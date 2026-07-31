@@ -5,7 +5,8 @@
 
 **Created**: 2026-07-31 — **Last revised**: 2026-07-31
 
-**Status**: Draft — 3 open questions. Not approved, not planned.
+**Status**: Draft — ready for `/speckit-plan` on approval. No open question blocks
+planning; the one that remains belongs to `002`.
 
 **Input**: User description:
 
@@ -139,10 +140,11 @@ fixtures, including that a clean fixture produces no violations.
 6. **Given** a page that fails to load in the browser, **When** the audit runs,
    **Then** that is stored as a failed check, never as a page with a perfect score
    or zero violations.
-7. **Given** a target with enough real-world traffic to appear in a public field
-   dataset, **When** an audit runs, **Then** the field measurements are stored
-   alongside the lab result and marked as field data — they are what actual
-   visitors experienced, and they are not interchangeable with a lab run.
+7. *(Deferred to a later increment — see Resolved Decisions.)* **Given** a target
+   with enough real-world traffic to appear in a public field dataset, **When** an
+   audit runs, **Then** the field measurements are stored alongside the lab result
+   and marked as field data — they are what actual visitors experienced, and they
+   are not interchangeable with a lab run.
 
 ---
 
@@ -298,6 +300,14 @@ rather than "not present".
   MUST be stored as "none detected", and the system MUST NOT store, derive, or
   emit a claim of WCAG or Section 508 conformance — automated rules establish
   failure, not conformance.
+- **FR-018b**: Every audit observation MUST record which source produced it — the
+  tool, its version, and whether it was run by this system or obtained from an
+  external service. The record MUST accommodate additional sources without
+  altering already-stored observations.
+- **FR-018c**: Results from different sources MUST NOT be combined into a single
+  series or averaged together. They are separate measurements of the same site,
+  and a change of source MUST be visible as such rather than appearing as a change
+  in the site.
 - **FR-019**: Mobile-friendliness MUST be stored as the individual audits that
   were run, each with its own outcome, in addition to any summary the tool
   provides.
@@ -414,10 +424,13 @@ mapping assigns them to.
   path, so a throttled score is far more comparable run-to-run than raw wall-clock
   timing; and multi-sample medians (FR-011a) absorb the runner's noise. What
   remains unsuitable is separating two sites whose scores are close together.
-- Where a public field dataset of real-user measurements covers a target, it is
-  the better evidence of what visitors actually experience, and the lab run is the
-  reproducible complement to it. Coverage is not universal — it depends on a site
-  having enough traffic — so the record must handle its absence as absence.
+- The first release has no field data, because it runs the audit itself and takes
+  no external dependency. Every performance figure it produces is therefore a lab
+  measurement under simulated conditions, and must be labelled as such — it is
+  what a throttled browser in a datacenter saw, not what a citizen experienced.
+  Where a field dataset is layered on later it becomes the better evidence of
+  real-world experience, with the lab run as its reproducible complement; coverage
+  will not be universal, so the record handles absence as absence.
 - Sampled availability supports reliability *classification*, not precise uptime.
   Daily sampling distinguishes a site that has never failed from one that fails a
   third of the time, which is the distinction that matters here; it cannot support
@@ -504,48 +517,31 @@ Recorded here so the reasoning is not re-litigated later.
 - **The measured unit is the host; "website" is a grouping applied afterwards.**
   See *What counts as "a website"*. Collection never decides whether a set of
   hosts is one site or several, so that judgment can be revised for free.
+- **The first release self-runs the audit, with no external service.** A baseline
+  that depends on nothing outside this repository can always be run, tested
+  offline, and reproduced years later against a pinned tool version. It also means
+  no credential exists in the system at all for the first release, which removes a
+  whole class of failure.
+
+  Hosted APIs — page-speed services, real-user field datasets — are expected to be
+  layered on afterwards as *additional sources*, never as a replacement. Which
+  performs better in practice is an empirical question, so it is settled by a
+  comparison spike against a sample of real targets rather than by argument here:
+  run both, compare coverage, variance across repeat runs, and agreement, then
+  decide. Per the feature workflow, that spike is exploratory and skips the
+  test-first ceremony; nothing it produces is shipped.
+
+  The consequence for this spec is a constraint, not a deferral: the record must
+  be able to hold results from more than one source from the start (FR-018b), or
+  layering a second source later means a migration of the whole history.
 
 ## Open Questions
 
-One decision remains before `/speckit-plan`. Everything else has a documented
-assumption or a resolved decision above.
+No decision blocks `/speckit-plan` for this half. The one question below belongs
+to `002` and is recorded here because it is contentious and better settled early;
+it changes nothing about what this spec stores.
 
-### Q1 — Do we run the auditing tool ourselves, or call a hosted service that runs it?
-
-**Context**: FR-011c, FR-014, and User Story 3 scenario 7. The same audit is
-available both ways, and the choice decides who generates the traffic, where the
-vantage point is, and whether real-user field data is available at all. It is
-partly a `plan.md` question, but it determines whether field measurements are a
-stored dimension, so the spec cannot stay silent on it.
-
-| Option | Answer | Implications |
-| --- | --- | --- |
-| A | Run the tool ourselves in CI | Full control, no quota, no third-party key, works offline in tests. Our runner is the vantage point, we generate all the traffic, and there is no field data |
-| B | Call the hosted service | Its infrastructure fetches the site, not ours — less traffic from us. Returns real-user field data alongside the lab run, which is the strongest available evidence of what visitors experience. Costs a quota-bearing API key, and the vantage point becomes theirs and opaque |
-| C | Both — hosted service for the audit and field data, self-run for anything it does not cover | Best evidence and a fallback when a target is missing from the service. Two code paths, two failure modes, and results from the two MUST NOT be mixed in one series |
-| D | Decoupled — self-run the lab audit for control, and fetch field data from the field dataset's own interface | Keeps A's reproducibility and still gets real-user data, since the field dataset is queryable independently of the audit service. Two sources, but they are two *different measurements* rather than two ways of taking the same one, so nothing is at risk of being mixed |
-| Custom | Something else | — |
-
-**Recommendation: D.** The two things being weighed are not actually coupled — the
-hosted service bundles them, but the field dataset can be queried on its own. That
-buys A's pinned-version reproducibility, which matters more here than it looks:
-this project's value is a record over years, and if the audit tool is upgraded
-under us, a site's apparent improvement may be the scoring changing rather than
-the site. Self-running means we choose when that happens and can re-run the old
-version to separate the two.
-
-The traffic argument cuts the other way and is worth stating: with a hosted
-service, *their* infrastructure fetches the target and we send only an API call,
-which is strictly less load on the government site than fetching it ourselves.
-That is a real point in favor of B under Principle I. It is outweighed here only
-because the audit tier already runs rarely against a bounded target list.
-
-Either way, a key for the field dataset or the audit service is a credential for
-*that service*, not for any target, so it does not breach Principle II — but it is
-still a credential, so it belongs in the layered secret handling, and the checker
-MUST degrade to recording "no data" when it is absent rather than failing the run.
-
-### Q2 — Does the public site rank named agencies on a composite score?
+### Q1 — Does the public site rank named agencies on a composite score?
 
 **Context**: Principle V and the goal of showing "which are doing best". Mostly a
 `002` question; it appears here because it decides nothing about what is stored —

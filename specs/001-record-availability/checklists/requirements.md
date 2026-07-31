@@ -35,12 +35,16 @@
 cadence is settled in FR-009, and the summarization approach is settled by
 adopting a standard tool's published scoring (FR-018).
 
-Three questions remain in Open Questions, none of them blocking a requirement's
-testability: Q1 (which governments), Q2 (self-run audit vs hosted service, which
-decides whether real-user field data is a stored dimension), and Q3 (whether the
-public site publishes a composite ranking — a `002` question recorded here because
-it is contentious and better settled early). Each carries options, implications,
-and a recommendation.
+Scope is settled (US federal, selected by measured traffic), as is the audit
+approach (self-run first, with hosted sources layered on later as additional
+sources rather than replacements). One question remains, and it belongs to `002`:
+whether the public site publishes a composite ranking of named agencies. It
+changes nothing this spec stores, so it does not block planning.
+
+**Watch on scope.** The spec now carries four dimensions, a four-level entity
+model, and 40+ requirements. That is defensible for a data-collection contract,
+but `/speckit-plan` should slice it — User Story 1 alone is a working system, and
+Stories 3 and 4 are where the cost and the complexity are.
 
 **Content quality caveat.** "No implementation details" passes on the stated
 intent — the spec names no language, framework, or host. It does assume checks run
