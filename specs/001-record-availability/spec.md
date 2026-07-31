@@ -399,28 +399,33 @@ Recorded here so the reasoning is not re-litigated later.
 - **Mobile-friendliness starts with the basic audits** — viewport, content width,
   tap targets, font legibility — and deepens only if the data justifies it
   (FR-019).
+- **Scope is US federal websites** for the first release. State, local, and
+  territorial government are deferred, not rejected: the data model carries
+  jurisdiction from the start (Key Entities: Target) so widening later is adding
+  rows, not reshaping the record.
+
+  Two public datasets are candidate sources for the list, both to be confirmed at
+  plan time rather than taken on trust here:
+
+  - **The .gov registry** — CISA publishes a daily `current-federal.csv` of
+    registered federal `.gov` domains with registrant organization. Confirmed to
+    exist. Two caveats: registration is not operation, since a registered domain
+    need not serve a site; and branch categorization is not explicit in that file,
+    so separating executive from legislative and judicial needs a second source.
+  - **Federal traffic analytics** — the government publishes visit data for
+    participating federal sites, which would give an objective basis for
+    "popular" rather than a hand-picked list. NOT VERIFIED: the fetch was blocked,
+    so both its current availability and its coverage are unconfirmed.
+
+  If no traffic source pans out, "popular" falls back to a curated list with the
+  reason recorded per target, which FR-001 already requires.
 
 ## Open Questions
 
-Two decisions remain before `/speckit-plan`. Everything else has a documented
+One decision remains before `/speckit-plan`. Everything else has a documented
 assumption or a resolved decision above.
 
-### Q1 — Which governments, and how is the list sourced?
-
-**Context**: FR-001. "Public sector" spans a federal executive agency and a county
-parks department, whose expectations differ by orders of magnitude.
-
-| Option | Answer | Implications |
-| --- | --- | --- |
-| A | US federal executive agencies only | Smallest, best-defined, published lists exist; comparisons are fair; ~200 targets |
-| B | Federal + all 50 states' primary portals | Still bounded and hand-curatable; enables state-vs-state, the most publicly interesting cut |
-| C | Add local (city/county) | Hundreds to thousands of targets; the list becomes a data pipeline of its own and the cost model changes completely |
-| Custom | Something else | — |
-
-**Recommendation: B.** It is curatable by hand, gives the ecosystem view the goal
-asks for, and keeps the cost inside a free CI tier.
-
-### Q2 — Do we run the auditing tool ourselves, or call a hosted service that runs it?
+### Q1 — Do we run the auditing tool ourselves, or call a hosted service that runs it?
 
 **Context**: FR-011c, FR-014, and User Story 3 scenario 7. The same audit is
 available both ways, and the choice decides who generates the traffic, where the
@@ -433,16 +438,29 @@ stored dimension, so the spec cannot stay silent on it.
 | A | Run the tool ourselves in CI | Full control, no quota, no third-party key, works offline in tests. Our runner is the vantage point, we generate all the traffic, and there is no field data |
 | B | Call the hosted service | Its infrastructure fetches the site, not ours — less traffic from us. Returns real-user field data alongside the lab run, which is the strongest available evidence of what visitors experience. Costs a quota-bearing API key, and the vantage point becomes theirs and opaque |
 | C | Both — hosted service for the audit and field data, self-run for anything it does not cover | Best evidence and a fallback when a target is missing from the service. Two code paths, two failure modes, and results from the two MUST NOT be mixed in one series |
+| D | Decoupled — self-run the lab audit for control, and fetch field data from the field dataset's own interface | Keeps A's reproducibility and still gets real-user data, since the field dataset is queryable independently of the audit service. Two sources, but they are two *different measurements* rather than two ways of taking the same one, so nothing is at risk of being mixed |
 | Custom | Something else | — |
 
-**Recommendation: B, moving to C if coverage gaps appear.** Field data is the one
-thing that answers "what do citizens actually experience", and no amount of
-throttling on our runner substitutes for it. Note the key is for the *service*,
-not for any target, so it does not breach Principle II — but it is a credential,
-so it belongs in the secret-handling layers, and the checker must degrade to
-recording "no audit" when it is absent rather than failing the run.
+**Recommendation: D.** The two things being weighed are not actually coupled — the
+hosted service bundles them, but the field dataset can be queried on its own. That
+buys A's pinned-version reproducibility, which matters more here than it looks:
+this project's value is a record over years, and if the audit tool is upgraded
+under us, a site's apparent improvement may be the scoring changing rather than
+the site. Self-running means we choose when that happens and can re-run the old
+version to separate the two.
 
-### Q3 — Does the public site rank named agencies on a composite score?
+The traffic argument cuts the other way and is worth stating: with a hosted
+service, *their* infrastructure fetches the target and we send only an API call,
+which is strictly less load on the government site than fetching it ourselves.
+That is a real point in favor of B under Principle I. It is outweighed here only
+because the audit tier already runs rarely against a bounded target list.
+
+Either way, a key for the field dataset or the audit service is a credential for
+*that service*, not for any target, so it does not breach Principle II — but it is
+still a credential, so it belongs in the layered secret handling, and the checker
+MUST degrade to recording "no data" when it is absent rather than failing the run.
+
+### Q2 — Does the public site rank named agencies on a composite score?
 
 **Context**: Principle V and the goal of showing "which are doing best". Mostly a
 `002` question; it appears here because it decides nothing about what is stored —
