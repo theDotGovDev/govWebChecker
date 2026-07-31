@@ -196,6 +196,20 @@ rather than "not present".
   simultaneous snapshot of a site.
 - **A target is retired or moves.** History is retained and the target marked
   retired; observations are never deleted to tidy a chart.
+- **A grouping turns out to be wrong.** Hosts assumed to be one property prove to
+  be separate products, or the reverse. The mapping is corrected and every past
+  observation re-aggregates under it; nothing is re-collected and no observation
+  changes.
+- **A host serves several properties, or a property spans agencies.** A shared
+  services portal, or a site jointly operated. A host maps to one property at a
+  time; where that is genuinely wrong, the ambiguity is recorded rather than
+  resolved by fiat, and the site is reported at host level only.
+- **Many hosts, one server.** Several hostnames of one agency resolve to the same
+  backend or CDN, so per-hostname limits alone would let a run hit one machine
+  repeatedly (FR-003a).
+- **The traffic dataset counts differently than we check.** It may report a
+  domain where we measure a hostname, or aggregate what we treat separately.
+  Recorded as a discrepancy against the target (FR-001a), never quietly averaged.
 
 ## Requirements *(mandatory)*
 
@@ -205,11 +219,27 @@ rather than "not present".
 
 - **FR-001**: Targets MUST come from a list that is data, not code, each with the
   reason it is included and its active/retired state.
+- **FR-001a**: Targets MUST be selected by measured traffic volume, using a public
+  dataset of visits to government sites, with each target's inclusion traceable to
+  that evidence. Where the traffic dataset's unit of aggregation differs from the
+  host being checked, the discrepancy MUST be recorded rather than silently
+  reconciled.
+- **FR-001b**: Host-to-property and property-to-agency membership MUST be stored as
+  a mapping that can be revised without modifying, invalidating, or re-collecting
+  any observation.
+- **FR-001c**: Observations MUST NOT be keyed to a property. Regrouping hosts MUST
+  change only how existing observations aggregate, never their contents.
+- **FR-001d**: The mapping MUST record, per property, why its hosts were grouped
+  together, so a disputed grouping can be argued about on the evidence.
 - **FR-002**: Every request MUST carry a User-Agent naming the project with a URL
   an operator can follow to understand it and to ask for it to stop.
 - **FR-003**: The system MUST enforce, inside the checker rather than in its
   callers: a per-host minimum interval, a per-request timeout, a bound on hosts
   checked concurrently, and no concurrent requests to a single host.
+- **FR-003a**: The system MUST additionally rate-limit per registrable domain, not
+  only per hostname. Many hostnames under one domain frequently share one backend,
+  so a per-hostname limit alone permits a burst against a single server that
+  satisfies every stated limit — the exact outcome Principle I forbids.
 - **FR-004**: A full cycle of every dimension against one target MUST NOT exceed
   the traffic of a handful of ordinary visits to that site.
 - **FR-005**: The system MUST honor `robots.txt` per target and record a
@@ -287,12 +317,53 @@ rather than "not present".
 - **FR-025**: The system MUST NOT treat a slow or unavailable target as an error
   condition requiring intervention.
 
+### What counts as "a website"
+
+A hostname is not a website. `about.usps.com` and `store.usps.com` are parts of
+one thing a visitor would name as a single site; `benefits.va.gov` and
+`myhealth.va.gov` share a domain while being separate products with separate
+teams, technology, and design. Any single rule — one row per domain, one per
+hostname — is wrong for one of these cases.
+
+The resolution is to **not decide it at collection time**. Four levels exist and
+they are kept distinct:
+
+| Level | Example | Role |
+| --- | --- | --- |
+| Agency | Department of Veterans Affairs | Who is accountable |
+| Property | My HealtheVet | The coherent "website" a person would name |
+| Host | `myhealth.va.gov` | Where a request actually goes |
+| Measured URL | `https://myhealth.va.gov/` | What a check actually loads |
+
+Measurement happens at the bottom two levels and is stored there. Property and
+agency membership is a **separate, revisable mapping** — data, not structure —
+applied when results are aggregated.
+
+This matters because the grouping is a judgment call that *will* be wrong and
+*will* change. If it is baked into stored observations, correcting the VA's
+decomposition means either losing history or re-collecting it. If it is a mapping
+resolved at analysis time, the correction re-aggregates every past observation
+automatically, and the observations themselves never change — which Principle IV
+requires anyway.
+
+It also means USPS and the VA need no special-casing in the checker. Both are
+"hosts that roll up to properties"; they differ only in how many properties the
+mapping assigns them to.
+
 ### Key Entities
 
-- **Target**: a public sector site under measurement — its URL, the government
-  level and jurisdiction it belongs to, why it is on the list, active or retired.
+- **Agency**: the accountable government organization. Stable, externally
+  verifiable, and the only level of the four that is not our judgment call.
+- **Property**: a coherent website as a visitor would name it — one or more hosts,
+  belonging to one agency, with the reasoning for the grouping recorded. Revisable
+  without touching any observation.
+- **Host**: a hostname under measurement, mapped to exactly one property at a time,
+  with the traffic evidence that earned it a place on the list.
+- **Target**: a host plus the specific URL checked for it, its jurisdiction, why it
+  is on the list, and whether it is active or retired.
 - **Observation**: one immutable measurement of one dimension of one target at one
-  moment, with its outcome, its timings or findings, and its method.
+  moment, with its outcome, its timings or findings, and its method. Keyed to the
+  target and the host — never to a property, so regrouping cannot invalidate it.
 - **Run**: one execution of one tier, grouping its observations so a run-level
   fault is distinguishable from a target-level one.
 - **Method**: vantage point, timeouts, tool and ruleset versions, viewport widths —
@@ -325,6 +396,13 @@ rather than "not present".
   measuring the spread across runs, not assumed.
 - **SC-010**: Every stored accessibility violation names the WCAG criterion it
   maps to, and no stored record asserts conformance.
+- **SC-011**: Reassigning a host from one property to another changes only
+  aggregated results; a byte-level comparison of the observation record before and
+  after shows no difference.
+- **SC-012**: No two requests to hosts sharing a registrable domain are closer
+  together than the per-domain minimum — verifiable from stored timestamps alone.
+- **SC-013**: Every active target's presence on the list traces to traffic
+  evidence, with zero targets included on unrecorded judgment.
 
 ## Assumptions
 
@@ -419,6 +497,13 @@ Recorded here so the reasoning is not re-litigated later.
 
   If no traffic source pans out, "popular" falls back to a curated list with the
   reason recorded per target, which FR-001 already requires.
+- **"Popular" means measured traffic volume**, not editorial importance (FR-001a).
+  A site is on the list because people demonstrably use it. This keeps selection
+  out of our hands, which matters when the output is public commentary on named
+  agencies — nobody can argue we picked the targets to make a point.
+- **The measured unit is the host; "website" is a grouping applied afterwards.**
+  See *What counts as "a website"*. Collection never decides whether a set of
+  hosts is one site or several, so that judgment can be revised for free.
 
 ## Open Questions
 
