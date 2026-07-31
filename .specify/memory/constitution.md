@@ -57,6 +57,10 @@ tell a courteous monitor from an attack unless the traffic says who it is.
   supersedes the old one; history is never rewritten to look tidier.
 - Store measurements — timings, status codes, metadata — not fetched page bodies.
   Page content is transient, potentially large, and not ours to archive.
+- A check MAY analyze a page in memory while it runs — that is how accessibility,
+  layout, and technology findings are produced. What it MUST NOT do is persist the
+  body, its subresources, or a screenshot. Findings derived from content are
+  stored; the content itself is discarded when the check ends.
 
 **Rationale:** The value of this project is a truthful record over time. A record
 that gets edited when it looks wrong, or that discards failures as noise, answers
@@ -117,4 +121,4 @@ principle, MINOR for adding one, PATCH for clarifications that do not change wha
 is allowed. Compliance is reviewed at pull request time; a violating change is
 either revised or accompanied by an explicit, recorded justification.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
+**Version**: 1.0.1 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
