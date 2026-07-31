@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,11 +31,16 @@
 
 ## Notes
 
-**One item fails, deliberately.** FR-009 carries the single remaining
-`[NEEDS CLARIFICATION]`, pointing at Q2 in Open Questions. Three decisions are
-open (Q1 target scope, Q2 sampling cadence, Q3 whether the public site ranks named
-sites); each has a recommendation and stated implications. All three change scope
-or affect named third parties, so none was resolved by assumption.
+**All items pass.** No inline `[NEEDS CLARIFICATION]` markers remain: the sampling
+cadence is settled in FR-009, and the summarization approach is settled by
+adopting a standard tool's published scoring (FR-018).
+
+Three questions remain in Open Questions, none of them blocking a requirement's
+testability: Q1 (which governments), Q2 (self-run audit vs hosted service, which
+decides whether real-user field data is a stored dimension), and Q3 (whether the
+public site publishes a composite ranking — a `002` question recorded here because
+it is contentious and better settled early). Each carries options, implications,
+and a recommendation.
 
 **Content quality caveat.** "No implementation details" passes on the stated
 intent — the spec names no language, framework, or host. It does assume checks run

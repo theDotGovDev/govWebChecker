@@ -97,34 +97,52 @@ self-signed cert, and plain HTTP; confirm each is characterized correctly.
 
 ---
 
-### User Story 3 - Accessibility and responsive-layout signals (Priority: P3)
+### User Story 3 - Standard quality audit: performance, accessibility, mobile (Priority: P3)
 
-The system loads each target in a real browser at more than one viewport width and
-records automated accessibility findings and layout signals — which rules failed,
-how many elements, and whether the page overflows horizontally on a narrow screen.
+The system runs each target through an industry-standard auditing tool under
+simulated mobile conditions — throttled network and CPU — and records the
+published category scores together with the individual audits behind them: which
+accessibility rules failed and against which WCAG criteria, whether the page is
+mobile-friendly, and the loading metrics.
 
 **Why this priority**: The highest public value of the four and the most
-expensive: it needs a browser, so it is the check that most constrains how often
-anything can run. It is third because the cheaper dimensions must already be
-stable to run it on a schedule.
+expensive, since it needs a real browser. It is third because the cheaper
+dimensions must be stable before this one can run on a schedule.
+
+Using an established tool rather than assembling our own checks is deliberate.
+Its scoring methodology is public, versioned, and already trusted, which means
+neither this project nor its readers have to take our word for how a number was
+reached. That satisfies "a published number carries its method" by construction.
 
 **Independent Test**: Run against local fixture pages with known, deliberate
-accessibility defects and known layout behavior; confirm findings match the
-fixtures — including that a clean fixture produces no findings.
+accessibility defects and known mobile behavior; confirm findings match the
+fixtures, including that a clean fixture produces no violations.
 
 **Acceptance Scenarios**:
 
-1. **Given** a page with known automated-detectable violations, **When** a check
-   runs, **Then** each violation is stored with its rule identifier, severity, and
-   how many elements matched.
-2. **Given** any accessibility result, **When** it is stored, **Then** it is
-   labelled as automated-only and carries the tool and ruleset version used.
-3. **Given** a page rendered at a narrow viewport, **When** a check runs, **Then**
-   horizontal overflow, the presence of a viewport meta tag, and whether the
-   layout responds to width are stored as separate signals rather than one
-   "responsive" verdict.
-4. **Given** a page that fails to load in the browser, **When** the check runs,
-   **Then** that is stored as a failed check, not as a page with zero violations.
+1. **Given** a target audited under mobile emulation with network and CPU
+   throttling, **When** the audit completes, **Then** the category scores, the
+   loading metrics, and the throttling profile used are all stored together.
+2. **Given** an audit result, **When** it is stored, **Then** the individual failed
+   audits are stored alongside the summary score — the score never replaces the
+   findings that produced it.
+3. **Given** a page with known accessibility violations, **When** the audit runs,
+   **Then** each violation is stored with its rule identifier, its severity, the
+   WCAG success criteria it maps to, and how many elements matched.
+4. **Given** an accessibility result with no violations detected, **When** it is
+   stored, **Then** it is recorded as "no violations detected by <tool> <version>"
+   and MUST NOT be recorded or later presented as conformance with WCAG or
+   Section 508.
+5. **Given** a target under mobile emulation, **When** the audit runs, **Then**
+   the mobile-friendliness audits — viewport meta, content sized to the viewport,
+   tap target sizing, legible font size — are stored individually.
+6. **Given** a page that fails to load in the browser, **When** the audit runs,
+   **Then** that is stored as a failed check, never as a page with a perfect score
+   or zero violations.
+7. **Given** a target with enough real-world traffic to appear in a public field
+   dataset, **When** an audit runs, **Then** the field measurements are stored
+   alongside the lab result and marked as field data — they are what actual
+   visitors experienced, and they are not interchangeable with a lab run.
 
 ---
 
@@ -204,15 +222,25 @@ rather than "not present".
 **Sampling**
 
 - **FR-008**: Checks MUST be tiered by cost: cheap availability sampling runs
-  frequently; expensive browser-based checks run rarely. The tiers MUST be
+  frequently; expensive browser-based audits run rarely. The tiers MUST be
   separately scheduled so the expensive tier cannot inherit the cheap tier's
   frequency.
-- **FR-009**: Availability sampling MUST run at [NEEDS CLARIFICATION: see Q2 — the
-  cadence determines what uptime claims the data can support].
-- **FR-010**: Expensive checks MUST be spread across targets over time rather than
+- **FR-009**: Availability sampling MUST run at least daily per target, at a
+  cadence sufficient to classify reliability over weeks and months rather than to
+  detect a short outage in progress.
+- **FR-010**: Expensive audits MUST be spread across targets over time rather than
   run against all targets at once, so no single window concentrates load.
 - **FR-011**: The system MUST record, for every observation, when the check
   actually executed — not the schedule that requested it.
+- **FR-011a**: Latency measurements MUST be taken from multiple samples within a
+  check, and MUST store the sample count, the median, and the spread. A single
+  reading MUST NOT be stored as a site's response time.
+- **FR-011b**: The multiple samples in a check MUST still obey the per-host
+  minimum interval in FR-003. Sampling for statistical confidence is not a licence
+  to burst.
+- **FR-011c**: Performance audits MUST apply a documented throttling profile
+  approximating a mobile connection, and MUST store which profile was used.
+  Results gathered under different profiles MUST NOT be compared as like for like.
 
 **What is stored**
 
@@ -231,12 +259,18 @@ rather than "not present".
   content identifying an individual, the finding is stored without it.
 - **FR-017**: Stored observations MUST NOT be modified or deleted after the fact;
   a correction is a new observation superseding the old.
-- **FR-018**: Accessibility results MUST be stored labelled as automated-detection
-  only, with the ruleset version, and MUST NOT be stored as a single score or
-  grade. Scoring, if any, is an analysis decision made in `002` against data that
-  keeps the underlying findings intact.
-- **FR-019**: Layout results MUST be stored as the individual signals observed,
-  not as a "responsive: yes/no" verdict.
+- **FR-018**: Audit results MUST store the tool's published category scores *and*
+  the individual audits behind them. The score is stored as a summary of the
+  findings, never as a replacement for them, so any figure shown in `002` can be
+  opened up into the specific issues that produced it.
+- **FR-018a**: Accessibility results MUST record the tool and ruleset version and
+  the WCAG success criteria each violation maps to. A result with no violations
+  MUST be stored as "none detected", and the system MUST NOT store, derive, or
+  emit a claim of WCAG or Section 508 conformance — automated rules establish
+  failure, not conformance.
+- **FR-019**: Mobile-friendliness MUST be stored as the individual audits that
+  were run, each with its own outcome, in addition to any summary the tool
+  provides.
 - **FR-020**: Technology detections MUST be stored with their evidence and a
   confidence indication, and absence MUST be recorded as "not detected".
 - **FR-021**: The storage format MUST be readable and queryable without running
@@ -286,26 +320,38 @@ rather than "not present".
   ecosystem-level count without re-running a check.
 - **SC-008**: Total scheduled compute stays within the free tier of a hosted CI
   runner, since exceeding it is the failure mode that quietly kills the project.
+- **SC-009**: Repeated audits of an unchanged site produce scores stable enough
+  that a genuine regression is distinguishable from runner noise — established by
+  measuring the spread across runs, not assumed.
+- **SC-010**: Every stored accessibility violation names the WCAG criterion it
+  maps to, and no stored record asserts conformance.
 
 ## Assumptions
 
 - Measurement is outside-in from a single vantage point, with no cooperation from
   or notification to site operators. Every timing therefore measures the network
   path plus the site, and that limitation travels with the data.
-- The vantage point is a shared, virtualized CI runner in a datacenter. Its timings
-  are noisy and are not what a citizen on a home or mobile connection experiences.
-  This makes the data suitable for detecting large changes and gross outliers, and
-  unsuitable for fine-grained ranking between similar sites.
-- Scheduling is best-effort. Precise uptime percentages are not claimable from
-  sampled checks; the data supports "unreachable when we looked", not "99.9%".
+- The vantage point is a shared, virtualized CI runner in a datacenter. Two things
+  make that workable rather than fatal. Applied throttling normalizes the network
+  path, so a throttled score is far more comparable run-to-run than raw wall-clock
+  timing; and multi-sample medians (FR-011a) absorb the runner's noise. What
+  remains unsuitable is separating two sites whose scores are close together.
+- Where a public field dataset of real-user measurements covers a target, it is
+  the better evidence of what visitors actually experience, and the lab run is the
+  reproducible complement to it. Coverage is not universal — it depends on a site
+  having enough traffic — so the record must handle its absence as absence.
+- Sampled availability supports reliability *classification*, not precise uptime.
+  Daily sampling distinguishes a site that has never failed from one that fails a
+  third of the time, which is the distinction that matters here; it cannot support
+  "99.9%", and a short outage between samples is invisible.
 - The target list is curated by a human. Nothing here discovers sites on its own.
-- Automated accessibility checking detects a well-documented minority of real
-  barriers. It finds no issue on many pages that are unusable with a screen
-  reader, and it cannot judge whether alt text is *meaningful*. The stored data is
-  evidence, never a verdict on whether a site is accessible.
-- "Responsive" has no automated test. What is stored are proxies — viewport meta,
-  overflow at width, layout change across widths — which together suggest, and
-  never establish, a good mobile experience.
+- Automated accessibility scanning is asymmetric evidence: a detected violation is
+  a real defect, but no detections is not conformance. Automated rules cover a
+  portion of the WCAG criteria and cannot judge whether alt text is *meaningful* or
+  whether a flow works with a screen reader. The stored data therefore supports
+  "these specific failures exist" and never "this site is accessible".
+- Mobile-friendliness starts from the basic, unambiguous audits and gets more
+  detailed as the data shows it needs to.
 - Alerting and any real-time guarantee are out of scope. This half records.
 - Nothing here decides language, framework, or hosting; that is `plan.md`, after
   this spec is approved.
@@ -322,14 +368,42 @@ rather than "not present".
 - **IV. An observation is a fact** — FR-012, FR-013, FR-017, FR-025. Requires the
   1.0.1 clarification that in-memory analysis of a page is allowed where persisting
   it is not (FR-015).
-- **V. A published number carries its method** — FR-014, FR-018, FR-019, FR-020,
-  SC-003. The dimensions where an unqualified number would mislead — accessibility
-  and responsiveness — are constrained to store findings rather than scores.
+- **V. A published number carries its method** — FR-014, FR-018, FR-018a, FR-019,
+  FR-020, SC-003, SC-010. Satisfied primarily by adopting a standard tool whose
+  scoring method is public and versioned, rather than by withholding scores. The
+  one claim still forbidden outright is conformance with WCAG or Section 508,
+  which automated scanning cannot establish (FR-018a).
+
+## Resolved Decisions
+
+Recorded here so the reasoning is not re-litigated later.
+
+- **Summarize with an established tool, not our own formula.** Category scores
+  come from a standard auditing tool whose scoring methodology is public and
+  versioned. Where summarizing is subjective, we adopt someone else's published
+  subjectivity rather than inventing our own — and store the underlying audits so
+  the summary can always be opened up (FR-018).
+- **Scores are stored, and so are the findings under them.** The earlier draft
+  refused to store an accessibility score at all. That was too strong: scanners
+  produce recordable, WCAG-mapped results, and a standard score over them is
+  defensible. What is *not* defensible is a conformance claim, which is a
+  different assertion than a score (FR-018a).
+- **Sampling statistics, not sampling frequency, carry reliability.** A daily
+  check that finds a site up 100% of the time versus 50% already separates those
+  sites decisively. Frequency buys outage *resolution*, which is not this
+  project's question (FR-009).
+- **Latency is a median over several samples, never one reading** (FR-011a), and
+  the samples still obey the per-host interval (FR-011b).
+- **Performance is measured under mobile throttling** so results are comparable
+  across runs despite a noisy datacenter runner (FR-011c).
+- **Mobile-friendliness starts with the basic audits** — viewport, content width,
+  tap targets, font legibility — and deepens only if the data justifies it
+  (FR-019).
 
 ## Open Questions
 
-Three decisions, needed before `/speckit-plan`. Everything else has a documented
-assumption above.
+Two decisions remain before `/speckit-plan`. Everything else has a documented
+assumption or a resolved decision above.
 
 ### Q1 — Which governments, and how is the list sourced?
 
@@ -346,35 +420,43 @@ parks department, whose expectations differ by orders of magnitude.
 **Recommendation: B.** It is curatable by hand, gives the ecosystem view the goal
 asks for, and keeps the cost inside a free CI tier.
 
-### Q2 — How often does availability sampling run, and what may be claimed from it?
+### Q2 — Do we run the auditing tool ourselves, or call a hosted service that runs it?
 
-**Context**: FR-009, and your question about catching outages without high
-overhead. Hosted cron realistically gives 10–15 minute granularity with drift.
-
-| Option | Answer | Implications |
-| --- | --- | --- |
-| A | Every ~15 min | Catches outages over ~15 min; ~96 runs/day; will strain a free tier at hundreds of targets |
-| B | Hourly | Catches multi-hour outages only; comfortably free; "unreachable when we looked" is the honest claim |
-| C | Adaptive — hourly baseline, tightening to ~15 min for a target that just failed | Best signal per request, and the backoff rule in FR-006 must not be violated: tightening after a *failure* means more traffic to a struggling site |
-| Custom | Something else | — |
-
-**Recommendation: B to start.** C is tempting and is the one design here that
-could put us on the wrong side of Principle I. If adaptive sampling is wanted, it
-should tighten around *recovery* (confirming a site is back), not around failure.
-
-### Q3 — Does the public site rank or grade individual named sites?
-
-**Context**: FR-018, Principle V, and the goal of showing "which are doing best".
-This is `002`'s question, but it constrains what this half must store, so it
-cannot wait.
+**Context**: FR-011c, FR-014, and User Story 3 scenario 7. The same audit is
+available both ways, and the choice decides who generates the traffic, where the
+vantage point is, and whether real-user field data is available at all. It is
+partly a `plan.md` question, but it determines whether field measurements are a
+stored dimension, so the spec cannot stay silent on it.
 
 | Option | Answer | Implications |
 | --- | --- | --- |
-| A | Ecosystem aggregates + per-site detail, no ranking or letter grade | Defensible from automated data; less shareable; weaker pressure to improve |
-| B | Rank on objective dimensions only (uptime, cert validity, load time); accessibility shown as findings, never scored | Honest, since scored dimensions are unambiguous; accessibility still visible and actionable |
-| C | Full composite score and league table across all dimensions | Most engaging and most likely to be shared — and most likely to be wrong about a specific agency, from a datacenter vantage point and automated a11y checks |
+| A | Run the tool ourselves in CI | Full control, no quota, no third-party key, works offline in tests. Our runner is the vantage point, we generate all the traffic, and there is no field data |
+| B | Call the hosted service | Its infrastructure fetches the site, not ours — less traffic from us. Returns real-user field data alongside the lab run, which is the strongest available evidence of what visitors experience. Costs a quota-bearing API key, and the vantage point becomes theirs and opaque |
+| C | Both — hosted service for the audit and field data, self-run for anything it does not cover | Best evidence and a fallback when a target is missing from the service. Two code paths, two failure modes, and results from the two MUST NOT be mixed in one series |
 | Custom | Something else | — |
 
-**Recommendation: B.** C is the version that gets attention, and it is also the
-version where an agency can fairly say the numbers misrepresent them — which
-Principle V exists to prevent.
+**Recommendation: B, moving to C if coverage gaps appear.** Field data is the one
+thing that answers "what do citizens actually experience", and no amount of
+throttling on our runner substitutes for it. Note the key is for the *service*,
+not for any target, so it does not breach Principle II — but it is a credential,
+so it belongs in the secret-handling layers, and the checker must degrade to
+recording "no audit" when it is absent rather than failing the run.
+
+### Q3 — Does the public site rank named agencies on a composite score?
+
+**Context**: Principle V and the goal of showing "which are doing best". Mostly a
+`002` question; it appears here because it decides nothing about what is stored —
+FR-018 keeps both the scores and the findings either way — but it is the decision
+most likely to be contentious later, so it is better made early.
+
+| Option | Answer | Implications |
+| --- | --- | --- |
+| A | Per-dimension standings, no composite | Every number traces to one published methodology; no weighting to defend; readers do their own synthesis |
+| B | Composite, with the weighting published and every component openly breakable out | Shareable and still defensible, provided the weighting is stated and arbitrary — which it is |
+| C | Composite letter grade per site | Most engaging, hardest to defend: a single letter over a datacenter lab run and automated a11y checks invites a fair complaint from a specific agency |
+| Custom | Something else | — |
+
+**Recommendation: A for the first release, B once there is enough history to show
+the composite is stable.** Note that a low score on a real audit is a legitimate
+finding to publish; the risk is not naming names, it is a number whose method the
+reader cannot see.
