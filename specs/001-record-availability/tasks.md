@@ -34,13 +34,13 @@ Structure.
 
 **Purpose**: Bring the repository from documents-only to a buildable project.
 
-- [ ] T001 Create `package.json` with `build`, `test`, and `verify` scripts, zero runtime dependencies, dev-only `typescript` and `@types/node`
-- [ ] T002 [P] Create `tsconfig.json` targeting current Node LTS, strict mode on
-- [ ] T003 [P] Create `.gitignore` for `node_modules/`, `dist/`, and local scratch — never for `data/`, which is the product
-- [ ] T004 [P] Create `.pre-commit-config.yaml` with the official gitleaks hook, and `.gitleaks.toml` for any project-specific rules
-- [ ] T005 [P] Create `.github/workflows/secret-scan.yml` running gitleaks on push and pull request
-- [ ] T006 [P] Create `.github/workflows/ci.yml` running build and tests on push and pull request
-- [ ] T007 Create `ARCHITECTURE.md` at repo root with initial components and a Mermaid structure diagram
+- [x] T001 Create `package.json` with `build`, `test`, and `verify` scripts, zero runtime dependencies, dev-only `typescript` and `@types/node`
+- [x] T002 [P] Create `tsconfig.json` targeting current Node LTS, strict mode on
+- [x] T003 [P] Create `.gitignore` for `node_modules/`, `dist/`, and local scratch — never for `data/`, which is the product
+- [x] T004 [P] Create `.pre-commit-config.yaml` with the official gitleaks hook, and `.gitleaks.toml` for any project-specific rules
+- [x] T005 [P] Create `.github/workflows/secret-scan.yml` running gitleaks on push and pull request
+- [x] T006 [P] Create `.github/workflows/ci.yml` running build and tests on push and pull request
+- [x] T007 Create `ARCHITECTURE.md` at repo root with initial components and a Mermaid structure diagram
 
 **Note on T004–T005**: the constitution requires three independent secret layers.
 These are two of them; the third is platform push protection, which is repository
@@ -55,30 +55,30 @@ these, so they block all of Phase 3 and must not be story-specific.
 
 ### Test fixtures
 
-- [ ] T008 [P] Create local fixture servers in `tests/fixtures/servers.ts`: fast responder, slow responder, and one that never responds
+- [x] T008 [P] Create local fixture servers in `tests/fixtures/servers.ts`: fast responder, slow responder, and one that never responds
 - [ ] T009 [P] Create failing fixture servers in `tests/fixtures/failing.ts`: connection refused, invalid TLS certificate, HTTP error statuses, and one that refuses an automated User-Agent
 - [ ] T010 [P] Add a test helper in `tests/fixtures/no-network.ts` that fails any test attempting a non-loopback connection, enforcing SC-006
 
 ### The observation record
 
-- [ ] T011 [US1] Write failing test in `tests/unit/record-shape.test.ts` asserting a record matches `contracts/observation.md` — required fields present, `method` on every row, no verdict fields
-- [ ] T012 [US1] Implement record types in `src/record/types.ts` per `data-model.md`
-- [ ] T013 [US1] Write failing test in `tests/unit/writer.test.ts`: appends a line, partitions by month, creates the file when absent, and never rewrites an existing line
-- [ ] T014 [US1] Implement the append-only writer in `src/record/writer.ts`, partitioning to `data/<dimension>/YYYY-MM.jsonl`
-- [ ] T015 [US1] Write failing test in `tests/unit/writer-immutability.test.ts` asserting a second write of the same observation appends rather than replaces (FR-017)
+- [x] T011 [US1] Write failing test in `tests/unit/record-shape.test.ts` asserting a record matches `contracts/observation.md` — required fields present, `method` on every row, no verdict fields
+- [x] T012 [US1] Implement record types in `src/record/types.ts` per `data-model.md`
+- [x] T013 [US1] Write failing test in `tests/unit/writer.test.ts`: appends a line, partitions by month, creates the file when absent, and never rewrites an existing line
+- [x] T014 [US1] Implement the append-only writer in `src/record/writer.ts`, partitioning to `data/<dimension>/YYYY-MM.jsonl`
+- [x] T015 [US1] Write failing test asserting a second write of the same observation appends rather than replaces, and that an earlier line stays byte-identical (FR-017) — folded into `tests/unit/writer.test.ts` rather than a separate file
 
 ### The politeness layer
 
-- [ ] T016 [P] Write failing test in `tests/unit/registrable-domain.test.ts` covering the two-label rule for `.gov`, plus a documented expected-failure case for `state.tx.us` marking the known limit from research.md R4
-- [ ] T017 Implement `registrableDomain()` in `src/politeness/domain.ts`, with the two-label assumption documented at the definition
-- [ ] T018 Write failing test in `tests/unit/rate-limit-host.test.ts` asserting requests to one host are separated by at least the minimum interval, and that the test fails if the interval is reduced (constitution quality gate)
-- [ ] T019 Implement the per-host limiter in `src/politeness/rate-limiter.ts`
-- [ ] T020 Write failing test in `tests/unit/rate-limit-domain.test.ts` asserting hosts sharing a registrable domain are separated by the per-domain minimum (FR-003a)
-- [ ] T021 Extend `src/politeness/rate-limiter.ts` with the per-domain limiter, independent of the per-host one
-- [ ] T022 [P] Write failing test in `tests/unit/user-agent.test.ts` asserting every outbound request carries the identifying User-Agent and that no code path can replace it
-- [ ] T023 Implement the fixed User-Agent in `src/politeness/user-agent.ts`, including the operator-facing URL (FR-002)
-- [ ] T024 Write failing test in `tests/unit/backoff.test.ts` asserting the wait after a failure is longer than the normal interval and never shorter (FR-006)
-- [ ] T025 Implement backoff in `src/politeness/backoff.ts`
+- [x] T016 [P] Write failing test in `tests/unit/registrable-domain.test.ts` covering the two-label rule for `.gov`, plus a documented expected-failure case for `state.tx.us` marking the known limit from research.md R4
+- [x] T017 Implement `registrableDomain()` in `src/politeness/domain.ts`, with the two-label assumption documented at the definition
+- [x] T018 Write failing test in `tests/unit/rate-limit-host.test.ts` asserting requests to one host are separated by at least the minimum interval, and that the test fails if the interval is reduced (constitution quality gate)
+- [x] T019 Implement the per-host limiter in `src/politeness/rate-limiter.ts`
+- [x] T020 Write failing test in `tests/unit/rate-limit-domain.test.ts` asserting hosts sharing a registrable domain are separated by the per-domain minimum (FR-003a)
+- [x] T021 Extend `src/politeness/rate-limiter.ts` with the per-domain limiter, independent of the per-host one
+- [x] T022 [P] Write failing test in `tests/unit/user-agent.test.ts` asserting every outbound request carries the identifying User-Agent and that no code path can replace it
+- [x] T023 Implement the fixed User-Agent in `src/politeness/user-agent.ts`, including the operator-facing URL (FR-002)
+- [x] T024 Write failing test in `tests/unit/backoff.test.ts` asserting the wait after a failure is longer than the normal interval and never shorter (FR-006)
+- [x] T025 Implement backoff in `src/politeness/backoff.ts`
 
 **Checkpoint**: the record can be written and the traffic rules are enforceable
 and tested. Phase 3 can begin.

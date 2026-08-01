@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local scratch only. `data/` is deliberately NOT ignored — the record of
+# measurements is the product, and it is meant to be committed and readable.
+.scratch/
