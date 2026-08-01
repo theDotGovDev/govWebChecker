@@ -1,0 +1,44 @@
+{
+  "_comment": "DEVELOPMENT SEED, not the real target list. FR-001a requires targets be selected by measured traffic volume; that source is recorded as NOT VERIFIED in specs/001-record-availability/spec.md and populating the real list is task T048. Every entry here says so in its own traffic_evidence rather than implying a measurement that was not taken.",
+  "targets": [
+    {
+      "id": "usa-gov",
+      "host": "www.usa.gov",
+      "url": "https://www.usa.gov/",
+      "agency": "General Services Administration",
+      "jurisdiction": "federal",
+      "inclusion_reason": "Development seed: the federal government's general-purpose portal",
+      "traffic_evidence": {
+        "source": "none-yet",
+        "measure": "NOT MEASURED — hand-picked for development (T048)"
+      },
+      "active": true
+    },
+    {
+      "id": "irs-gov",
+      "host": "www.irs.gov",
+      "url": "https://www.irs.gov/",
+      "agency": "Internal Revenue Service",
+      "jurisdiction": "federal",
+      "inclusion_reason": "Development seed: high-traffic service site with strong seasonality",
+      "traffic_evidence": {
+        "source": "none-yet",
+        "measure": "NOT MEASURED — hand-picked for development (T048)"
+      },
+      "active": true
+    },
+    {
+      "id": "weather-gov",
+      "host": "www.weather.gov",
+      "url": "https://www.weather.gov/",
+      "agency": "National Weather Service",
+      "jurisdiction": "federal",
+      "inclusion_reason": "Development seed: load spikes during severe weather make it a useful reliability case",
+      "traffic_evidence": {
+        "source": "none-yet",
+        "measure": "NOT MEASURED — hand-picked for development (T048)"
+      },
+      "active": true
+    }
+  ]
+}

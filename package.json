@@ -11,7 +11,7 @@
     "build": "tsc",
     "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
     "check": "node dist/src/cli/index.js check",
-    "verify": "node dist/src/cli/verify.js"
+    "verify": "node dist/src/cli/index.js verify"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

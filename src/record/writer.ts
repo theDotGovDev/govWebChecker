@@ -28,3 +28,21 @@ export async function appendObservation(dir: string, observation: Observation): 
   // JSON.stringify escapes newlines, so one observation is always one line.
   await fs.appendFile(file, `${JSON.stringify(observation)}\n`, 'utf8');
 }
+
+/**
+ * Appends a run summary. Same append-only rules as an observation.
+ *
+ * Runs are recorded separately from observations because a run-level fact — most
+ * importantly, that nothing answered — is about our own pass rather than about
+ * any site. A reader joins the two by `run_id` and can discount a whole run
+ * without that judgement having been baked into every row (FR-024).
+ */
+export async function appendRunSummary(
+  dir: string,
+  summary: { run_id: string; started_at: string } & Record<string, unknown>,
+): Promise<void> {
+  const month = summary.started_at.slice(0, 7);
+  const file = path.join(dir, 'runs', `${month}.jsonl`);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.appendFile(file, `${JSON.stringify(summary)}\n`, 'utf8');
+}

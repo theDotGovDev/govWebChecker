@@ -56,8 +56,8 @@ these, so they block all of Phase 3 and must not be story-specific.
 ### Test fixtures
 
 - [x] T008 [P] Create local fixture servers in `tests/fixtures/servers.ts`: fast responder, slow responder, and one that never responds
-- [ ] T009 [P] Create failing fixture servers in `tests/fixtures/failing.ts`: connection refused, invalid TLS certificate, HTTP error statuses, and one that refuses an automated User-Agent
-- [ ] T010 [P] Add a test helper in `tests/fixtures/no-network.ts` that fails any test attempting a non-loopback connection, enforcing SC-006
+- [x] T009 [P] Create failing fixture servers in `tests/fixtures/failing.ts`: connection refused, invalid TLS certificate, HTTP error statuses, and one that refuses an automated User-Agent
+- [x] T010 [P] Add a test helper in `tests/fixtures/no-network.ts` that fails any test attempting a non-loopback connection, enforcing SC-006
 
 ### The observation record
 
@@ -96,9 +96,9 @@ stored series reflects each server's actual behavior — including the gaps
 
 ### Targets
 
-- [ ] T026 [US1] Write failing test in `tests/unit/targets.test.ts`: loads the list, rejects a target missing `inclusion_reason` or `traffic_evidence`, and ignores inactive targets
-- [ ] T027 [US1] Implement target loading and validation in `src/targets/load.ts` per `data-model.md`
-- [ ] T028 [US1] Create `targets/federal.json` with a small development seed, each entry carrying its `inclusion_reason` and `traffic_evidence`
+- [x] T026 [US1] Write failing test in `tests/unit/targets.test.ts`: loads the list, rejects a target missing `inclusion_reason` or `traffic_evidence`, and ignores inactive targets
+- [x] T027 [US1] Implement target loading and validation in `src/targets/load.ts` per `data-model.md`
+- [x] T028 [US1] Create `targets/federal.json` with a small development seed, each entry carrying its `inclusion_reason` and `traffic_evidence`
 
 **T028 is deliberately a seed, not the real list.** FR-001a requires targets be
 selected by measured traffic, and the traffic source is recorded as NOT VERIFIED
@@ -107,32 +107,32 @@ confirming that source.
 
 ### Checking
 
-- [ ] T029 [US1] Write failing test in `tests/integration/classify.test.ts` asserting each fixture produces its distinct outcome: success, http_error, timeout, connection_failure, dns_failure, tls_failure, blocked (FR-013)
-- [ ] T030 [US1] Implement outcome classification in `src/checker/classify.ts` from request-lifecycle events, not error strings (research.md R3)
-- [ ] T031 [US1] Write failing test in `tests/integration/check.test.ts` asserting one check records elapsed time, final status, and the redirect chain, with the final URL as what was measured
-- [ ] T032 [US1] Implement the single check in `src/checker/check.ts` using `node:https` with socket-level timing
-- [ ] T033 [US1] Write failing test in `tests/integration/sampling.test.ts` asserting several samples are taken, spaced by the per-host interval, and that median, min, max, and count are stored (FR-011a, FR-011b)
-- [ ] T034 [US1] Implement multi-sample timing and the median in `src/checker/sample.ts`
-- [ ] T035 [US1] Write failing test in `tests/integration/sampling-failure.test.ts` asserting a total failure stores `samples: 0` with no latency figure — never zero-as-absence (Principle V)
-- [ ] T036 [P] [US1] Write failing test in `tests/integration/robots.test.ts` asserting a disallowed target is skipped and recorded with its reason, with no request beyond `robots.txt` (FR-005)
-- [ ] T037 [US1] Implement `robots.txt` fetching and evaluation in `src/checker/robots.ts`
+- [x] T029 [US1] Write failing test asserting each fixture produces its distinct outcome (in `tests/integration/check.test.ts`; classification is not separately reachable): success, http_error, timeout, connection_failure, dns_failure, tls_failure, blocked (FR-013)
+- [x] T030 [US1] Implement outcome classification in `src/checker/check.ts` (`classifyError`/`classifyStatus`) from request-lifecycle events, not error strings (research.md R3)
+- [x] T031 [US1] Write failing test in `tests/integration/check.test.ts` asserting one check records elapsed time, final status, and the redirect chain, with the final URL as what was measured
+- [x] T032 [US1] Implement the single check in `src/checker/check.ts` using `node:https` with socket-level timing
+- [x] T033 [US1] Write failing test in `tests/integration/sampling.test.ts` asserting several samples are taken, spaced by the per-host interval, and that median, min, max, and count are stored (FR-011a, FR-011b)
+- [x] T034 [US1] Implement multi-sample timing and the median in `src/checker/sample.ts`
+- [x] T035 [US1] Write failing test asserting a total failure stores `samples: 0` (in `tests/integration/sampling.test.ts`) with no latency figure — never zero-as-absence (Principle V)
+- [x] T036 [P] [US1] Write failing test in `tests/integration/robots.test.ts` asserting a disallowed target is skipped and recorded with its reason, with no request beyond `robots.txt` (FR-005)
+- [x] T037 [US1] Implement `robots.txt` fetching and evaluation in `src/checker/robots.ts`
 
 ### Runs
 
-- [ ] T038 [US1] Write failing test in `tests/integration/run.test.ts` asserting one observation per active target, that one target's failure does not stop the rest (FR-023), and that a run where everything failed carries the run-level marker (FR-024)
-- [ ] T039 [US1] Implement run orchestration in `src/checker/run.ts`, bounding concurrency across hosts and forbidding it within a host
-- [ ] T040 [P] [US1] Write failing test in `tests/integration/no-bodies.test.ts` asserting no page body, subresource, or screenshot reaches disk during a run (FR-015)
+- [x] T038 [US1] Write failing test in `tests/integration/run.test.ts` asserting one observation per active target, that one target's failure does not stop the rest (FR-023), and that a run where everything failed carries the run-level marker (FR-024)
+- [x] T039 [US1] Implement run orchestration in `src/checker/run.ts`, bounding concurrency across hosts and forbidding it within a host
+- [x] T040 [P] [US1] Write failing tests asserting no page body reaches the result or disk (in `check.test.ts` and `run.test.ts`), subresource, or screenshot reaches disk during a run (FR-015)
 
 ### Command surface
 
-- [ ] T041 [US1] Write failing test in `tests/integration/cli-check.test.ts` asserting `check` exits 0 when targets are down, exits 1 only when the run cannot proceed, and that `--dry-run` writes nothing while still obeying limits
-- [ ] T042 [US1] Implement the `check` command in `src/cli/index.ts` per `contracts/checker-cli.md`, with no flag that weakens a limit
-- [ ] T043 [US1] Write failing test in `tests/integration/cli-verify.test.ts` asserting `verify` detects a crafted record violating per-host spacing, per-domain spacing, a future timestamp, and a row missing its method
-- [ ] T044 [US1] Implement the `verify` command in `src/cli/verify.ts`, printing expected-versus-actual verdicts and exiting non-zero on violation (SC-002, SC-012)
+- [x] T041 [US1] Write failing test in `tests/integration/cli.test.ts` for the CLI shell: exit codes, rejected limit-weakening flags, and unknown options. Down-target and dry-run behavior is covered in `run.test.ts`, where limits are injectable — the CLI cannot sample quickly by design
+- [x] T042 [US1] Implement the `check` command in `src/cli/index.ts` per `contracts/checker-cli.md`, with no flag that weakens a limit
+- [x] T043 [US1] Write failing test in `tests/integration/cli.test.ts` and `tests/integration/verify.test.ts` asserting `verify` detects a crafted record violating per-host spacing, per-domain spacing, a future timestamp, and a row missing its method
+- [x] T044 [US1] Implement the `verify` command in `src/cli/verify.ts`, printing expected-versus-actual verdicts and exiting non-zero on violation (SC-002, SC-012)
 
 ### Scheduling
 
-- [ ] T045 [US1] Create `.github/workflows/check.yml` running the checker on a daily schedule and committing appended records back, guarded by a concurrency group (research.md R6)
+- [x] T045 [US1] Create `.github/workflows/check.yml` running the checker on a daily schedule and committing appended records back, guarded by a concurrency group (research.md R6)
 
 **Checkpoint**: US1 is complete and independently deliverable. The system
 measures, records, and can prove its own politeness from the record alone.
@@ -142,7 +142,7 @@ measures, records, and can prove its own politeness from the record alone.
 ## Phase 4: Polish & Cross-Cutting Concerns
 
 - [ ] T046 Update `ARCHITECTURE.md` with the delivered components and a Mermaid data-flow diagram, in this same change per the project default
-- [ ] T047 Walk `quickstart.md` end to end against the seed targets and correct any step that does not work as written
+- [x] T047 Walk `quickstart.md` end to end against the seed targets and correct any step that does not work as written
 
 ---
 

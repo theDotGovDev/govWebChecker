@@ -3,11 +3,12 @@
 govWebChecker measures public government websites and stores what it finds. This
 describes the components as they exist today.
 
-**Status**: the foundational layer is built — the record and the politeness
-controls. The checker itself, the CLI, and the schedule are specified and planned
-but not yet implemented. See
-[`specs/001-record-availability/tasks.md`](specs/001-record-availability/tasks.md)
-for what is done and what is not.
+**Status**: User Story 1 is built — the checker measures availability and
+response time, records it, and can prove its own conduct from the record. What
+is *not* built: the other three dimensions (transport security, the standard
+quality audit, technology fingerprinting) and the public site. The target list
+is a development seed, not the traffic-selected list the spec requires. See
+[`specs/001-record-availability/tasks.md`](specs/001-record-availability/tasks.md).
 
 ## Shape of the system
 
@@ -23,9 +24,9 @@ flowchart LR
     politeness[politeness<br/>rate limits, backoff, identification]
     checker --> record[record<br/>validate then append]
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
+    data --> verify[verify<br/>checks our conduct from the record]
     data --> site[static site<br/>not yet built]
 
-    style checker stroke-dasharray: 4 4
     style site stroke-dasharray: 4 4
 ```
 
@@ -64,16 +65,36 @@ assumed.
 - `writer.ts` — append, and only append. No update, no delete, no deduplication,
   since a correction is a new observation rather than an edit.
 
-### `src/checker/` — not yet built
+### `src/checker/` — performing the measurement
 
-Performs one check, classifies the outcome from request-lifecycle events, and
-summarizes repeated samples into a median with its spread.
+- `check.ts` — one request with socket-level timing, following redirects and
+  recording the chain. Classifies failures by the lifecycle phase they arrive in
+  rather than by error text, which drifts between Node versions. It never returns
+  a body. `fetchTextForEvaluation` is the deliberate, size-capped exception, used
+  only for `robots.txt` — a file whose purpose is to be read before we act.
+- `robots.ts` — a small parser for the directives that decide whether we may
+  fetch: User-agent grouping, Disallow, Allow. A group naming us beats the
+  wildcard, and the longest matching rule wins, so a site can carve an exception
+  out of a broad prohibition and we honor it.
+- `sample.ts` — repeated readings through the limiter, summarized as a median
+  with min and max. No successful timing means no latency figure at all.
+- `run.ts` — one pass. Different hosts run concurrently up to a bound; one host
+  never runs concurrently with itself. Politeness is a property of what we do to
+  a single server, not of total throughput.
 
-### `src/cli/` — not yet built
+### `src/cli/` — the command surface
 
-Two commands: `check` runs a pass; `verify` reads a record and reports whether the
-politeness guarantees hold. `verify` exists so the claims are checkable from the
-published data by someone who has never read this code.
+`check` runs a pass. `verify` reads a record and reports whether the politeness
+guarantees hold, printing expected versus actual.
+
+`verify` matters more than it looks: it reads the *record*, never the code, so
+someone who has never seen this repository can run the same check against the
+published data and reach the same verdict.
+
+The CLI has no flag that weakens a limit — no `--concurrency`, no
+`--rate-limit`, no `--timeout`, not even for local runs, since a local run
+reaches the same government servers a scheduled one does. Tests inject limits at
+the layer below, so the fast path exists where it cannot ship.
 
 ## Data flow
 
