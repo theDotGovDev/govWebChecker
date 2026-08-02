@@ -108,15 +108,38 @@ function futureTimestampCheck(rows: Observation[]): VerifyCheck {
   };
 }
 
+/**
+ * Append-only ordering, checked per target rather than across the whole file.
+ *
+ * Different hosts are checked concurrently and appended as each finishes, so
+ * rows across targets are legitimately interleaved and the file is NOT globally
+ * chronological. A single target is checked serially, though, so its own rows
+ * must never go backwards — and if they do, the file was reordered or rewritten,
+ * which is the thing append-only actually forbids.
+ *
+ * Checking global monotonicity instead would fail every honest concurrent run.
+ */
 function orderingCheck(rows: Observation[]): VerifyCheck {
+  const lastPerTarget = new Map<string, number>();
   let outOfOrder = 0;
-  for (let i = 1; i < rows.length; i++) {
-    if (timestamp(rows[i]!) < timestamp(rows[i - 1]!)) outOfOrder++;
+  let example = '';
+
+  for (const row of rows) {
+    const previous = lastPerTarget.get(row.target_id);
+    if (previous !== undefined && timestamp(row) < previous) {
+      outOfOrder++;
+      if (!example) example = row.target_id;
+    }
+    lastPerTarget.set(row.target_id, timestamp(row));
   }
+
   return {
     name: 'append-only ordering',
     pass: outOfOrder === 0,
-    detail: `${outOfOrder} rows out of chronological order`,
+    detail:
+      outOfOrder === 0
+        ? `${lastPerTarget.size} targets, each in order`
+        : `${outOfOrder} rows go backwards within a target (e.g. ${example})`,
   };
 }
 
@@ -145,7 +168,8 @@ export function formatReport(report: VerifyReport): string {
   );
   lines.push(
     '',
-    `${report.rows} rows checked — ${report.ok ? 'all guarantees hold' : 'VIOLATIONS FOUND'}`,
+    `${report.rows} ${report.rows === 1 ? 'row' : 'rows'} checked — ` +
+      `${report.ok ? 'all guarantees hold' : 'VIOLATIONS FOUND'}`,
   );
   return lines.join('\n');
 }

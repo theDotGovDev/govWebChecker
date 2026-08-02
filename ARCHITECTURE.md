@@ -120,6 +120,12 @@ sequenceDiagram
 The loop appends an observation whether the target responded or not. A failure is
 data, so there is no path through this diagram that produces silence.
 
+Distinct hosts run through this loop concurrently, up to a bound, which means
+observations are appended in completion order rather than target order. The
+record is therefore not globally chronological, and anything reading it — the
+`verify` command included — has to treat per-target ordering as the invariant
+rather than per-file.
+
 ## Boundaries that matter
 
 - **Nothing writes to `data/` except `record/`**, and it validates first.

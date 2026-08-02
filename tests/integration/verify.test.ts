@@ -93,14 +93,43 @@ describe('verify reads the record, not the code (SC-002, SC-012)', () => {
     assert.ok(report.checks.some((c) => /future/.test(c.name) && !c.pass));
   });
 
-  test('detects out-of-order rows, since the record is append-only', async () => {
+  test('detects a target whose own rows go backwards in time', async () => {
+    // One target is checked serially, so its own observations must be appended in
+    // order. A later row with an earlier timestamp means the file was reordered
+    // or rewritten, which append-only forbids.
     const file = await writeRecord([
-      row({ checked_at: '2026-07-31T07:00:00Z' }),
-      row({ checked_at: '2026-07-31T06:00:00Z' }),
+      row({ target_id: 'irs-gov', checked_at: '2026-07-31T07:00:00Z' }),
+      row({ target_id: 'irs-gov', checked_at: '2026-07-31T06:00:00Z' }),
     ]);
     const report = await verifyRecord(file, LIMITS);
     assert.equal(report.ok, false);
     assert.ok(report.checks.some((c) => /order/.test(c.name) && !c.pass));
+  });
+
+  test('does NOT flag interleaved targets, which concurrency produces legitimately', async () => {
+    // Different hosts are checked concurrently and appended as each finishes, so
+    // rows across targets are not globally chronological. Treating that as a
+    // violation would fail every honest run — it did, before this test existed.
+    const file = await writeRecord([
+      row({
+        target_id: 'b-gov',
+        host: 'b.gov',
+        url: 'https://b.gov/',
+        checked_at: '2026-07-31T06:00:05Z',
+      }),
+      row({
+        target_id: 'a-gov',
+        host: 'a.gov',
+        url: 'https://a.gov/',
+        checked_at: '2026-07-31T06:00:00Z',
+      }),
+    ]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(
+      report.ok,
+      true,
+      `interleaving must not be a violation: ${JSON.stringify(report.checks.filter((c) => !c.pass))}`,
+    );
   });
 
   test('reports expected versus actual rather than a bare verdict', async () => {

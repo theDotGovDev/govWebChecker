@@ -1,11 +1,14 @@
 # Quickstart: running and verifying US1
 
-How to run the checker and — more importantly — how to confirm it is behaving
+How to run the checker and — more importantly — how to confirm it behaved
 politely, using only the record it produced.
+
+Every command and every output below is copied from a real run against local
+fixtures. Nothing here is illustrative.
 
 ## Prerequisites
 
-- Node.js (current LTS)
+- Node.js 22 or later
 - No API keys, tokens, or credentials. This release needs none (FR-007)
 
 ```bash
@@ -22,56 +25,74 @@ makes it pass.
 npm test
 ```
 
-No test touches the network. Every scenario runs against local fixture servers
-(SC-006). If a test ever needs a real government site to pass, that test is
-wrong.
+106 tests, about two seconds. No test touches the network: a guard patches socket
+creation and fails any test that dials something other than loopback (SC-006). If
+a test ever needs a real government site to pass, that test is wrong.
 
 ## Check a single target
 
 ```bash
-node dist/cli.js check --only irs-gov --dry-run
+node dist/src/cli/index.js check --only irs-gov --dry-run
 ```
 
-`--dry-run` performs the real checks and prints the records without writing. Note
-that it still obeys every rate limit — a dry run sends the same traffic as a real
-one, so it is dry with respect to *our* disk, not to the target.
+`--dry-run` performs the real checks and prints the records without writing
+anything. It still obeys every rate limit — a dry run is dry with respect to
+*our* disk, not to the target.
 
-Expect it to feel slow. Samples are spaced by the per-host minimum interval
-(FR-011b), so a three-sample check takes at least twice that interval. That is
-the design working.
+Expect it to feel slow. Samples are spaced by the per-host interval, so a
+three-sample check takes at least 30 seconds. That is the design working, and
+there is deliberately no flag to speed it up.
 
 ## Run a full pass
 
 ```bash
-node dist/cli.js check
+node dist/src/cli/index.js check
 ```
 
-Appends to `data/availability/YYYY-MM.jsonl`. Exits `0` whether or not the
-targets responded — a down site is data, not an error (FR-025). It exits non-zero
-only when the run itself could not proceed.
+```text
+run 2026-08-02T01:52:44.668Z/availability/ab865680
+  2 targets, success=2
+```
+
+Appends to `data/availability/YYYY-MM.jsonl`, and the run itself to
+`data/runs/YYYY-MM.jsonl`. Exits `0` whether or not the targets responded — a
+down site is data, not an error (FR-025). It exits non-zero only when the run
+itself could not proceed: an unreadable target list, an unwritable directory.
 
 ## Verify the politeness guarantees
 
 This is the part worth doing.
 
 ```bash
-node dist/cli.js verify data/availability/2026-07.jsonl
+node dist/src/cli/index.js verify data/availability/2026-08.jsonl
 ```
-
-Prints a verdict per guarantee — expected versus actual — and exits non-zero if
-any is violated:
 
 ```text
-per-host spacing      min observed 60.2s   required 60s    PASS
-per-domain spacing    min observed 12.1s   required 10s    PASS
-method on every row   4210/4210                            PASS
-append-only ordering  timestamps monotonic per file        PASS
-no future timestamps  max 2026-07-31T06:04:51Z             PASS
+per-host spacing                no repeated key to compare (required 15000ms)         PASS
+per-domain spacing              no repeated key to compare (required 5000ms)          PASS
+method on every row             2/2 rows carry their method                           PASS
+no future timestamps            0 rows ahead of now; latest 2026-08-02T01:52:44.687Z  PASS
+append-only ordering            2 targets, each in order                              PASS
+rows match the record contract  2/2 valid                                             PASS
+
+2 rows checked — all guarantees hold
 ```
 
+Exits non-zero if any guarantee is violated.
+
 The point is that this reads the *record*, not the code. Anyone can run the
-equivalent against the published data and check our claims — which is what SC-002
-and SC-012 promise.
+equivalent against the published data and reach the same verdict without trusting
+our implementation — which is what SC-002 and SC-012 promise.
+
+Two things about that output worth understanding:
+
+- **"no repeated key to compare"** means this record has only one row per host, so
+  there is no gap to measure yet. It is not a vacuous pass hiding a problem — it
+  says exactly what it checked.
+- **"each in order" is per target, not across the file.** Different hosts are
+  checked concurrently and appended as each finishes, so the file is legitimately
+  not in overall time order. A single target is checked serially, so its own rows
+  must never go backwards; that is what append-only actually forbids.
 
 ## Read the record by hand
 
@@ -80,14 +101,17 @@ No tooling from this project required (FR-021):
 ```bash
 # How did one site do this month?
 jq 'select(.target_id=="irs-gov") | {checked_at, outcome, median: .latency.median_ms}' \
-  data/availability/2026-07.jsonl
+  data/availability/2026-08.jsonl
 
 # What failed, and how?
 jq -r 'select(.outcome!="success") | [.checked_at, .host, .outcome] | @tsv' \
-  data/availability/2026-07.jsonl
+  data/availability/2026-08.jsonl
 
-# Distinguish a gap from a failure: days with no rows at all
-jq -r '.checked_at[:10]' data/availability/2026-07.jsonl | sort -u
+# Which runs should be discounted entirely?
+jq -r 'select(.all_targets_failed) | .run_id' data/runs/2026-08.jsonl
+
+# Distinguish a gap from a failure: which days did we measure at all?
+jq -r '.checked_at[:10]' data/availability/2026-08.jsonl | sort -u
 ```
 
 That last one matters. A day missing from the output is a day we did not measure,
@@ -96,20 +120,34 @@ those be confused (US1 scenario 5).
 
 ## Scheduled runs
 
-`.github/workflows/check.yml` runs the same command and commits the appended
-records back.
+`.github/workflows/check.yml` runs the same command daily and commits the
+appended records back.
 
-- Runs are guarded by a concurrency group so two runs cannot race the commit.
-- Scheduled runs are best-effort and can be delayed; `checked_at` records when
-  the check actually ran, never when it was scheduled (FR-011).
-- If scheduled workflows stop firing, the record shows it as missing rows.
-  Silent cessation is the failure mode that goes unnoticed longest, so this is
-  worth an explicit check once the schedule is live.
+- Runs are guarded by a concurrency group set to queue, not cancel: a cancelled
+  run is a gap in the record, and gaps are meant to mean "we did not measure".
+- The workflow runs `verify` before committing. A run that violated a politeness
+  guarantee does not get published — publishing data that fails our own stated
+  checks would be worse than publishing nothing.
+- Scheduled runs are best-effort and can be delayed; `checked_at` records when the
+  check actually ran, never when it was scheduled (FR-011).
+- If scheduled runs stop firing, the record shows it as missing rows. Silent
+  cessation is the failure mode that goes unnoticed longest, so it is worth an
+  explicit check once the schedule is live (task T050).
 
 ## What "working" looks like
 
 - One row per active target per run, including failures (SC-001)
-- `verify` passes on the produced record (SC-002, SC-012)
+- One run summary per pass, joined to those rows by `run_id`
+- `verify` exits 0 on the produced record (SC-002, SC-012)
 - Every row carries its method (SC-003)
 - A target down all day produced no more traffic than one that was up (SC-004)
-- The full test suite passed with no network access (SC-006)
+- The full suite passed with no network access (SC-006)
+
+## Known limitations of this release
+
+- `targets/federal.json` is a **development seed of three hand-picked sites**, not
+  the traffic-selected list FR-001a requires. Each entry says so in its own
+  `traffic_evidence` rather than implying a measurement nobody took (task T048).
+- The scheduled workflow has not yet run against real infrastructure.
+- Only availability and response time are measured. Transport security, the
+  quality audit, and technology fingerprinting are User Stories 2–4.
