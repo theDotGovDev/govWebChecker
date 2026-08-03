@@ -36,7 +36,16 @@ export async function verifyRecord(file: string, limits: VerifyLimits): Promise<
   const lines = text.trimEnd().split('\n').filter((l) => l.trim() !== '');
   const rows: Observation[] = lines.map((line) => JSON.parse(line) as Observation);
 
+  // Guard the shape before checking the substance. Pointed at a file of run
+  // summaries — which have no host — the spacing checks used to throw a
+  // TypeError, killing the workflow step that gates publication and discarding
+  // a set of good measurements with it. A tool that decides whether data gets
+  // published has to fail legibly or not at all.
+  const shape = shapeCheck(rows);
+  if (!shape.pass) return { ok: false, checks: [shape], rows: rows.length };
+
   const checks: VerifyCheck[] = [
+    shape,
     spacingCheck('per-host spacing', rows, limits.hostIntervalMs, (r) => r.host),
     spacingCheck('per-domain spacing', rows, limits.domainIntervalMs, (r) => registrableDomain(r.host)),
     methodCheck(rows),
@@ -46,6 +55,32 @@ export async function verifyRecord(file: string, limits: VerifyLimits): Promise<
   ];
 
   return { ok: checks.every((c) => c.pass), checks, rows: rows.length };
+}
+
+/** Is this an observation record at all? */
+function shapeCheck(rows: Observation[]): VerifyCheck {
+  const name = 'file is an observation record';
+  if (rows.length === 0) {
+    return { name, pass: true, detail: 'empty file, nothing to check' };
+  }
+
+  const usable = rows.filter(
+    (r) => typeof r?.host === 'string' && typeof r?.target_id === 'string' && typeof r?.checked_at === 'string',
+  ).length;
+
+  if (usable === rows.length) return { name, pass: true, detail: `${rows.length} observation rows` };
+
+  const looksLikeRuns = rows.some(
+    (r) => (r as unknown as { run_id?: unknown; targets_attempted?: unknown }).targets_attempted !== undefined,
+  );
+
+  return {
+    name,
+    pass: false,
+    detail: looksLikeRuns
+      ? 'this is a run-summary file, not an observation record — verify expects data/<dimension>/'
+      : `${rows.length - usable}/${rows.length} rows lack host, target_id, or checked_at`,
+  };
 }
 
 function timestamp(row: Observation): number {

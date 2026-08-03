@@ -37,10 +37,20 @@ jobs:
         # If the run violated a politeness guarantee, the record does not get
         # committed. Publishing data that fails our own stated checks would be
         # worse than publishing nothing.
+        #
+        # Only observation files are verified. data/runs/ holds run summaries,
+        # which have no host and are not what `verify` checks — globbing
+        # data/*/*.jsonl swept them in and crashed the step, which skipped the
+        # commit and discarded a whole run's good measurements.
         run: |
           set -e
           shopt -s nullglob
-          for file in data/*/*.jsonl; do
+          files=(data/availability/*.jsonl)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no observation files produced — nothing to verify or publish"
+            exit 0
+          fi
+          for file in "${files[@]}"; do
             echo "verifying $file"
             node dist/src/cli/index.js verify "$file"
           done

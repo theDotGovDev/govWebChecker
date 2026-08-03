@@ -71,6 +71,19 @@ stricter, they win.
   metadata. Don't commit or archive fetched page bodies.
 - **Re-probe only when the question needs it.** Answer from stored results where
   they exist rather than generating fresh traffic to look something up twice.
+- **Checks run in GitHub Actions, never from a development sandbox.** This is the
+  intended production path, and running from anywhere else produces measurements
+  of that machine's network rather than of the target.
+
+  This is not theoretical. A run from a cloud sandbox whose egress refused
+  `CONNECT` returned three federal sites as `blocked` with a 403 — individually
+  plausible observations that, committed, would have asserted those agencies
+  refuse automated traffic. See the FR-024 note in
+  `specs/001-record-availability/spec.md`.
+
+  To exercise the checker, use `workflow_dispatch` on `check.yml` and read the
+  run's output. If you must run it locally to debug, point it at local fixtures,
+  and never at a real government site.
 
 ## My working defaults
 
