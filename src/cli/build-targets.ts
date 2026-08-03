@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import { parseTrafficCsv, parseRegistryCsv, buildTargets } from '../targets/build.js';
+import { parseTargets } from '../targets/load.js';
 
 /**
  * Regenerates the target list from published data.
@@ -27,10 +28,20 @@ async function main(): Promise<number> {
     agencies: Record<string, string>;
   };
 
+  // Read the list being replaced so hosts already measured keep their ids and
+  // their history stays joined. A missing or unreadable file is fine — that is
+  // simply the first run.
+  let existing: Awaited<ReturnType<typeof parseTargets>> = [];
+  try {
+    existing = parseTargets(await fs.readFile(out, 'utf8'));
+  } catch {
+    existing = [];
+  }
+
   const result = buildTargets(
     parseTrafficCsv(await fs.readFile(traffic, 'utf8')),
     parseRegistryCsv(await fs.readFile(registry, 'utf8')),
-    { limit, overrides: overrides.agencies },
+    { limit, overrides: overrides.agencies, existing },
   );
 
   await fs.writeFile(
@@ -59,6 +70,8 @@ async function main(): Promise<number> {
 
   const agencies = new Set(result.targets.map((t) => t.agency));
   console.log(`  agencies:  ${agencies.size}`);
+  const kept = result.targets.filter((t) => existing.some((e) => e.host === t.host && e.id === t.id));
+  console.log(`  ids kept from the previous list: ${kept.length}/${existing.length}`);
   console.log(`  written:   ${out}`);
 
   if (result.targets.length === 0) {
