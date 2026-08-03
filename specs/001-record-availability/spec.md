@@ -508,15 +508,23 @@ Recorded here so the reasoning is not re-litigated later.
   Two public datasets are candidate sources for the list, both to be confirmed at
   plan time rather than taken on trust here:
 
-  - **The .gov registry** — CISA publishes a daily `current-federal.csv` of
-    registered federal `.gov` domains with registrant organization. Confirmed to
-    exist. Two caveats: registration is not operation, since a registered domain
-    need not serve a site; and branch categorization is not explicit in that file,
-    so separating executive from legislative and judicial needs a second source.
-  - **Federal traffic analytics** — the government publishes visit data for
-    participating federal sites, which would give an objective basis for
-    "popular" rather than a hand-picked list. NOT VERIFIED: the fetch was blocked,
-    so both its current availability and its coverage are unconfirmed.
+  - **The .gov registry** — CISA publishes a daily `current-federal.csv`.
+    **CONFIRMED** from a runner: 1,339 rows, with `Domain type` (e.g. `Federal -
+    Executive`), `Organization name`, and `Suborganization name` — the last
+    populated for about two thirds of entries, giving NOAA under Commerce and IRS
+    under Treasury. An earlier draft of this spec said branch categorization was
+    absent from the file; that was taken from the repository's summary and is
+    wrong. One caveat stands: registration is not operation, since a registered
+    domain need not serve a site.
+  - **Federal traffic analytics** — **CONFIRMED**: `analytics.usa.gov` publishes
+    `data/live/sites.csv`, 10,000 hostnames ranked by visits, plus 30- and 7-day
+    top-domain files. Keyed by *hostname* — `tools.usps.com`,
+    `forecast.weather.gov` — which is exactly the unit this system measures, so
+    the aggregation mismatch FR-001a anticipates does not arise for this source.
+    The file states visits without naming its window, so no period is claimed.
+
+    An earlier draft recorded this as unverified because the fetch was blocked.
+    The block was the development sandbox's egress policy, not the source.
 
   If no traffic source pans out, "popular" falls back to a curated list with the
   reason recorded per target, which FR-001 already requires.

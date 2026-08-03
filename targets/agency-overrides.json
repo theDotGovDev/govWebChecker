@@ -1,0 +1,6 @@
+{
+  "_comment": "Federal properties the .gov registry cannot attribute, because they do not use a .gov domain. Each entry is a deliberate, reviewable claim that the domain belongs to the named agency. Without this a top-traffic federal site is either dropped or included with no accountable owner; neither is acceptable. Keep this small — if it grows, the attribution approach needs rethinking rather than more exceptions.",
+  "agencies": {
+    "usps.com": "United States Postal Service"
+  }
+}
