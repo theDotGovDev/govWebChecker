@@ -20,17 +20,33 @@ None of these exist. Create each one as part of the first change that needs it,
 not as a later cleanup pass:
 
 - `ARCHITECTURE.md` — components, boundaries, data flow
-- `specs/` — a Spec Kit style `spec.md` per feature (ask before running
-  `specify init`; a hand-written `spec.md` in the same shape is fine)
 - a test framework — propose one before introducing it, then work test-first
 - pre-commit gitleaks hook, a secret scan in CI, and push protection on the repo
 - `infra/` — repo settings in Terraform, applied by CI
 - `docs/` — a static site describing what this is, why it exists, how to use it
 
+## Spec-driven development
+
+This project uses [Spec Kit](https://github.com/github/spec-kit). The toolchain
+is installed, so use its skills — `/speckit-specify`, `/speckit-clarify`,
+`/speckit-plan`, `/speckit-tasks`, `/speckit-analyze`, `/speckit-implement`,
+`/speckit-converge` — rather than hand-rolling the artifacts. (This version
+ships them as skills with hyphens; older docs name them `/speckit.specify` with
+a dot.)
+
+`.specify/memory/constitution.md` holds the project's binding principles. Read it
+before planning anything: where it is stricter than the defaults below, it wins,
+and its two NON-NEGOTIABLE principles have no convenience exception.
+
+`specs/001-record-availability/spec.md` is the current front of the work. It is a
+**draft with open `[NEEDS CLARIFICATION]` markers** — do not plan or implement
+from it until those are answered and it is approved.
+
 ## Project-specific rules
 
 These are about the one thing this project does: sending traffic to government
-websites it does not own. They sit above the general defaults — where they are
+websites it does not own. The constitution states them as binding principles;
+this is the short version. They sit above the general defaults — where they are
 stricter, they win.
 
 - **This is measurement, not load testing.** A check produces no more traffic

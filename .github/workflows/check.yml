@@ -1,0 +1,67 @@
+name: check
+
+on:
+  schedule:
+    # Daily. Sampled availability supports reliability classification, not outage
+    # resolution — a site up 100% of the time versus 50% is the distinction this
+    # project answers (spec.md FR-009).
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+# Two runs must never race the commit. Queue rather than cancel: a cancelled run
+# is a gap in the record, and gaps are meant to mean "we did not measure".
+concurrency:
+  group: availability-check
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Run the checks
+        run: node dist/src/cli/index.js check
+
+      - name: Verify our own conduct before publishing it
+        # If the run violated a politeness guarantee, the record does not get
+        # committed. Publishing data that fails our own stated checks would be
+        # worse than publishing nothing.
+        run: |
+          set -e
+          shopt -s nullglob
+          for file in data/*/*.jsonl; do
+            echo "verifying $file"
+            node dist/src/cli/index.js verify "$file"
+          done
+
+      - name: Commit the record
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/)" ]; then
+            echo "no new observations — nothing to commit"
+            exit 0
+          fi
+          git config user.name 'govwebchecker[bot]'
+          git config user.email 'govwebchecker[bot]@users.noreply.github.com'
+          git add data/
+          git commit -m "data: availability observations $(date -u +%Y-%m-%dT%H:%MZ)"
+          # Another run may have landed while this one was checking. Rebase rather
+          # than force: the record is append-only, and losing someone else's
+          # observations to a push race would be a silent hole in the history.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "could not push the record after 3 attempts" >&2
+          exit 1

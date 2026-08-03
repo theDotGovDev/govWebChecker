@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      # The suite must pass with no network access to any external host (SC-006).
+      # Fixtures are loopback servers; a test reaching the internet is a bug in
+      # the test, not a reason to relax this.
+      - run: npm test

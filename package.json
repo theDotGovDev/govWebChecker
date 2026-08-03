@@ -1,0 +1,20 @@
+{
+  "name": "govwebchecker",
+  "version": "0.1.0",
+  "description": "Check popular gov websites for status and speed",
+  "license": "CC0-1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "check": "node dist/src/cli/index.js check",
+    "verify": "node dist/src/cli/index.js verify"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
