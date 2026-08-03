@@ -14,6 +14,12 @@ export interface Target {
   /** The exact URL checked. Rate limiting keys on the host; measurement is of a URL. */
   url: string;
   agency: string;
+  /**
+   * The operating unit within the agency, where the registry names one — NOAA
+   * under Commerce, IRS under Treasury. The department is who is accountable;
+   * the suborganization is who the public recognizes, and both are worth having.
+   */
+  suborganization?: string;
   /** `federal` today. Present from the start so widening scope adds rows, not columns. */
   jurisdiction: string;
   inclusion_reason: string;
@@ -101,6 +107,9 @@ export function parseTargets(json: string): Target[] {
         ...(typeof e['visits'] === 'number' ? { visits: e['visits'] } : {}),
         ...(typeof e['period'] === 'string' ? { period: e['period'] } : {}),
       },
+      ...(typeof t['suborganization'] === 'string' && t['suborganization'] !== ''
+        ? { suborganization: t['suborganization'] }
+        : {}),
       ...(typeof t['traffic_unit_mismatch'] === 'string'
         ? { traffic_unit_mismatch: t['traffic_unit_mismatch'] }
         : {}),
