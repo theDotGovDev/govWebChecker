@@ -1,0 +1,58 @@
+name: probe-data-sources
+
+# Reports whether the upstream data sources this project depends on are still
+# published, and in what shape.
+#
+# It exists because those sources cannot be reached from a development sandbox
+# (see AGENTS.md), so "does this endpoint exist" is a question only a runner can
+# answer. Keeping it as a workflow means the answer is reproducible rather than
+# something one person checked once and wrote down.
+#
+# This reads published data files. It sends no traffic to any measurement target
+# and is unrelated to the checker.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe candidate sources
+        run: |
+          set -uo pipefail
+
+          probe() {
+            local label="$1" url="$2"
+            local code size first
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-time 30 "$url" 2>/dev/null || echo "000")
+            size=$(wc -c < /tmp/body 2>/dev/null || echo 0)
+            first=$(head -c 180 /tmp/body 2>/dev/null | tr '\n' ' ' | tr -d '\r')
+            printf '%-46s %-4s %10s bytes\n' "$label" "$code" "$size"
+            if [ "$code" = "200" ] && [ "$size" -gt 0 ]; then
+              printf '    head: %s\n' "$first"
+              printf '    lines: %s\n' "$(wc -l < /tmp/body)"
+            fi
+            printf '\n'
+          }
+
+          echo "=== Federal traffic (Digital Analytics Program) ==="
+          probe "analytics.usa.gov top-domains-30-days.csv" \
+            "https://analytics.usa.gov/data/live/top-domains-30-days.csv"
+          probe "analytics.usa.gov top-domains-7-days.csv" \
+            "https://analytics.usa.gov/data/live/top-domains-7-days.csv"
+          probe "analytics.usa.gov sites.csv" \
+            "https://analytics.usa.gov/data/live/sites.csv"
+          probe "analytics.usa.gov top-pages-30-days.csv" \
+            "https://analytics.usa.gov/data/live/top-pages-30-days.csv"
+          probe "analytics.usa.gov (root, sanity check)" \
+            "https://analytics.usa.gov/"
+
+          echo "=== .gov registry (CISA) ==="
+          probe "cisagov current-federal.csv" \
+            "https://raw.githubusercontent.com/cisagov/dotgov-data/main/current-federal.csv"
+          probe "cisagov current-full.csv" \
+            "https://raw.githubusercontent.com/cisagov/dotgov-data/main/current-full.csv"
+
+          echo "Probe complete. A 200 with a plausible head means the source is usable;"
+          echo "anything else means the target list needs a different basis."
