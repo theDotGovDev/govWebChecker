@@ -323,7 +323,17 @@ rather than "not present".
 
 - **FR-023**: A failure of one target or one dimension MUST NOT prevent the other
   targets or dimensions in that run from being checked and stored.
-- **FR-024**: A run where every target failed MUST be marked at the run level.
+- **FR-024**: A run in which no target produced a *successful* measurement MUST be
+  marked at the run level, and the run record MUST carry the count of targets per
+  outcome.
+
+  "Failed" is deliberately not the test. A network path that refuses our
+  connections can make every target report as blocked or errored while each
+  observation looks individually plausible — the run then publishes as "these
+  named agencies refuse automated traffic" when the fault was entirely ours. The
+  system cannot distinguish a target refusing us from our own path refusing us,
+  so absence of any success is the signal, and the per-outcome counts let a
+  reader see the uniformity that gives it away.
 - **FR-025**: The system MUST NOT treat a slow or unavailable target as an error
   condition requiring intervention.
 

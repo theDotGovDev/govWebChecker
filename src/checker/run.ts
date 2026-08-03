@@ -34,6 +34,8 @@ export interface RunSummary {
   targets_attempted: number;
   targets_succeeded: number;
   all_targets_failed: boolean;
+  /** How many targets landed on each outcome. Uniformity is the tell. */
+  outcome_breakdown: Record<string, number>;
   vantage: string;
   observations: Observation[];
 }
@@ -41,8 +43,18 @@ export interface RunSummary {
 const SCHEMA = '1';
 const DIMENSION = 'availability';
 
-/** Outcomes that mean we got an answer from the site. */
-const ANSWERED = new Set(['success', 'http_error', 'blocked']);
+/**
+ * Only a successful measurement counts toward a run being trustworthy.
+ *
+ * `blocked` deliberately does NOT count, and that distinction was learned the
+ * hard way: run from a network whose egress refused the connections, every
+ * target came back 403/blocked and the run looked healthy. The record would have
+ * asserted that named federal agencies refuse automated traffic, when the fault
+ * was entirely ours. We cannot tell a target refusing us from our own path
+ * refusing us, so a run with no successes is marked and left for a reader to
+ * discount.
+ */
+const SUCCEEDED = new Set(['success']);
 
 async function robotsAllows(target: Target, config: RunConfig, limiter: RateLimiter): Promise<boolean> {
   const robotsUrl = new URL('/robots.txt', target.url).toString();
@@ -91,7 +103,7 @@ export async function executeRun({ targets, dataDir, config }: RunInput): Promis
     for (let index = next++; index < active.length; index = next++) {
       const observation = await checkOne(active[index]!, config, limiter, run_id);
       observations.push(observation);
-      if (ANSWERED.has(observation.outcome)) answered++;
+      if (SUCCEEDED.has(observation.outcome)) answered++;
       // Appends are awaited inside the worker so a crash mid-run leaves the
       // observations already taken on disk rather than losing the whole pass.
       if (!config.dryRun) await appendObservation(dataDir, observation);
@@ -113,9 +125,13 @@ export async function executeRun({ targets, dataDir, config }: RunInput): Promis
     finished_at: new Date().toISOString(),
     targets_attempted: active.length,
     targets_succeeded: answered,
-    // A run where nothing answered is more likely our network than every
+    // A run where nothing succeeded is more likely our network than every
     // government site at once. Marking it lets a reader discount it (FR-024).
     all_targets_failed: active.length > 0 && answered === 0,
+    outcome_breakdown: observations.reduce<Record<string, number>>((counts, o) => {
+      counts[o.outcome] = (counts[o.outcome] ?? 0) + 1;
+      return counts;
+    }, {}),
     vantage: config.vantage,
     observations,
   };
