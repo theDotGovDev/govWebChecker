@@ -23,6 +23,11 @@ export interface BuildOptions {
    * owner or dropping some of the highest-traffic federal sites entirely.
    */
   overrides: Record<string, string>;
+  /**
+   * The list being replaced, if any. A host already present keeps its id, so
+   * regeneration never orphans the observations that join on it.
+   */
+  existing?: Target[];
 }
 
 export interface Excluded {
@@ -132,6 +137,12 @@ export function buildTargets(
   options: BuildOptions,
 ): BuildResult {
   const byDomain = new Map(registry.map((r) => [r.domain, r]));
+  // A host keeps whatever id it was first given. Every stored observation joins
+  // on that id, so re-deriving it would silently sever the series this project
+  // exists to build — and the break would only show up as a site that
+  // mysteriously has no history.
+  const idForHost = new Map((options.existing ?? []).map((t) => [t.host, t.id]));
+  const taken = new Set(idForHost.values());
   const targets: Target[] = [];
   const unmatched: Excluded[] = [];
 
@@ -160,8 +171,17 @@ export function buildTargets(
     }
 
     const rank = targets.length + unmatched.length + 1;
+    let id = idForHost.get(host);
+    if (id === undefined) {
+      id = toId(host);
+      // Only reachable when a previous list gave some other host this exact id.
+      let suffix = 2;
+      while (taken.has(id)) id = `${toId(host)}-${suffix++}`;
+      taken.add(id);
+    }
+
     targets.push({
-      id: toId(host),
+      id,
       host,
       url: `https://${host}/`,
       agency,

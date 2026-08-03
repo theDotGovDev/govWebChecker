@@ -154,3 +154,64 @@ gsa.gov,Federal - Executive,General Services Administration,,Washington,DC,x@gsa
     assert.equal('suborganization' in targets[0]!, false, 'absent, not empty string');
   });
 });
+
+describe('id stability across regeneration', () => {
+  const REG = `Domain name,Domain type,Organization name,Suborganization name,City,State,Security contact email
+irs.gov,Federal - Executive,Department of the Treasury,Internal Revenue Service,DC,DC,x@irs.gov
+`;
+
+  test('reuses the existing id for a host already measured', () => {
+    // Regeneration must not orphan history. A host keeps whatever id it was
+    // first given, because every stored observation joins on that id — changing
+    // it silently severs the series the whole project exists to build.
+    const existing = [
+      {
+        id: 'irs-gov',
+        host: 'www.irs.gov',
+        url: 'https://www.irs.gov/',
+        agency: 'Department of the Treasury',
+        jurisdiction: 'federal',
+        inclusion_reason: 'seed',
+        traffic_evidence: { source: 's', measure: 'm' },
+        active: true,
+      },
+    ];
+    const { targets } = buildTargets(
+      parseTrafficCsv('domain,visits\nwww.irs.gov,100\n'),
+      parseRegistryCsv(REG),
+      { limit: 1, overrides: {}, existing },
+    );
+    assert.equal(targets[0]!.id, 'irs-gov', 'the historical id must survive regeneration');
+  });
+
+  test('derives a fresh id only for a host never seen before', () => {
+    const { targets } = buildTargets(
+      parseTrafficCsv('domain,visits\nwww.irs.gov,100\n'),
+      parseRegistryCsv(REG),
+      { limit: 1, overrides: {}, existing: [] },
+    );
+    assert.equal(targets[0]!.id, 'www-irs-gov');
+  });
+
+  test('a reused id does not collide with a derived one', () => {
+    const existing = [
+      {
+        id: 'www-irs-gov',
+        host: 'irs.gov',
+        url: 'https://irs.gov/',
+        agency: 'Department of the Treasury',
+        jurisdiction: 'federal',
+        inclusion_reason: 'seed',
+        traffic_evidence: { source: 's', measure: 'm' },
+        active: true,
+      },
+    ];
+    const { targets } = buildTargets(
+      parseTrafficCsv('domain,visits\nirs.gov,200\nwww.irs.gov,100\n'),
+      parseRegistryCsv(REG),
+      { limit: 2, overrides: {}, existing },
+    );
+    const ids = targets.map((t) => t.id);
+    assert.equal(new Set(ids).size, ids.length, `ids collided: ${ids.join(', ')}`);
+  });
+});
