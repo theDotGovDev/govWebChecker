@@ -178,6 +178,51 @@ describe('a run', () => {
     }
   });
 
+  test('marks a run where every target was blocked — that is our network, not theirs', async () => {
+    // Found by running against real targets from a sandbox whose egress refused
+    // CONNECT: every target came back 403/blocked, and the run was NOT marked,
+    // because "blocked" counted as the site answering. The record would have
+    // asserted that three federal agencies refuse automated traffic when the
+    // truth was our own network path.
+    const a = await statusServer(403);
+    const b = await statusServer(403);
+    try {
+      const summary = await executeRun({
+        targets: [target('a', a.url), target('b', b.url)],
+        dataDir: dir,
+        config: CONFIG,
+      });
+      assert.equal(
+        summary.all_targets_failed,
+        true,
+        'no target produced a successful measurement, so the run is not trustworthy',
+      );
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test('records the outcome breakdown so uniformity is visible to a reader', async () => {
+    const a = await statusServer(403);
+    const good = await fastServer();
+    try {
+      await executeRun({
+        targets: [target('a', a.url), target('good', good.url)],
+        dataDir: dir,
+        config: CONFIG,
+      });
+      const month = new Date().toISOString().slice(0, 7);
+      const summary = JSON.parse(
+        (await fs.readFile(path.join(dir, 'runs', `${month}.jsonl`), 'utf8')).trim(),
+      ) as { outcome_breakdown: Record<string, number> };
+      assert.deepEqual(summary.outcome_breakdown, { blocked: 1, success: 1 });
+    } finally {
+      await a.close();
+      await good.close();
+    }
+  });
+
   test('does not mark a run in which something succeeded', async () => {
     const good = await fastServer();
     const dead = await refusedUrl();
