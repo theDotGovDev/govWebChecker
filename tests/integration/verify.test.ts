@@ -142,6 +142,42 @@ describe('verify reads the record, not the code (SC-002, SC-012)', () => {
     assert.match(spacing.detail, /\d/, 'the report must show the numbers, not just pass/fail');
   });
 
+  test('reports plainly when handed a file that is not an observation record', async () => {
+    // The first real workflow run crashed here: the verify step globbed
+    // data/*/*.jsonl, which swept in the run-summary file, whose rows have no
+    // host. A TypeError killed the step, the commit was skipped, and three
+    // perfectly good measurements were discarded. A tool that gates publication
+    // must fail legibly or not at all.
+    const file = path.join(dir, 'runs.jsonl');
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        run_id: 'r',
+        started_at: '2026-08-03T15:48:58Z',
+        finished_at: '2026-08-03T15:49:43Z',
+        targets_attempted: 3,
+        targets_succeeded: 3,
+        all_targets_failed: false,
+        outcome_breakdown: { success: 3 },
+        vantage: 'github-actions/Linux',
+      }) + '\n',
+      'utf8',
+    );
+
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, false);
+    assert.ok(
+      report.checks.some((c) => /observation record/i.test(c.detail) || /observation record/i.test(c.name)),
+      `expected a legible explanation, got ${JSON.stringify(report.checks)}`,
+    );
+  });
+
+  test('does not throw on rows missing the fields it keys on', async () => {
+    const file = path.join(dir, 'partial.jsonl');
+    await fs.writeFile(file, JSON.stringify({ dimension: 'availability', nonsense: true }) + '\n', 'utf8');
+    await assert.doesNotReject(() => verifyRecord(file, LIMITS));
+  });
+
   test('a failure outcome is not itself a violation', async () => {
     const file = await writeRecord([
       row({ checked_at: '2026-07-31T06:00:00Z', outcome: 'timeout', latency: { samples: 0 } }),
