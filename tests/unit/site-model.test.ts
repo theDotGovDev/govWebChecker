@@ -148,6 +148,61 @@ describe('site model', () => {
     assert.equal(model.summary.lastObserved, '2026-08-03T12:00:00Z');
   });
 
+  test('aggregates response time across observations, not within one check', () => {
+    // At hourly cadence each observation is a single reading. A site's response
+    // time is the median of the series; showing the newest reading alone would
+    // present noise as a measurement (FR-011a).
+    const model = buildSiteModel({
+      targets: [target('a', 'a.gov')],
+      observations: [
+        observation({ checked_at: '2026-08-03T10:00:00Z', latency: { samples: 1, median_ms: 100, min_ms: 100, max_ms: 100 } }),
+        observation({ checked_at: '2026-08-03T11:00:00Z', latency: { samples: 1, median_ms: 900, min_ms: 900, max_ms: 900 } }),
+        observation({ checked_at: '2026-08-03T12:00:00Z', latency: { samples: 1, median_ms: 200, min_ms: 200, max_ms: 200 } }),
+      ],
+      runs: [],
+    });
+    const typical = model.sites[0]!.typical!;
+    assert.equal(typical.median_ms, 200, 'the outlier must not drag the figure');
+    assert.equal(typical.readings, 3, 'the count it was computed from travels with it');
+  });
+
+  test('a lone reading yields no typical figure', () => {
+    const model = buildSiteModel({
+      targets: [target('a', 'a.gov')],
+      observations: [observation()],
+      runs: [],
+    });
+    assert.equal(model.sites[0]!.typical, undefined, 'one reading is not a response time');
+  });
+
+  test('counts how often a site responded, as a reliability signal', () => {
+    const model = buildSiteModel({
+      targets: [target('a', 'a.gov')],
+      observations: [
+        observation({ checked_at: '2026-08-03T10:00:00Z', outcome: 'success' }),
+        observation({ checked_at: '2026-08-03T11:00:00Z', outcome: 'timeout', latency: { samples: 0 } }),
+        observation({ checked_at: '2026-08-03T12:00:00Z', outcome: 'success' }),
+        observation({ checked_at: '2026-08-03T13:00:00Z', outcome: 'success' }),
+      ],
+      runs: [],
+    });
+    assert.equal(model.sites[0]!.responded, 3);
+    assert.equal(model.sites[0]!.observationCount, 4);
+  });
+
+  test('failed observations contribute to the count but not to the timing', () => {
+    const model = buildSiteModel({
+      targets: [target('a', 'a.gov')],
+      observations: [
+        observation({ checked_at: '2026-08-03T10:00:00Z', latency: { samples: 1, median_ms: 100, min_ms: 100, max_ms: 100 } }),
+        observation({ checked_at: '2026-08-03T11:00:00Z', outcome: 'timeout', latency: { samples: 0 } }),
+        observation({ checked_at: '2026-08-03T12:00:00Z', latency: { samples: 1, median_ms: 300, min_ms: 300, max_ms: 300 } }),
+      ],
+      runs: [],
+    });
+    assert.equal(model.sites[0]!.typical!.readings, 2, 'a timeout is not a slow reading');
+  });
+
   test('an empty record produces an empty model rather than throwing', () => {
     const model = buildSiteModel({ targets: [], observations: [], runs: [] });
     assert.equal(model.sites.length, 0);

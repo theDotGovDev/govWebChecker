@@ -39,9 +39,9 @@ node dist/src/cli/index.js check --only irs-gov --dry-run
 anything. It still obeys every rate limit — a dry run is dry with respect to
 *our* disk, not to the target.
 
-Expect it to feel slow. Samples are spaced by the per-host interval, so a
-three-sample check takes at least 30 seconds. That is the design working, and
-there is deliberately no flag to speed it up.
+One reading per check, so a single target is quick. A full pass is paced by the
+per-host and per-domain intervals rather than by any one site, and there is
+deliberately no flag to speed it up.
 
 ## Run a full pass
 
@@ -120,8 +120,10 @@ those be confused (US1 scenario 5).
 
 ## Scheduled runs
 
-`.github/workflows/check.yml` runs the same command daily and commits the
-appended records back.
+`.github/workflows/check.yml` runs the same command hourly and commits the
+appended records back. The site rebuilds on its own six-hourly rhythm rather
+than on every data commit — at hourly collection that would be 24 deployments a
+day to change one table.
 
 - Runs are guarded by a concurrency group set to queue, not cancel: a cancelled
   run is a gap in the record, and gaps are meant to mean "we did not measure".

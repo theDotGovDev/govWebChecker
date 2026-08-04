@@ -2,10 +2,16 @@ name: check
 
 on:
   schedule:
-    # Daily. Sampled availability supports reliability classification, not outage
-    # resolution — a site up 100% of the time versus 50% is the distinction this
-    # project answers (spec.md FR-009).
-    - cron: '17 7 * * *'
+    # Hourly. Still statistical rather than operational: ~720 readings per site
+    # per month give a 30-minute interruption a fair chance of being caught and a
+    # 2-hour one a good chance of being caught repeatedly, so short outages reach
+    # the reliability record instead of falling between checks. This is not
+    # real-time detection — an outage between checks is invisible, and one we
+    # catch is dated to when we looked (spec.md FR-009).
+    #
+    # Cost at this cadence: 1 reading + 1 robots.txt per host per hour, and about
+    # 20 MB of packed git history per year.
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 # Two runs must never race the commit. Queue rather than cancel: a cancelled run
