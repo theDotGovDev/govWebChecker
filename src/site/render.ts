@@ -35,16 +35,19 @@ const OUTCOME_LABEL: Record<string, string> = {
 };
 
 function latencyCell(site: SiteView): string {
-  const latest = site.latest;
-  if (!latest || latest.median_ms === undefined) {
-    // Absence of data is shown as absence, never as zero (Principle V).
-    return '<td class="num"><span class="nodata">no measurement</span></td>';
+  // The figure is the median across observations, never the newest reading —
+  // one reading is noise, not a response time (FR-011a). Until there are two,
+  // the page says so rather than showing the single value it happens to have.
+  const typical = site.typical;
+  if (!typical) {
+    const pending = site.latest ? 'not enough readings yet' : 'no measurement';
+    return `<td class="num"><span class="nodata">${pending}</span></td>`;
   }
-  const spread =
-    latest.min_ms !== undefined && latest.max_ms !== undefined
-      ? `<span class="spread">${number(latest.min_ms)}–${number(latest.max_ms)} ms</span>`
-      : '';
-  return `<td class="num"><strong>${number(latest.median_ms)} ms</strong>${spread}</td>`;
+  return (
+    `<td class="num"><strong>${number(typical.median_ms)} ms</strong>` +
+    `<span class="spread">${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms ` +
+    `over ${number(typical.readings)}</span></td>`
+  );
 }
 
 function row(site: SiteView): string {
@@ -59,7 +62,7 @@ function row(site: SiteView): string {
             latest?.status_code !== undefined ? `<span class="spread">HTTP ${latest.status_code}</span>` : ''
           }</td>
 ${latencyCell(site)}
-          <td class="num">${latest ? number(latest.samples) : '—'}</td>
+          <td class="num">${site.observationCount > 0 ? `${number(site.responded)}/${number(site.observationCount)}` : '—'}</td>
           <td class="num">${latest ? escape(day(latest.checked_at)) : '—'}</td>
         </tr>`;
 }
@@ -157,15 +160,16 @@ export function renderSite(model: SiteModel, generatedAt: string): string {
 <table>
   <caption>
     Ordered by public traffic, which is how sites were selected for measurement.
-    Response time is the median of repeated samples taken in one check.
+    Typical response is the median across every reading we have, not the latest
+    one. “Responded” counts how many of our checks got an answer.
   </caption>
   <thead>
     <tr>
       <th scope="col">Site</th>
       <th scope="col">Agency</th>
       <th scope="col">What we saw</th>
-      <th scope="col" class="num">Response time</th>
-      <th scope="col" class="num">Samples</th>
+      <th scope="col" class="num">Typical response</th>
+      <th scope="col" class="num">Responded</th>
       <th scope="col" class="num">Checked</th>
     </tr>
   </thead>
@@ -205,8 +209,10 @@ ${model.sites.map(row).join('\n')}
 <div class="panel">
   <h3>Sampling is occasional, so gaps are gaps</h3>
   <p>
-    Sites are checked on a schedule rather than continuously. A short outage
-    between checks is invisible to us. Where we have no measurement, this page
+    Sites are checked hourly rather than continuously, which gives a short
+    interruption a fair chance of landing in the record without pretending to be
+    outage detection — an outage between checks is still invisible to us, and one
+    we catch is dated to when we looked. Where we have no measurement, this page
     says so rather than showing a zero${
       model.discardedRuns > 0
         ? `. ${number(model.discardedRuns)} run${model.discardedRuns === 1 ? '' : 's'} that produced no

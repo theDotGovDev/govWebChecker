@@ -24,6 +24,19 @@ export interface LatestView {
   vantage: string;
 }
 
+/**
+ * A site's response time, computed across observations rather than within one
+ * check. At hourly cadence each observation is a single reading, so the series
+ * is what supplies the statistics (FR-011a).
+ */
+export interface TypicalView {
+  median_ms: number;
+  /** How many readings the median came from. Travels with the figure, always. */
+  readings: number;
+  fastest_ms: number;
+  slowest_ms: number;
+}
+
 export interface SiteView {
   id: string;
   host: string;
@@ -32,6 +45,10 @@ export interface SiteView {
   suborganization?: string;
   visits?: number;
   observationCount: number;
+  /** How many of those observations got a response at all. */
+  responded: number;
+  /** Absent until there are at least two readings — one is not a response time. */
+  typical?: TypicalView;
   latest?: LatestView;
 }
 
@@ -85,6 +102,23 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
       .sort((a, b) => a.checked_at.localeCompare(b.checked_at));
     const last = rows[rows.length - 1];
 
+    // Only successful readings carry a timing. A timeout is not a slow response,
+    // and folding one in as a large number would invent a measurement.
+    const timings = rows
+      .map((o) => o.latency.median_ms)
+      .filter((ms): ms is number => typeof ms === 'number')
+      .sort((a, b) => a - b);
+
+    const typical =
+      timings.length >= 2
+        ? {
+            median_ms: timings[Math.floor(timings.length / 2)]!,
+            readings: timings.length,
+            fastest_ms: timings[0]!,
+            slowest_ms: timings[timings.length - 1]!,
+          }
+        : undefined;
+
     return {
       id: t.id,
       host: t.host,
@@ -93,6 +127,8 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
       ...(t.suborganization ? { suborganization: t.suborganization } : {}),
       ...(typeof t.traffic_evidence.visits === 'number' ? { visits: t.traffic_evidence.visits } : {}),
       observationCount: rows.length,
+      responded: rows.filter((o) => o.outcome === 'success').length,
+      ...(typical ? { typical } : {}),
       ...(last
         ? {
             latest: {

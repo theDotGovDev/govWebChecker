@@ -23,10 +23,26 @@ function obs(overrides: Partial<Observation> = {}): Observation {
 }
 
 describe('site rendering', () => {
-  test('shows a measured figure with its spread and sample count', () => {
+  test('shows the median across readings, with the count it came from', () => {
+    const html = renderSite(
+      buildSiteModel({
+        targets: [target],
+        observations: [
+          obs({ checked_at: '2026-08-03T10:00:00Z', latency: { samples: 1, median_ms: 40, min_ms: 40, max_ms: 40 } }),
+          obs({ checked_at: '2026-08-03T11:00:00Z', latency: { samples: 1, median_ms: 55, min_ms: 55, max_ms: 55 } }),
+        ],
+        runs: [],
+      }),
+      'now',
+    );
+    assert.match(html, /55 ms/);
+    assert.match(html, /40–55 ms over 2/);
+  });
+
+  test('refuses to present a single reading as a response time (FR-011a)', () => {
     const html = renderSite(buildSiteModel({ targets: [target], observations: [obs()], runs: [] }), 'now');
-    assert.match(html, /42 ms/);
-    assert.match(html, /40–55 ms/);
+    assert.match(html, /not enough readings yet/);
+    assert.doesNotMatch(html, /42 ms/, 'the lone reading must not be shown as the figure');
   });
 
   test('says "no measurement" rather than showing a zero', () => {

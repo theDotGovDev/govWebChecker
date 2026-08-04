@@ -6,10 +6,17 @@ name: pages
 # rather than being rebuilt on a schedule of its own and going stale between.
 
 on:
+  # Deliberately NOT triggered by data commits. At hourly collection that would
+  # be 24 deployments a day to change one table, and the page is a summary whose
+  # figures barely move between checks. The site rebuilds on its own rhythm and
+  # picks up whatever the record holds at that moment.
+  schedule:
+    - cron: '47 */6 * * *'
   push:
     branches: [main]
+    # Only when the site's own code or inputs change, so a rendering fix ships
+    # immediately rather than waiting for the next slot.
     paths:
-      - 'data/**'
       - 'src/site/**'
       - 'src/cli/build-site.ts'
       - 'targets/**'

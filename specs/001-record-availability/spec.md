@@ -257,19 +257,35 @@ rather than "not present".
   frequently; expensive browser-based audits run rarely. The tiers MUST be
   separately scheduled so the expensive tier cannot inherit the cheap tier's
   frequency.
-- **FR-009**: Availability sampling MUST run at least daily per target, at a
-  cadence sufficient to classify reliability over weeks and months rather than to
-  detect a short outage in progress.
+- **FR-009**: Availability sampling MUST run at least hourly per target.
+
+  The purpose is still statistical rather than operational. Hourly sampling gives
+  roughly 720 readings per site per month, which makes a 30-minute outage likely
+  to be caught at least once and a 2-hour outage very likely to be caught
+  several times. Short interruptions therefore show up in a site's reliability
+  record instead of falling silently between checks. This is emphatically NOT
+  real-time outage detection: an outage may still be missed, and one that is
+  caught is dated to when we happened to look.
 - **FR-010**: Expensive audits MUST be spread across targets over time rather than
   run against all targets at once, so no single window concentrates load.
 - **FR-011**: The system MUST record, for every observation, when the check
   actually executed — not the schedule that requested it.
-- **FR-011a**: Latency measurements MUST be taken from multiple samples within a
-  check, and MUST store the sample count, the median, and the spread. A single
-  reading MUST NOT be stored as a site's response time.
-- **FR-011b**: The multiple samples in a check MUST still obey the per-host
-  minimum interval in FR-003. Sampling for statistical confidence is not a licence
-  to burst.
+- **FR-011a**: An observation records a single timing. Any figure presented as a
+  site's response time MUST be an aggregate over multiple observations, carrying
+  the count it was computed from.
+
+  This reverses an earlier requirement that took several samples within one
+  check. Those samples were seconds apart, against the same cache, in the same
+  moment — highly correlated, and a poor basis for a median. Readings spread
+  across hours are independent, so at hourly cadence the *series* supplies the
+  statistics that repetition within a check was trying to fake. Sampling noise
+  moves to the analysis side, which is where it can be handled honestly.
+
+  The prohibition that matters survives: a single reading MUST NOT be presented
+  as a site's response time.
+- **FR-011b**: Where a check takes more than one reading, those readings MUST
+  still obey the per-host minimum interval in FR-003. Sampling for statistical
+  confidence is not a licence to burst.
 - **FR-011c**: Performance audits MUST apply a documented throttling profile
   approximating a mobile connection, and MUST store which profile was used.
   Results gathered under different profiles MUST NOT be compared as like for like.
@@ -442,9 +458,10 @@ mapping assigns them to.
   real-world experience, with the lab run as its reproducible complement; coverage
   will not be universal, so the record handles absence as absence.
 - Sampled availability supports reliability *classification*, not precise uptime.
-  Daily sampling distinguishes a site that has never failed from one that fails a
-  third of the time, which is the distinction that matters here; it cannot support
-  "99.9%", and a short outage between samples is invisible.
+  Hourly sampling distinguishes a site that has never failed from one that fails
+  occasionally, and gives short interruptions a real chance of appearing in the
+  record. It still cannot support "99.9%": an outage between checks is invisible,
+  and a caught one is dated to when we looked rather than when it began.
 - The target list is curated by a human. Nothing here discovers sites on its own.
 - Automated accessibility scanning is asymmetric evidence: a detected violation is
   a real defect, but no detections is not conformance. Automated rules cover a

@@ -15,7 +15,12 @@ import { verifyRecord, formatReport } from './verify.js';
  * configuration instead, so the escape hatch exists where it cannot ship.
  */
 const LIMITS = {
-  samples: 3,
+  /**
+   * One reading per check. Repeated samples seconds apart measure the same cache
+   * in the same moment and are near-duplicates; hourly readings are independent,
+   * so the series carries the statistics instead (FR-011a).
+   */
+  samples: 1,
   timeoutMs: 15_000,
   maxRedirects: 5,
   /**
