@@ -4,9 +4,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { installNoNetworkGuard, removeNoNetworkGuard } from '../fixtures/no-network.js';
-import { fastServer, statusServer, robotsServer, type Fixture } from '../fixtures/servers.js';
+import {
+  fastServer,
+  statusServer,
+  robotsServer,
+  slowRobotsServer,
+  type Fixture,
+} from '../fixtures/servers.js';
 import { refusedUrl } from '../fixtures/failing.js';
 import { executeRun } from '../../src/checker/run.js';
+import { verifyRecord } from '../../src/cli/verify.js';
 import type { Target } from '../../src/targets/load.js';
 import type { Observation } from '../../src/record/types.js';
 
@@ -307,6 +314,42 @@ describe('a run', () => {
       assert.ok(!text.includes('secret content'), 'page content must never reach disk');
     } finally {
       await a.close();
+    }
+  });
+  test('the record satisfies the spacing it claims when robots.txt costs vary (FR-003a)', async () => {
+    // The timestamp that reaches the record has to be the moment the limiter
+    // released the request. Stamping it after robots.txt came back instead let a
+    // slow robots.txt on one target and a fast one on the next shift the recorded
+    // gap below the configured minimum — while the requests themselves were
+    // properly spaced. The record is what a reader checks, and `verify` is how
+    // they check it, so the guarantee has to hold in the file, not just in the
+    // limiter.
+    const HOST_INTERVAL_MS = 300;
+    const slow = await slowRobotsServer(200);
+    const fast = await slowRobotsServer(0);
+    try {
+      await executeRun({
+        targets: [target('slow', slow.url), target('fast', fast.url)],
+        dataDir: dir,
+        config: {
+          ...CONFIG,
+          hostIntervalMs: HOST_INTERVAL_MS,
+          domainIntervalMs: 1,
+          maxConcurrentHosts: 2,
+        },
+      });
+
+      const file = path.join(dir, 'availability', `${new Date().toISOString().slice(0, 7)}.jsonl`);
+      const report = await verifyRecord(file, {
+        hostIntervalMs: HOST_INTERVAL_MS,
+        domainIntervalMs: 1,
+      });
+      const spacing = report.checks.find((c) => c.name === 'per-host spacing');
+      assert.ok(spacing, 'verify must report on per-host spacing');
+      assert.ok(spacing.pass, spacing.detail);
+    } finally {
+      await slow.close();
+      await fast.close();
     }
   });
 });

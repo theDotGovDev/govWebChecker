@@ -17,6 +17,13 @@ export interface SampleResult {
   latency: Latency;
   redirectChain: string[];
   finalUrl: string;
+  /**
+   * UTC moment the limiter released the first sample — when the check ran.
+   *
+   * Comes from the limiter rather than a fresh clock read so the timestamp the
+   * record publishes is the same instant the spacing arithmetic used.
+   */
+  requestedAt: string;
 }
 
 /**
@@ -45,9 +52,11 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
   const host = new URL(url).hostname;
   const timings: number[] = [];
   let last: Awaited<ReturnType<typeof performCheck>> | undefined;
+  let requestedAt: string | undefined;
 
   for (let i = 0; i < options.samples; i++) {
-    await options.limiter.acquire(host);
+    const granted = await options.limiter.acquire(host);
+    requestedAt ??= new Date(granted).toISOString();
     const result = await performCheck(url, {
       timeoutMs: options.timeoutMs,
       maxRedirects: options.maxRedirects,
@@ -57,7 +66,9 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
     if (typeof result.elapsedMs === 'number') timings.push(result.elapsedMs);
   }
 
-  if (!last) throw new Error('sampleTarget requires at least one sample');
+  if (!last || requestedAt === undefined) {
+    throw new Error('sampleTarget requires at least one sample');
+  }
 
   // No successful timing means no latency figure at all. A zero here would read
   // as "instant" to anyone scanning the record — absence must look like absence
@@ -78,5 +89,6 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
     latency,
     redirectChain: last.redirectChain,
     finalUrl: last.finalUrl,
+    requestedAt,
   };
 }
