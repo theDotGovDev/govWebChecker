@@ -4,26 +4,52 @@ Check popular gov websites for status and speed.
 
 ## Where the project is right now
 
-The repository is empty apart from `README.md` and a CC0 `LICENSE`. There is no
-code, no language or framework chosen, no site list, and no definition of what
-"status" and "speed" mean here. Assume nothing has been decided.
+Feature `001` is built and running. The checker collects availability
+measurements for 58 federal hosts on an hourly schedule in GitHub Actions and
+commits the results to `data/`. Treat the stack and the record format as
+decided; a change here is a change to working software, not a greenfield choice.
 
-The first substantial piece of work is therefore a **new feature**, not a fix:
-propose a direction — what gets checked, how often, what is measured, where
-results go, and what the output is — and wait for a yes before implementing.
-That is the feature workflow in the block below, and it applies to the choice of
-stack too.
+- **Stack**: TypeScript on Node 22, no runtime dependencies. `node --test` for
+  tests, `tsc` for the build. Don't add a dependency without saying why first.
+- **Code**: `src/checker` (fetching, robots, sampling), `src/politeness` (rate
+  limiter, user-agent, backoff), `src/record` (types, validation, JSONL writer),
+  `src/targets`, `src/site`, `src/cli`.
+- **Targets**: `targets/federal.json`, 58 hosts. Adding one is a deliberate act
+  (FR-001) — `refresh-targets.yml` opens a PR rather than committing.
+- **Record**: monthly JSONL under `data/availability/` and `data/runs/`. It is
+  append-only and it is the product, so it is committed, not ignored.
+- **Workflows**: `check` (hourly collection), `ci`, `secret-scan`, `pages`,
+  `refresh-targets`, `probe-data-sources`.
+- **Site**: generated into `docs/` by `build-site` and deployed by `pages.yml`.
+  It is a build artifact, not a checked-in directory.
+
+`npm run verify -- data/availability/<month>.jsonl` checks the published record
+against the guarantees it claims. `check.yml` runs it after every collection and
+refuses to commit a record that violates them, so a failing run discards the
+readings it just took. Runs fail independently, which means a broken guarantee
+shows up as an elevated failure rate rather than a clean stop — collection limps
+along committing whichever runs happen to pass. Treat a red `check` run as data
+loss, not as a flaky job, and check the failure rate rather than whether the
+most recent run was green.
+
+The next substantial piece of work is feature `002` — analysis and presentation.
+It has no spec yet. That one *is* a new feature: propose a direction and wait for
+a yes, per the feature workflow below.
 
 ## What the defaults below expect that this repo does not have yet
 
-None of these exist. Create each one as part of the first change that needs it,
-not as a later cleanup pass:
+Most of the list is now in place: `ARCHITECTURE.md` exists, `node --test` is the
+test framework, the pre-commit gitleaks hook and the CI secret scan are
+configured, and the static site is generated and published by `pages.yml`.
 
-- `ARCHITECTURE.md` — components, boundaries, data flow
-- a test framework — propose one before introducing it, then work test-first
-- pre-commit gitleaks hook, a secret scan in CI, and push protection on the repo
-- `infra/` — repo settings in Terraform, applied by CI
-- `docs/` — a static site describing what this is, why it exists, how to use it
+Still missing — create each as part of the first change that needs it, not as a
+later cleanup pass:
+
+- `infra/` — repo settings in Terraform, applied by CI. This is also the third
+  secret-scanning layer the constitution asks for (platform push protection),
+  which nothing currently provides (task T049).
+- A local `pre-commit install`. The config is committed but the hook is per
+  machine, so a fresh checkout has only the CI layer until someone runs it.
 
 ## Spec-driven development
 
@@ -38,9 +64,12 @@ a dot.)
 before planning anything: where it is stricter than the defaults below, it wins,
 and its two NON-NEGOTIABLE principles have no convenience exception.
 
-`specs/001-record-availability/spec.md` is the current front of the work. It is a
-**draft with open `[NEEDS CLARIFICATION]` markers** — do not plan or implement
-from it until those are answered and it is approved.
+`specs/001-record-availability/spec.md` is the spec for the work that is built.
+Its open questions have been answered and 46 of its 51 tasks are done; the
+remainder are listed at the end of `tasks.md`. Keep it true — when intended
+behavior changes, revise the spec in the same change as the code.
+
+The spec for `002` (analysis and presentation) has not been written yet.
 
 ## Project-specific rules
 
