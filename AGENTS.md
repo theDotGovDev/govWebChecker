@@ -32,9 +32,15 @@ along committing whichever runs happen to pass. Treat a red `check` run as data
 loss, not as a flaky job, and check the failure rate rather than whether the
 most recent run was green.
 
-The next substantial piece of work is feature `002` — analysis and presentation.
-It has no spec yet. That one *is* a new feature: propose a direction and wait for
-a yes, per the feature workflow below.
+The next substantial piece of work is feature `003` — a census of all US `.gov`
+domains, checked in two tiers. Its spec is written
+(`specs/003-dotgov-census/spec.md`) and awaiting approval; nothing is built. It
+widens `001`'s scope, so it also revises `001`'s FR-001a and FR-009, which it
+contradicts — do those edits in the same change, not afterwards.
+
+Feature `002` — analysis and presentation — is still unwritten and keeps its
+number. `003` skipped ahead rather than taking it, so `001`'s references to
+`002` stay true.
 
 ## What the defaults below expect that this repo does not have yet
 
