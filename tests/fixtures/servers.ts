@@ -96,3 +96,24 @@ export async function closedPort(): Promise<string> {
   await f.close();
   return url;
 }
+
+/**
+ * Serves `/robots.txt` after a delay; every other path answers immediately.
+ *
+ * Reproduces the real shape of the problem: robots.txt is fetched before the
+ * measurement itself, and how long it takes varies per site.
+ */
+export async function slowRobotsServer(delayMs: number, robotsBody = ''): Promise<Fixture> {
+  const { server, requests } = recording((req, res) => {
+    if (req.url === '/robots.txt') {
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(robotsBody);
+      }, delayMs);
+      return;
+    }
+    res.writeHead(200);
+    res.end('ok');
+  });
+  return listen(server, requests);
+}

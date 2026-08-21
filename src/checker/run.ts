@@ -56,9 +56,20 @@ const DIMENSION = 'availability';
  */
 const SUCCEEDED = new Set(['success']);
 
-async function robotsAllows(target: Target, config: RunConfig, limiter: RateLimiter): Promise<boolean> {
+interface RobotsDecision {
+  allowed: boolean;
+  /** UTC moment the limiter released the robots.txt fetch. */
+  requestedAt: string;
+}
+
+async function robotsAllows(
+  target: Target,
+  config: RunConfig,
+  limiter: RateLimiter,
+): Promise<RobotsDecision> {
   const robotsUrl = new URL('/robots.txt', target.url).toString();
-  await limiter.acquire(target.host);
+  const granted = await limiter.acquire(target.host);
+  const requestedAt = new Date(granted).toISOString();
   const body = await fetchTextForEvaluation(robotsUrl, {
     timeoutMs: config.timeoutMs,
     maxRedirects: config.maxRedirects,
@@ -67,8 +78,8 @@ async function robotsAllows(target: Target, config: RunConfig, limiter: RateLimi
   // Only an explicit, readable prohibition stops us. An unreachable robots.txt is
   // not consent, but neither is it a refusal — treating a fetch failure as a
   // block would silently stop measuring every site having a bad day.
-  if (body === undefined) return true;
-  return isAllowed(parseRobots(body), new URL(target.url).pathname);
+  if (body === undefined) return { allowed: true, requestedAt };
+  return { allowed: isAllowed(parseRobots(body), new URL(target.url).pathname), requestedAt };
 }
 
 /**
@@ -171,10 +182,13 @@ async function checkOne(
     method,
   };
 
-  if (!(await robotsAllows(target, config, limiter))) {
+  const robots = await robotsAllows(target, config, limiter);
+  if (!robots.allowed) {
     return {
       ...base,
-      checked_at: new Date().toISOString(),
+      // The robots.txt fetch was the only request this target received, so it is
+      // the moment this check ran.
+      checked_at: robots.requestedAt,
       outcome: 'skipped',
       skip_reason: 'robots.txt disallows this path',
       redirect_chain: [],
@@ -182,7 +196,6 @@ async function checkOne(
     };
   }
 
-  const checked_at = new Date().toISOString();
   const result = await sampleTarget(target.url, {
     samples: config.samples,
     timeoutMs: config.timeoutMs,
@@ -192,7 +205,10 @@ async function checkOne(
 
   return {
     ...base,
-    checked_at,
+    // The limiter's own grant moment, not a later clock read. A robots.txt fetch
+    // sits between the two and its cost varies per site, so re-reading the clock
+    // published gaps that drifted below the spacing the limiter had enforced.
+    checked_at: result.requestedAt,
     outcome: result.outcome,
     ...(result.statusCode !== undefined ? { status_code: result.statusCode } : {}),
     redirect_chain: result.redirectChain,
