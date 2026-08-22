@@ -142,46 +142,63 @@ function spacingCheck(
 }
 
 /**
- * Did each cycle reach the whole frame, and if not, which domains did it miss?
+ * Did each slice that ran reach every domain it owned, and how much of the cycle
+ * has run so far?
  *
  * Computed from the observations and the committed frame, never from our own run
  * summaries. SC-102 promises a reader can answer this holding only the record —
  * a coverage claim checked against our own account of what we did would be us
  * marking our own homework.
  *
+ * Coverage is judged against the slices the record shows ran, not against the
+ * whole frame. A cycle takes seven days, so judging day one against all seven
+ * slices would name thousands of domains as missed when they are merely not yet
+ * due — reading "not yet" as "never came", which is the same error as reading a
+ * domain that publishes no website as a broken one. How much of the cycle has run
+ * is reported alongside, so an incomplete cycle is never mistaken for a complete
+ * one either.
+ *
  * Naming the missing domains is the part that matters. A count alone leaves a gap
  * uninvestigable, and an uninvestigable gap is indistinguishable from a
  * jurisdiction that vanished.
  */
 function coverageCheck(rows: Observation[], frame: Frame): VerifyCheck {
-  const expected = new Set(frame.domains.map((d) => d.domain));
-  const byCycle = new Map<string, Set<string>>();
+  const slicesInFrame = new Set(frame.domains.map((d) => d.slice));
+  const byCycle = new Map<string, { covered: Set<string>; slices: Set<number> }>();
 
   for (const row of rows) {
     // Hot-tier rows check curated hosts on a different cadence. Counting them
     // would inflate coverage with domains the census never reached.
-    if (row.tier !== 'broad' || row.cycle === undefined) continue;
-    if (!byCycle.has(row.cycle)) byCycle.set(row.cycle, new Set());
-    byCycle.get(row.cycle)!.add(row.target_id);
+    if (row.tier !== 'broad' || row.cycle === undefined || row.slice === undefined) continue;
+    let entry = byCycle.get(row.cycle);
+    if (entry === undefined) {
+      entry = { covered: new Set(), slices: new Set() };
+      byCycle.set(row.cycle, entry);
+    }
+    entry.covered.add(row.target_id);
+    entry.slices.add(row.slice);
   }
 
   if (byCycle.size === 0) {
     return {
       name: 'census coverage',
       pass: true,
-      detail: `no census observations to check against a frame of ${expected.size}`,
+      detail: `no census observations to check against a frame of ${frame.domains.length}`,
     };
   }
 
   const lines: string[] = [];
   let pass = true;
-  for (const [cycle, covered] of [...byCycle.entries()].sort()) {
-    const missing = [...expected].filter((d) => !covered.has(d)).sort();
-    const reached = expected.size - missing.length;
+  for (const [cycle, { covered, slices }] of [...byCycle.entries()].sort()) {
+    const due = frame.domains.filter((d) => slices.has(d.slice)).map((d) => d.domain);
+    const missing = due.filter((d) => !covered.has(d)).sort();
     if (missing.length > 0) pass = false;
     const named = missing.slice(0, 10).join(', ');
+    const complete = slices.size === slicesInFrame.size;
     lines.push(
-      `${cycle}: ${reached}/${expected.size}` +
+      `${cycle}: ${slices.size}/${slicesInFrame.size} slices` +
+        (complete ? '' : ' (in progress)') +
+        `, ${due.length - missing.length}/${due.length} domains` +
         (missing.length > 0
           ? ` — missed ${missing.length}: ${named}${missing.length > 10 ? ', …' : ''}`
           : ''),

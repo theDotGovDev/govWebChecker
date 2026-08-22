@@ -370,6 +370,12 @@ mixes populations.
   whether a cycle covered the whole frame, and which domains it did not reach.
 - **FR-115**: An interrupted or partial cycle MUST be distinguishable in the
   record from a complete one.
+- **FR-115a**: A cycle still in progress MUST NOT be reported as having missed the
+  domains whose slices have not yet run. Coverage is judged against the slices the
+  record shows ran; how much of the cycle has run is reported alongside, so
+  "not yet" is never presented as "never came" and an incomplete cycle is never
+  mistaken for a complete one. This is FR-116's distinction — absence is not
+  failure — applied to our own coverage rather than to a jurisdiction's website.
 
 **Distinguishing absence from failure**
 

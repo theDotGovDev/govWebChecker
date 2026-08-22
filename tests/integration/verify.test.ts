@@ -274,11 +274,14 @@ describe('verify proves the shared-hosting limit from the record alone', () => {
  * summaries, which are our own account of what we did.
  */
 describe('verify proves census coverage (FR-114, SC-102)', () => {
+  // a.gov, f.gov and h.gov all hash into slice 3; b.gov into 0 and c.gov into 6.
+  // Coverage is a claim about the slices that ran, so a fixture that put every
+  // domain in its own slice could not express "this slice missed one".
   const frame = {
     source: 'test',
     retrieved_at: '2026-08-22T00:00:00Z',
     digest: 'sha256:test',
-    domains: ['a.gov', 'b.gov', 'c.gov'].map((domain) => ({
+    domains: ['a.gov', 'f.gov', 'b.gov', 'c.gov'].map((domain) => ({
       domain,
       type: 'City',
       organization: '',
@@ -305,33 +308,45 @@ describe('verify proves census coverage (FR-114, SC-102)', () => {
 
   test('a cycle that covered the whole frame passes and says so', async () => {
     const file = await writeRecord(
-      frame.domains.map((d, i) =>
-        censusRow(d.domain, `2026-08-2${2 + i}T06:00:00Z`),
-      ),
+      frame.domains.map((d, i) => censusRow(d.domain, `2026-08-2${2 + i}T06:00:00Z`)),
     );
     const report = await verifyRecord(file, LIMITS, frame);
     const check = report.checks.find((c) => c.name === 'census coverage');
     assert.ok(check, JSON.stringify(report.checks.map((c) => c.name)));
     assert.equal(check.pass, true, check.detail);
-    assert.match(check.detail, /3\/3/);
+    assert.match(check.detail, /4\/4 domains/);
+    assert.match(check.detail, /3\/3 slices/);
   });
 
-  test('names the domains a cycle did not reach', async () => {
+  test('names the domains a slice that ran did not reach', async () => {
     // "How many" is not enough. A reader has to be able to name them, or the
     // gap cannot be investigated — and an uninvestigable gap is indistinguishable
     // from a jurisdiction that vanished.
     const file = await writeRecord([censusRow('a.gov', '2026-08-22T06:00:00Z')]);
     const report = await verifyRecord(file, LIMITS, frame);
     const check = report.checks.find((c) => c.name === 'census coverage')!;
-    assert.equal(check.pass, false);
-    assert.match(check.detail, /b\.gov/);
-    assert.match(check.detail, /c\.gov/);
+    assert.equal(check.pass, false, check.detail);
+    assert.match(check.detail, /f\.gov/);
+    assert.equal(report.ok, false, 'a slice that skipped a domain it owned must not pass');
   });
 
-  test('an incomplete cycle is not reported as complete', async () => {
-    const file = await writeRecord([censusRow('a.gov', '2026-08-22T06:00:00Z')]);
+  test('a cycle still in progress is neither a failure nor reported as complete', async () => {
+    // The census covers the frame over seven days. Judged against the whole frame
+    // on day one, every cycle in progress would report thousands of missing
+    // domains — reading "not yet" as "never came", which is the exact error this
+    // feature exists to avoid, one level up from a jurisdiction's website.
+    const file = await writeRecord([
+      censusRow('a.gov', '2026-08-22T06:00:00Z'),
+      censusRow('f.gov', '2026-08-22T06:10:00Z'),
+    ]);
     const report = await verifyRecord(file, LIMITS, frame);
-    assert.equal(report.ok, false, 'a cycle missing two thirds of the frame must not pass');
+    const check = report.checks.find((c) => c.name === 'census coverage')!;
+    assert.equal(check.pass, true, check.detail);
+    assert.match(check.detail, /1\/3 slices/, 'must say how much of the cycle has run');
+    assert.ok(
+      !check.detail.includes('b.gov') && !check.detail.includes('c.gov'),
+      `a slice that has not run yet is not a miss: ${check.detail}`,
+    );
   });
 
   test('hot-tier rows are not counted toward census coverage', async () => {
@@ -339,11 +354,13 @@ describe('verify proves census coverage (FR-114, SC-102)', () => {
     // cycle would inflate coverage with domains the census never reached.
     const file = await writeRecord([
       censusRow('a.gov', '2026-08-22T06:00:00Z'),
+      censusRow('f.gov', '2026-08-22T06:10:00Z'),
       row({ tier: 'hot', target_id: 'irs-gov', checked_at: '2026-08-22T07:00:00Z' }),
     ]);
     const report = await verifyRecord(file, LIMITS, frame);
     const check = report.checks.find((c) => c.name === 'census coverage')!;
-    assert.match(check.detail, /1\/3/);
+    assert.match(check.detail, /2\/2 domains/);
+    assert.ok(!check.detail.includes('irs-gov'), check.detail);
   });
 
   test('is skipped, not failed, when no frame is supplied', async () => {

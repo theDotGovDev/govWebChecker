@@ -59,8 +59,23 @@ sweep of nothing is the one shape that would make a gap look like coverage.
 ### `verify` — extended
 
 Gains one check: **coverage**. Given a record and a frame, it reports for each
-cycle whether all seven slices ran against the same frame digest and how many
-domains each covered.
+cycle how many of the frame's slices have run and, within those, how many of the
+domains they own were reached — naming the ones that were not.
+
+It judges a slice that ran, never a slice that has not. A cycle takes seven days,
+so measuring day one against the whole frame would name fourteen thousand domains
+as missed when they are simply not yet due. That is the same error as calling a
+domain with no website a broken one, made about our own coverage instead of about
+a jurisdiction, so the check refuses to make it: an incomplete cycle reads
+`3/7 slices (in progress)` and passes, while a slice that skipped a domain it
+owned fails and names it.
+
+It is a reader's check, not the publication gate. `census.yml` verifies conduct
+before committing — spacing, method, ordering — and deliberately does not pass a
+frame. The frame is refreshed weekly by pull request, so a domain added to a slice
+that already ran this cycle would fail a coverage check through no fault of the
+run; gating on it would discard a slice of good measurements to report a registry
+edit. Coverage is answered afterwards, over the record, by anyone holding it.
 
 Like every other check it reads the record, not the code. A reader holding only
 the published record and the committed frame reaches the same verdict without
