@@ -116,9 +116,25 @@ stricter, they win.
   refuse automated traffic. See the FR-024 note in
   `specs/001-record-availability/spec.md`.
 
+  Working internet does not lift this rule — it makes breaking it more dangerous.
+  The sandbox above failed loudly because its egress was broken. A machine with
+  unrestricted access produces measurements that look entirely healthy while
+  describing that machine's network, latency and resolver rather than the
+  target's. `vantage()` labels such rows `local` rather than `github-actions/*`,
+  so they are at least honest, but nothing rejects them: `verify` checks shape,
+  spacing, method, ordering and timestamps, not vantage. A local run will write
+  into `data/`, pass the gate, and be committable.
+
   To exercise the checker, use `workflow_dispatch` on `check.yml` and read the
   run's output. If you must run it locally to debug, point it at local fixtures,
   and never at a real government site.
+
+  DNS-only work is the exception, and is why `research/dns-survey.mjs` exists: it
+  queries resolvers rather than the jurisdictions' servers, so it costs targets
+  nothing. Even so, resolver behaviour varies by vantage — this sandbox returns
+  `ESERVFAIL` for small municipal domains that a runner resolves fine, and
+  collapses NXDOMAIN into NODATA — so run it on a runner and read its
+  self-diagnosing resolver-code histogram before trusting a negative result.
 
 ## My working defaults
 
