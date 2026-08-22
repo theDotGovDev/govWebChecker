@@ -8,7 +8,9 @@ number would falsify those references.)
 
 **Created**: 2026-08-21
 
-**Status**: Draft — ready for `/speckit-plan` on approval.
+**Status**: Draft — ready for `/speckit-plan` on approval. The shared-hosting
+limit (FR-140 to FR-142) is specified and built ahead of the census itself,
+because FR-133 blocked the first sweep until it was.
 
 **Input**: User description:
 
@@ -107,6 +109,46 @@ Cities have the *lowest* rate of any large category, slightly below Federal
 Executive. In absolute terms they still dominate — 863 of the 1,807 — simply
 because there are 8,976 of them. The risk is therefore one of volume spread
 across all of government, not of a bias against small jurisdictions.
+
+### Where `.gov` is hosted
+
+A second DNS-only survey (`survey-hosting` run `32548354070`, 2026-08-22, 145
+seconds) resolved the whole registry and grouped the 14,299 web-publishing
+domains by the backend each answers on. It sent no HTTP request to any
+government web server. `research/hosting-survey.mjs` re-runs it when hosting
+arrangements drift.
+
+Concentration inside a *single broad-tier run* — which is what a backend
+experiences, and the figure the design turns on:
+
+| Candidate key | Largest cluster in one slice | Domains in saturating clusters | Share of frame |
+| --- | ---: | ---: | ---: |
+| Resolved address | 89 | 4,320 | 30.2% |
+| `/24` network | 93 | 5,341 | 37.3% |
+| Origin ASN | 517 | 11,558 | 80.8% |
+| CNAME target | 106 | 3,200 | 22.4% |
+| Nameserver operator | 586 | 10,417 | 72.8% |
+
+"Saturating" means a cluster with at least as many domains as there are workers,
+so a single run can point every worker at one machine simultaneously.
+
+**The gap was real and it is large.** 531 unrelated registrable domains answer on
+`89.106.200.153` alone. Roughly three domains in ten sit in a cluster that can
+occupy the whole run.
+
+**Origin ASN is disqualified.** At 80.8% it is not a backend but a continent of
+them — the largest cluster is 3,452 domains on Cloudflare, which throttling
+would slow without protecting anything.
+
+**The evidence about *what* a cluster is runs one way only.** A domain fronted by
+a platform CNAMEs to that platform's own name, so a platform name is reliable
+evidence. The absence of a CNAME is not the converse: of the 1,020 domains with
+a direct address record that a per-address key binds, 631 sit on AWS Global
+Accelerator or Cloudflare Spectrum front doors, against 184 on a single Liquid
+Web server. Since CNAME evidence covers only 31% of domains, roughly a third of
+what any backend key binds cannot be classified from DNS at all.
+
+That asymmetry is why the design classifies nothing (FR-140).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -415,9 +457,43 @@ rule below.
 - **FR-132**: Hosts in flight MUST remain bounded at the order of a dozen. This
   is a stated constraint of this feature, not a tuning parameter.
 - **FR-133**: Raising the bound in FR-132 MUST remain blocked until the
-  shared-hosting gap (see *Known gap*) is closed. A future change that raises
-  concurrency without addressing that gap is a Principle I violation, and the
-  spec records this so the question cannot be bypassed silently.
+  shared-hosting limit (FR-140) is enforced and provable (FR-141). That condition
+  is now met, so the block is discharged — but raising the bound remains a
+  separate decision needing its own evidence, not an automatic consequence of
+  closing the gap. Nothing here argues for a higher bound.
+
+**The shared-hosting limit**
+
+- **FR-140**: Requests MUST be limited on the backend actually contacted, not
+  only on the names used to reach it. Distinct registrable domains sharing one
+  machine MUST share a budget for it.
+
+  The measured basis is in *Where `.gov` is hosted*: 531 unrelated domains on one
+  address, and 30.2% of the frame in clusters large enough for a single run to
+  occupy every worker against one machine. Both name-keyed limits pass such a
+  burst, because every name in it is different.
+- **FR-140a**: The limit MUST NOT depend on classifying a backend as a shared
+  origin or a content delivery network. The survey shows that distinction cannot
+  be drawn from DNS for roughly a third of the domains involved, so a design
+  requiring it would rest on a maintained guess that goes stale silently. Erring
+  toward limiting a network with capacity to spare is the affordable error;
+  erring toward not limiting a municipal server is not.
+- **FR-140b**: The backend a request is limited against MUST be the backend it is
+  sent to. Accounting for one address and connecting to another would make the
+  published guarantee false on its own record.
+- **FR-140c**: Where the backend cannot be established, the name-keyed limits
+  MUST still apply and the record MUST NOT claim to know where the request went.
+  An unknown backend is not an unlimited one.
+- **FR-140d**: Every request a check makes MUST pass the limits, including each
+  redirect hop and the `robots.txt` fetch. A redirect onto a vendor's shared host
+  is one of the commonest shapes in the registry, so the hop that reaches the
+  shared backend is the one that most needs accounting.
+- **FR-141**: The backend contacted MUST be recorded with the observation, so the
+  spacing guarantee in FR-140 is provable by a reader from the stored record
+  alone rather than taken on trust (Principle V). Where no backend was
+  established the field is absent, and absence MUST NOT be read as a shared key.
+- **FR-142**: Observations written before this field existed MUST remain valid
+  and MUST NOT be rewritten (FR-136).
 - **FR-134**: `robots.txt` MUST continue to be honored per target, and every
   request MUST continue to identify itself (Principle II, Principle III).
 - **FR-135**: A run MUST NOT retry harder against a domain that has already
@@ -485,6 +561,14 @@ never describe different intended behavior:
 - **SC-104**: No two requests to the same host are closer together than the
   configured minimum, provable from stored timestamps alone — holding at census
   scale exactly as it holds today.
+- **SC-104a**: No two requests to the same *backend* are closer together than the
+  configured minimum, provable from stored timestamps alone, however many
+  distinct registrable domains reached it. On the survey baseline this binds the
+  4,320 domains sitting in saturating address clusters, which no name-keyed limit
+  constrains.
+- **SC-104b**: A check that follows redirects generates no request that escapes
+  the limits, so the spacing the record publishes is the spacing every request
+  actually received.
 - **SC-105**: A single run completes within the hosted runner's per-job limit,
   with the bound on hosts in flight held at the order of a dozen.
 - **SC-106**: The annual growth of the committed record stays within the same
@@ -500,33 +584,39 @@ never describe different intended behavior:
 - **SC-110**: The test suite continues to run with no network access to any
   external host, and no test contacts a real government site.
 
-## Known gap — shared hosting *(carried deliberately)*
+## Closed — shared hosting
 
-`001`'s politeness limits key on hostname and registrable domain. FR-003a added
+*This section recorded a deliberately carried gap. It was measured and closed
+before the first census sweep; the history is kept because the reasoning is the
+justification for FR-140.*
+
+`001`'s politeness limits keyed on hostname and registrable domain. FR-003a added
 the domain-level limit precisely because many hostnames under one domain share a
-backend. At census scale that same hole reopens one level up: thousands of small
+backend. At census scale that same hole reopened one level up: thousands of small
 city and county `.gov` sites are hosted behind a handful of shared vendors, so
-many *distinct registrable domains* can resolve to a single backend. Neither
-existing limit can see that.
+many *distinct registrable domains* resolve to a single backend, and neither
+existing limit could see it.
 
-Principle I is NON-NEGOTIABLE, so this gap constrains what is safe to build now.
-It is recorded here rather than omitted, and the project owner has decided to
-defer closing it to follow-up work.
+**It was not hypothetical.** The hosting survey found 531 unrelated registrable
+domains answering on one address, and 30.2% of the frame in clusters large enough
+for a single run to point every worker at one machine.
 
-**Interim mitigation, binding on this feature**: hosts in flight stay at the
-order of a dozen (FR-132), which bounds aggregate pressure on any single shared
-backend regardless of how many distinct domains route to it. The rolling-slice
-cadence is what makes this affordable — a slice of roughly 2,362 domains
-completes in about an hour at that concurrency, well inside the per-job limit —
-so there is no throughput pressure to raise it.
+**How it is closed.** FR-140 adds a limit keyed on the backend actually
+contacted, pinned so the machine accounted for is the machine reached (FR-140b),
+covering every request including redirect hops (FR-140d), and recorded so a
+reader can check it without trusting our implementation (FR-141). It classifies
+nothing (FR-140a), because the survey showed the CDN-versus-shared-origin
+distinction is not drawable from DNS for roughly a third of the domains involved.
 
-**What closing the gap would require**: a rate-limit key that reflects the
-backend actually being contacted rather than the name used to reach it, so that
-domains sharing infrastructure share a budget. That is deliberately not specified
-here.
+**What it cost.** Nothing that matters. The worst single-slice cluster is 89
+domains on one address, which the limit serialises to about seven minutes against
+a per-job cap an order of magnitude larger. There was never a throughput argument
+for weakening it.
 
-FR-133 exists so that a future contributor who wants a faster sweep has to
-confront this first.
+**What FR-133 was protecting.** The block on raising concurrency is discharged,
+having done its job: the question was confronted rather than bypassed. Raising
+the bound is still a separate decision on its own evidence, and this feature does
+not make one.
 
 ## Assumptions
 

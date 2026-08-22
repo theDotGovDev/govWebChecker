@@ -221,11 +221,19 @@ rather than "not present".
 
 - **FR-001**: Targets MUST come from a list that is data, not code, each with the
   reason it is included and its active/retired state.
-- **FR-001a**: Targets MUST be selected by measured traffic volume, using a public
-  dataset of visits to government sites, with each target's inclusion traceable to
-  that evidence. Where the traffic dataset's unit of aggregation differs from the
-  host being checked, the discrepancy MUST be recorded rather than silently
-  reconciled.
+- **FR-001a**: Measured traffic volume, from a public dataset of visits to
+  government sites, MUST determine membership of the hourly *hot tier*. Where the
+  traffic dataset's unit of aggregation differs from the host being checked, the
+  discrepancy MUST be recorded rather than silently reconciled.
+
+  **Revised by `003`.** This originally governed inclusion outright: a target was
+  in the list only if traffic evidence justified it, and that traceability was
+  what kept selection from being editorial. `003` makes the frame the full `.gov`
+  registry, which does not select at all — so the guarantee is not weakened but
+  replaced by a stronger one. An exhaustive frame cannot cherry-pick, because
+  there is nothing left to choose (`003` FR-102). Traffic evidence keeps its
+  original meaning and becomes optional enrichment plus the hot-tier selector
+  (`003` FR-103, FR-107).
 - **FR-001b**: Host-to-property and property-to-agency membership MUST be stored as
   a mapping that can be revised without modifying, invalidating, or re-collecting
   any observation.
@@ -242,6 +250,22 @@ rather than "not present".
   only per hostname. Many hostnames under one domain frequently share one backend,
   so a per-hostname limit alone permits a burst against a single server that
   satisfies every stated limit — the exact outcome Principle I forbids.
+- **FR-003b**: The system MUST additionally rate-limit per backend address, not
+  only per name. The same reasoning as FR-003a, one level up: *distinct
+  registrable domains* also share backends, and neither name-keyed limit can see
+  it. Measured across the `.gov` registry, 531 unrelated domains answer on a
+  single address.
+
+  Every request a check makes passes these limits, including each redirect hop and
+  the `robots.txt` fetch, and the address a request is limited against is the
+  address it is sent to. Specified in full at `003` FR-140 to FR-142; stated here
+  because the limits live in `001`'s checker and this list is where a reader looks
+  for them.
+
+  Note that FR-003's per-host interval and FR-003a's per-domain interval are
+  independent limits even when a host *is* its own registrable domain, which is
+  the normal shape for a census target. The stricter governs; neither relaxes the
+  other.
 - **FR-004**: A full cycle of every dimension against one target MUST NOT exceed
   the traffic of a handful of ordinary visits to that site.
 - **FR-005**: The system MUST honor `robots.txt` per target and record a
@@ -257,7 +281,16 @@ rather than "not present".
   frequently; expensive browser-based audits run rarely. The tiers MUST be
   separately scheduled so the expensive tier cannot inherit the cheap tier's
   frequency.
-- **FR-009**: Availability sampling MUST run at least hourly per target.
+- **FR-009**: Availability sampling MUST run at least hourly per target *in the
+  hot tier*.
+
+  **Revised by `003`.** This originally applied to every target. A census of
+  16,535 domains cannot be sampled hourly and stay within Principle I, so the
+  cadence became a property of the tier rather than of the system. The statistical
+  rationale below survives intact for the hot tier, which is where outage
+  detection lives. The broad tier is explicitly not an outage-detection
+  instrument: it is sampled on a rolling weekly cycle (`003` FR-111) and answers
+  questions about coverage and change over months.
 
   The purpose is still statistical rather than operational. Hourly sampling gives
   roughly 720 readings per site per month, which makes a 30-minute outage likely
