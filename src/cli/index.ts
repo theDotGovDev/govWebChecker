@@ -50,8 +50,25 @@ const LIMITS = {
    * server, so checking unrelated agencies in parallel is not less polite — and
    * serializing everything would put a few hundred targets beyond any sane
    * schedule (SC-008).
+   *
+   * Raised from 6 to 12 for the census, which is the change FR-133 blocked until
+   * the shared-hosting gap was closed. The precondition is now met and is what
+   * makes this safe rather than merely faster: the per-address limit means twelve
+   * workers cannot pile onto one backend however many distinct names route there.
+   * Without it, doubling this number would have doubled the burst any single
+   * shared vendor could receive.
+   *
+   * Twelve is the ceiling, not a starting point. FR-132 fixes the bound at the
+   * order of a dozen and a test fails if the shipped value goes past it — this is
+   * the number governing how many separate government servers hear from us at the
+   * same moment, and changing it is a change to what this project does to public
+   * infrastructure rather than a tuning decision.
+   *
+   * Measured: a census slice of ~2,045 web-publishing domains spends ~91 minutes
+   * waiting on the limits at 6 and ~46 at 12, against a 120-minute job cap the
+   * first live sweep hit exactly.
    */
-  maxConcurrentHosts: 6,
+  maxConcurrentHosts: 12,
 } as const;
 
 const TOOL_VERSION = '0.1.0';

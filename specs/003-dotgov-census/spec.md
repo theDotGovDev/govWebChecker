@@ -455,7 +455,19 @@ rule below.
   request timeout, and the bound on hosts in flight MUST continue to be enforced
   inside the checker, unchanged in kind by the increase in scale.
 - **FR-132**: Hosts in flight MUST remain bounded at the order of a dozen. This
-  is a stated constraint of this feature, not a tuning parameter.
+  is a stated constraint of this feature, not a tuning parameter, and a test MUST
+  fail if the shipped value goes past it.
+
+  Set to 12 after the first live sweep exceeded the job cap at 6. That raise is
+  precisely what FR-133 blocked, and it is safe only because the precondition is
+  now met: the per-address limit (FR-140) means twelve workers cannot pile onto
+  one backend however many distinct names route there. Without it, doubling this
+  number would have doubled the burst any single shared vendor could receive.
+
+  Twelve is a ceiling reached, not a step on a path. The number governs how many
+  separate government servers hear from us at the same moment; raising it further
+  is a change to what this project does to public infrastructure and needs its own
+  evidence, not this precedent.
 - **FR-133**: Raising the bound in FR-132 MUST remain blocked until the
   shared-hosting limit (FR-140) is enforced and provable (FR-141). That condition
   is now met, so the block is discharged — but raising the bound remains a

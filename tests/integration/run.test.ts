@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { installNoNetworkGuard, removeNoNetworkGuard } from '../fixtures/no-network.js';
 import {
   fastServer,
@@ -415,5 +417,75 @@ describe('the hot tier names itself (FR-108, US3)', () => {
     } finally {
       await site.close();
     }
+  });
+});
+
+/**
+ * The bound on hosts in flight (FR-003, FR-132).
+ *
+ * Nothing asserted this before, which meant the one number the census's traffic
+ * profile turns on could be edited without a single test noticing. FR-132 calls
+ * it "a stated constraint of this feature, not a tuning parameter", and a
+ * constraint nothing checks is a comment.
+ */
+describe('hosts in flight are bounded', () => {
+  test('never exceeds the configured bound', async () => {
+    const BOUND = 3;
+    let inFlight = 0;
+    let peak = 0;
+    const server = http.createServer((_req, res) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      setTimeout(() => {
+        inFlight--;
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end('ok');
+      }, 40);
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      // Distinct hosts so no per-host limit interferes; all resolve to the same
+      // loopback fixture, which is what lets one server count them.
+      const targets = Array.from({ length: 12 }, (_, i) =>
+        target(`t${i}`, `http://127.0.0.1:${port}/site${i}`),
+      );
+      await executeRun({
+        targets,
+        dataDir: dir,
+        config: {
+          samples: 1,
+          timeoutMs: 2_000,
+          maxRedirects: 2,
+          hostIntervalMs: 1,
+          domainIntervalMs: 1,
+          addressIntervalMs: 1,
+          maxConcurrentHosts: BOUND,
+          vantage: 'test',
+          toolVersion: '0.1.0',
+        },
+      });
+      assert.ok(
+        peak <= BOUND,
+        `${peak} requests were in flight at once, above the bound of ${BOUND}`,
+      );
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+
+  test('the shipped bound stays within the order of a dozen', async () => {
+    // FR-132. The census sends requests to thousands of separate government
+    // servers, and this is the only number governing how many of them hear from
+    // us at the same moment. Raising it past the order of a dozen is a change to
+    // what this project does to public infrastructure, not a tuning decision, and
+    // it must not pass unnoticed.
+    const { LIMITS } = await import('../../src/cli/index.js');
+    assert.ok(
+      LIMITS.maxConcurrentHosts <= 12,
+      `hosts in flight is ${LIMITS.maxConcurrentHosts}, beyond the order of a dozen FR-132 fixes`,
+    );
+    assert.ok(LIMITS.maxConcurrentHosts >= 1);
   });
 });

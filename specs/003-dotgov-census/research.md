@@ -270,8 +270,28 @@ make the same wasted traffic take longer to discard. A request whose result we
 throw away is not a measurement, and Principle I does not permit spending a
 jurisdiction's resources on one.
 
-**Not implemented.** This changes a politeness limit, and Principle III makes
-those structural. It awaits the project owner's decision.
+**Not implemented, and deliberately still open.** This changes a politeness limit,
+and Principle III makes those structural.
+
+**What was done instead** (project owner's decision): concurrency raised from 6 to
+12 — the change FR-133 blocked until the shared-hosting gap closed, now permitted
+because the per-address limit means twelve workers cannot pile onto one backend.
+
+| | limiter waiting | plus ~29 min observed request time |
+| --- | ---: | ---: |
+| 6 workers, as first shipped | 91 min | ~120 min — the cap, hit exactly |
+| 12 workers | 46 min | ~75 min |
+
+The trade is worth stating plainly rather than leaving implicit. Raising
+concurrency does change what targets collectively experience: twice as many
+government servers hear from us at the same moment. Per-target load is unchanged,
+and the per-address limit bounds any shared backend — but the aggregate is
+genuinely higher, where R8a's change would have altered nothing a target can
+observe. The 45 minutes of margin this buys is real; so is the cost.
+
+R8a therefore remains available. If the frame grows, or a slice creeps back toward
+the cap, it is the next lever — and the better one, because it costs targets
+nothing. Reaching for more concurrency again would not be.
 
 ---
 
