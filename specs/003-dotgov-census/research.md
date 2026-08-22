@@ -236,6 +236,43 @@ than by the current one, because one visit following three redirects is one visi
 than daily. Both increase traffic to targets to solve a problem of our own
 scheduling.
 
+### R8a. Measured after the first live sweep — the same argument reaches robots.txt
+
+**Status**: open. The census schedule is disabled until this is decided.
+
+The first live sweep (`census` run `32554093317`, slice 0) was **cancelled at
+exactly 120 minutes with nothing published**. Two hours of real requests to
+roughly two thousand government domains, every measurement discarded.
+
+The cause is the same shape as R8, one step earlier. The `robots.txt` fetch and
+the page check are two requests to the same host, so the second pays the full 15s
+per-host interval. Simulating the real `RateLimiter` at 1/100 scale, with the
+census's actual access pattern:
+
+| | projected slice time |
+| --- | ---: |
+| As built — `robots.txt` pays the per-host interval | **91 min** |
+| `robots.txt` treated as a continuation | **34 min** |
+
+91 minutes is *pure limiter waiting*, before a single HTTP response is accounted
+for. Timeouts pushed the real run past the cap.
+
+**The proposal** is R8's argument applied unchanged: `robots.txt` and the page it
+guards are **one visit, not two independent readings**. Nobody fetches
+`robots.txt` as a separate reading of a site — it is fetched precisely so that the
+one request that follows may be made. The per-host interval exists to space
+independent readings, and there is only one here. The backend budget still
+charges, which is why the projection is 34 minutes rather than near zero: the
+shared-hosting limit continues to do its work untouched.
+
+**Why the schedule is off rather than the cap raised**: raising the cap would only
+make the same wasted traffic take longer to discard. A request whose result we
+throw away is not a measurement, and Principle I does not permit spending a
+jurisdiction's resources on one.
+
+**Not implemented.** This changes a politeness limit, and Principle III makes
+those structural. It awaits the project owner's decision.
+
 ---
 
 ## R9. What is not being solved
