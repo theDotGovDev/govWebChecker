@@ -5,6 +5,7 @@ import { RateLimiter } from '../politeness/rate-limiter.js';
 import { appendObservation, appendRunSummary } from '../record/writer.js';
 import { sampleTarget } from './sample.js';
 import { fetchTextForEvaluation } from './check.js';
+import { pinnedLookup, ResolutionCache } from './resolve.js';
 import { parseRobots, isAllowed } from './robots.js';
 
 export interface RunConfig {
@@ -13,6 +14,8 @@ export interface RunConfig {
   maxRedirects: number;
   hostIntervalMs: number;
   domainIntervalMs: number;
+  /** Minimum gap between requests to one backend, whatever name reached it. */
+  addressIntervalMs: number;
   /** How many distinct hosts may be in flight at once (FR-003). */
   maxConcurrentHosts: number;
   vantage: string;
@@ -66,13 +69,20 @@ async function robotsAllows(
   target: Target,
   config: RunConfig,
   limiter: RateLimiter,
+  backends: ResolutionCache,
 ): Promise<RobotsDecision> {
   const robotsUrl = new URL('/robots.txt', target.url).toString();
-  const granted = await limiter.acquire(target.host);
+  // robots.txt is a request to the same machine as the check that follows, so it
+  // spends the same budget and goes to the same pinned address.
+  const backend = await backends.get(target.host);
+  const granted = await limiter.acquire(target.host, backend.address);
   const requestedAt = new Date(granted).toISOString();
   const body = await fetchTextForEvaluation(robotsUrl, {
     timeoutMs: config.timeoutMs,
     maxRedirects: config.maxRedirects,
+    ...(backend.address !== undefined && backend.family !== undefined
+      ? { lookup: pinnedLookup(backend.address, backend.family) }
+      : {}),
   });
 
   // Only an explicit, readable prohibition stops us. An unreachable robots.txt is
@@ -103,7 +113,12 @@ export async function executeRun({ targets, dataDir, config }: RunInput): Promis
   const limiter = new RateLimiter({
     hostIntervalMs: config.hostIntervalMs,
     domainIntervalMs: config.domainIntervalMs,
+    addressIntervalMs: config.addressIntervalMs,
   });
+  // One resolution per host for the whole run. The robots fetch, the check and
+  // every redirect hop must agree on the backend, or the limiter would account
+  // for one machine while the socket reached another.
+  const backends = new ResolutionCache();
 
   const active = targets.filter((t) => t.active);
   const observations: Observation[] = [];
@@ -112,7 +127,7 @@ export async function executeRun({ targets, dataDir, config }: RunInput): Promis
 
   const worker = async (): Promise<void> => {
     for (let index = next++; index < active.length; index = next++) {
-      const observation = await checkOne(active[index]!, config, limiter, run_id);
+      const observation = await checkOne(active[index]!, config, limiter, run_id, backends);
       observations.push(observation);
       if (SUCCEEDED.has(observation.outcome)) answered++;
       // Appends are awaited inside the worker so a crash mid-run leaves the
@@ -163,6 +178,7 @@ async function checkOne(
   config: RunConfig,
   limiter: RateLimiter,
   run_id: string,
+  backends: ResolutionCache,
 ): Promise<Observation> {
   const method = {
     vantage: config.vantage,
@@ -182,7 +198,7 @@ async function checkOne(
     method,
   };
 
-  const robots = await robotsAllows(target, config, limiter);
+  const robots = await robotsAllows(target, config, limiter, backends);
   if (!robots.allowed) {
     return {
       ...base,
@@ -201,6 +217,7 @@ async function checkOne(
     timeoutMs: config.timeoutMs,
     maxRedirects: config.maxRedirects,
     limiter,
+    backends,
   });
 
   return {
@@ -209,6 +226,7 @@ async function checkOne(
     // sits between the two and its cost varies per site, so re-reading the clock
     // published gaps that drifted below the spacing the limiter had enforced.
     checked_at: result.requestedAt,
+    ...(result.address !== undefined ? { address: result.address } : {}),
     outcome: result.outcome,
     ...(result.statusCode !== undefined ? { status_code: result.statusCode } : {}),
     redirect_chain: result.redirectChain,

@@ -20,8 +20,10 @@ flowchart LR
         C1[perform check] --> C2[classify outcome]
         C2 --> C3[summarize samples]
     end
-    checker -->|every request| politeness
-    politeness[politeness<br/>rate limits, backoff, identification]
+    checker -->|every request,<br/>redirects included| politeness
+    politeness[politeness<br/>per host, per domain, per backend<br/>backoff, identification]
+    dns{{resolve + pin<br/>backend address}} --> politeness
+    checker --> dns
     checker --> record[record<br/>validate then append]
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
     data --> verify[verify<br/>checks our conduct from the record]
@@ -43,11 +45,17 @@ caller cannot route around it.
   a backend. Takes the last two labels, which is correct for `.gov` and wrong for
   multi-label suffixes; documented at the definition, and the single place that
   changes when scope widens beyond federal.
-- `rate-limiter.ts` — two independent limits, per host and per registrable
-  domain, whichever is stricter. Serializes acquisition, so there is never more
-  than one request in flight to a host. Enforced spacing exceeds the configured
-  minimum by a small margin so the guarantee holds on the *recorded* timestamps,
-  which is what an outside reader can check.
+- `rate-limiter.ts` — three independent limits, whichever is strictest: per host,
+  per registrable domain, and per **backend address**. The third exists because
+  the first two key on the *name* used to reach a site, and distinct registrable
+  domains routinely share one machine — 531 unrelated `.gov` domains answer on a
+  single address, and a burst across them satisfies both name-keyed limits
+  because every name in it differs. Keys are namespaced, since a host that is its
+  own registrable domain would otherwise collide with itself and take the weaker
+  of the two intervals. Serializes acquisition, so there is never more than one
+  request in flight to a host. Enforced spacing exceeds the configured minimum by
+  a small margin so the guarantee holds on the *recorded* timestamps, which is
+  what an outside reader can check.
 - `backoff.ts` — the wait after a failure, which only ever grows.
 - `user-agent.ts` — identification that a caller cannot override.
 
@@ -67,8 +75,17 @@ assumed.
 
 ### `src/checker/` — performing the measurement
 
+- `resolve.ts` — establishes which backend a host answers on, and pins the
+  connection to it. The pin is what makes the address limit real rather than
+  decorative: without it the limiter would account for one address while Node
+  resolved again and reached another, leaving the record asserting a guarantee
+  about a machine never contacted. Where a host publishes several addresses the
+  choice is a hash of the host — stable so observations stay comparable, spread
+  so a vendor's several machines do not all receive the same customer.
 - `check.ts` — one request with socket-level timing, following redirects and
-  recording the chain. Classifies failures by the lifecycle phase they arrive in
+  recording the chain. Every hop passes through the limiter, including the one a
+  redirect names: a municipal domain redirecting onto its vendor's host is a
+  common shape, so that hop is the one most likely to reach a shared backend. Classifies failures by the lifecycle phase they arrive in
   rather than by error text, which drifts between Node versions. It never returns
   a body. `fetchTextForEvaluation` is the deliberate, size-capped exception, used
   only for `robots.txt` — a file whose purpose is to be read before we act.
@@ -85,7 +102,8 @@ assumed.
 ### `src/cli/` — the command surface
 
 `check` runs a pass. `verify` reads a record and reports whether the politeness
-guarantees hold, printing expected versus actual.
+guarantees hold, printing expected versus actual — including backend spacing,
+which it can only check because each observation records the address contacted.
 
 `verify` matters more than it looks: it reads the *record*, never the code, so
 someone who has never seen this repository can run the same check against the
@@ -130,7 +148,12 @@ rather than per-file.
 
 - **Nothing writes to `data/` except `record/`**, and it validates first.
 - **Nothing makes a request except through `politeness/`.** A future dimension
-  that needs to bypass it is a design problem, not a special case.
+  that needs to bypass it is a design problem, not a special case. This covers
+  every request a check makes, not just the first: redirect hops and the
+  `robots.txt` fetch spend the same budget.
+- **A limit is accounted for against the machine actually contacted.** Resolution
+  and rate limiting are one step, and the address that was accounted for is the
+  address the socket is pinned to.
 - **The stored record holds no verdicts.** Whether a site counts as "up" is a
   question for the analysis half, where the threshold can change without
   rewriting history.

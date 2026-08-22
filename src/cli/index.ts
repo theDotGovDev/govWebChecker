@@ -31,6 +31,18 @@ const LIMITS = {
   hostIntervalMs: 15_000,
   domainIntervalMs: 5_000,
   /**
+   * Spacing between requests to one backend, however many distinct names reach
+   * it. Matches the per-domain interval, because it answers the same question
+   * one level up: several names, one machine.
+   *
+   * The measured cost is negligible. The `.gov` hosting survey (run
+   * 32548354070) found the worst single-slice cluster to be 89 domains on one
+   * address, which this serialises to about 7 minutes against a job cap of 60 —
+   * so there is no throughput reason to weaken it, and none to carve out
+   * exemptions for large networks whose capacity we would only be guessing at.
+   */
+  addressIntervalMs: 5_000,
+  /**
    * Distinct hosts in flight. Politeness is a property of what we do to one
    * server, so checking unrelated agencies in parallel is not less polite — and
    * serializing everything would put a few hundred targets beyond any sane
@@ -123,6 +135,7 @@ async function verify(args: Args): Promise<number> {
   const report = await verifyRecord(args.file, {
     hostIntervalMs: LIMITS.hostIntervalMs,
     domainIntervalMs: LIMITS.domainIntervalMs,
+    addressIntervalMs: LIMITS.addressIntervalMs,
   });
   console.log(formatReport(report));
   return report.ok ? 0 : 1;

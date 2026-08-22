@@ -4,11 +4,31 @@ import type { LookupFunction } from 'node:net';
 import type { Outcome } from '../record/types.js';
 import { requestHeaders } from '../politeness/user-agent.js';
 
+/** What the limiter granted for one request, and where to send it. */
+export interface RequestGrant {
+  /** The epoch-millisecond moment the limiter released this request. */
+  grantedAt: number;
+  /** Pins the connection to the backend the grant accounted for. */
+  lookup?: LookupFunction;
+}
+
 export interface CheckOptions {
   timeoutMs: number;
   maxRedirects: number;
   /** Injectable resolver. Tests use it to produce a DNS failure without leaving the machine. */
   lookup?: LookupFunction;
+  /**
+   * Called before every request this check makes, including each redirect hop.
+   *
+   * A redirect is a request, and it goes wherever the redirect names — commonly
+   * a vendor's shared host that the original name says nothing about. Following
+   * hops outside the limiter let one check send several requests while the
+   * record showed the spacing of one.
+   *
+   * Optional so `performCheck` stays usable on its own; production always
+   * supplies it.
+   */
+  acquire?: (url: string) => Promise<RequestGrant>;
 }
 
 export interface CheckResult {
@@ -20,6 +40,15 @@ export interface CheckResult {
   waitedMs?: number;
   redirectChain: string[];
   finalUrl: string;
+  /**
+   * When the limiter released the first request — which is when this check ran.
+   *
+   * Carried out rather than re-read from the clock by the caller: a redirect
+   * chain sits between the grant and the return, and its cost varies per site.
+   * Re-reading published gaps that had drifted below the spacing the limiter
+   * actually enforced, against our own record.
+   */
+  firstGrantedAt: number;
 }
 
 /** Which phase of the request lifecycle an error arrived in. */
@@ -191,20 +220,36 @@ export async function performCheck(url: string, options: CheckOptions): Promise<
   let current = url;
   let totalMs = 0;
   const started = Date.now();
+  let firstGrantedAt: number | undefined;
 
   for (let hop = 0; ; hop++) {
+    // Every hop is accounted for before it is sent. The hop that follows a
+    // redirect is the one most likely to reach a shared vendor backend, so it is
+    // the last one that should escape the limiter.
+    const grant = await options.acquire?.(current);
+    firstGrantedAt ??= grant?.grantedAt ?? Date.now();
+    const hopOptions: CheckOptions =
+      grant?.lookup !== undefined ? { ...options, lookup: grant.lookup } : options;
+
     let response: SingleResponse;
     try {
-      response = await requestOnce(current, options);
+      response = await requestOnce(current, hopOptions);
     } catch (error) {
       const err = error as NodeJS.ErrnoException & { phase?: Phase; timedOut?: boolean };
       if (err.timedOut) {
-        return { outcome: 'timeout', waitedMs: Date.now() - started, redirectChain, finalUrl: current };
+        return {
+          outcome: 'timeout',
+          waitedMs: Date.now() - started,
+          redirectChain,
+          finalUrl: current,
+          firstGrantedAt,
+        };
       }
       return {
         outcome: classifyError(err.code, err.phase ?? 'connect'),
         redirectChain,
         finalUrl: current,
+        firstGrantedAt,
       };
     }
 
@@ -218,6 +263,7 @@ export async function performCheck(url: string, options: CheckOptions): Promise<
         elapsedMs: Math.round(totalMs),
         redirectChain,
         finalUrl: current,
+        firstGrantedAt,
       };
     }
 
@@ -229,6 +275,7 @@ export async function performCheck(url: string, options: CheckOptions): Promise<
         elapsedMs: Math.round(totalMs),
         redirectChain,
         finalUrl: current,
+        firstGrantedAt,
       };
     }
 

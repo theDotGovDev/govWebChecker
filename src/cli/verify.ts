@@ -6,6 +6,7 @@ import type { Observation } from '../record/types.js';
 export interface VerifyLimits {
   hostIntervalMs: number;
   domainIntervalMs: number;
+  addressIntervalMs: number;
 }
 
 export interface VerifyCheck {
@@ -48,6 +49,10 @@ export async function verifyRecord(file: string, limits: VerifyLimits): Promise<
     shape,
     spacingCheck('per-host spacing', rows, limits.hostIntervalMs, (r) => r.host),
     spacingCheck('per-domain spacing', rows, limits.domainIntervalMs, (r) => registrableDomain(r.host)),
+    // The shared-hosting guarantee. Distinct registrable domains routinely share
+    // one machine, so this is the only check that can catch a burst against a
+    // vendor backend — both name-keyed checks above pass such a burst.
+    spacingCheck('per-address spacing', rows, limits.addressIntervalMs, (r) => r.address ?? ''),
     methodCheck(rows),
     futureTimestampCheck(rows),
     orderingCheck(rows),
@@ -102,6 +107,10 @@ function spacingCheck(
     // violated spacing.
     if (row.outcome === 'skipped') continue;
     const k = key(row);
+    // An absent key is unknown, not shared. Grouping every row whose backend we
+    // could not establish would invent a violation out of missing data — the
+    // same error as reading absence as zero (Principle V).
+    if (k === '') continue;
     const previous = lastSeen.get(k);
     if (previous !== undefined) {
       const gap = timestamp(row) - previous;

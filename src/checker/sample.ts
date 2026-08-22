@@ -2,6 +2,7 @@ import type { LookupFunction } from 'node:net';
 import type { Latency, Outcome } from '../record/types.js';
 import type { RateLimiter } from '../politeness/rate-limiter.js';
 import { performCheck } from './check.js';
+import { pinnedLookup, ResolutionCache } from './resolve.js';
 
 export interface SampleOptions {
   samples: number;
@@ -9,6 +10,8 @@ export interface SampleOptions {
   maxRedirects: number;
   limiter: RateLimiter;
   lookup?: LookupFunction;
+  /** Resolves and pins each request's backend. Shared across a run. */
+  backends?: ResolutionCache;
 }
 
 export interface SampleResult {
@@ -17,6 +20,8 @@ export interface SampleResult {
   latency: Latency;
   redirectChain: string[];
   finalUrl: string;
+  /** The backend the first request was sent to, when one was established. */
+  address?: string;
   /**
    * UTC moment the limiter released the first sample — when the check ran.
    *
@@ -24,6 +29,36 @@ export interface SampleResult {
    * record publishes is the same instant the spacing arithmetic used.
    */
   requestedAt: string;
+}
+
+/**
+ * Takes a slot for one request and says where to send it.
+ *
+ * Resolution and rate limiting are deliberately the same step. Keying the
+ * limiter on an address we then failed to connect to would leave the record
+ * asserting a guarantee about a machine we never contacted, so the address that
+ * was accounted for is the address the socket is pinned to (FR-140).
+ *
+ * An unresolvable host yields no address and no pin. The name-keyed limits still
+ * applied, and the record simply does not claim to know where the request went
+ * (FR-121).
+ */
+async function acquireHop(
+  url: string,
+  options: SampleOptions,
+): Promise<{ grantedAt: number; address?: string; lookup?: LookupFunction }> {
+  const host = new URL(url).hostname;
+  const backend = (await options.backends?.get(host)) ?? {};
+  const grantedAt = await options.limiter.acquire(host, backend.address);
+
+  if (backend.address === undefined || backend.family === undefined) return { grantedAt };
+  // A caller-supplied lookup is a test seam and outranks the pin, which is how a
+  // DNS failure can be exercised without leaving the machine.
+  return {
+    grantedAt,
+    address: backend.address,
+    lookup: options.lookup ?? pinnedLookup(backend.address, backend.family),
+  };
 }
 
 /**
@@ -49,18 +84,25 @@ export function median(values: number[]): number {
  * samples that actually produced one.
  */
 export async function sampleTarget(url: string, options: SampleOptions): Promise<SampleResult> {
-  const host = new URL(url).hostname;
   const timings: number[] = [];
   let last: Awaited<ReturnType<typeof performCheck>> | undefined;
   let requestedAt: string | undefined;
+  let address: string | undefined;
 
   for (let i = 0; i < options.samples; i++) {
-    const granted = await options.limiter.acquire(host);
-    requestedAt ??= new Date(granted).toISOString();
     const result = await performCheck(url, {
       timeoutMs: options.timeoutMs,
       maxRedirects: options.maxRedirects,
       ...(options.lookup ? { lookup: options.lookup } : {}),
+      acquire: async (hopUrl) => {
+        const grant = await acquireHop(hopUrl, options);
+        // The first hop is the one the record timestamps and names a backend for.
+        requestedAt ??= new Date(grant.grantedAt).toISOString();
+        address ??= grant.address;
+        return grant.lookup !== undefined
+          ? { grantedAt: grant.grantedAt, lookup: grant.lookup }
+          : { grantedAt: grant.grantedAt };
+      },
     });
     last = result;
     if (typeof result.elapsedMs === 'number') timings.push(result.elapsedMs);
@@ -85,6 +127,7 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
 
   return {
     outcome: last.outcome,
+    ...(address !== undefined ? { address } : {}),
     ...(last.statusCode !== undefined ? { statusCode: last.statusCode } : {}),
     latency,
     redirectChain: last.redirectChain,

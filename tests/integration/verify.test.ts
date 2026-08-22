@@ -44,7 +44,7 @@ async function writeRecord(rows: Observation[]): Promise<string> {
   return file;
 }
 
-const LIMITS = { hostIntervalMs: 60_000, domainIntervalMs: 10_000 };
+const LIMITS = { hostIntervalMs: 60_000, domainIntervalMs: 10_000, addressIntervalMs: 5_000 };
 
 describe('verify reads the record, not the code (SC-002, SC-012)', () => {
   test('passes a well-spaced record', async () => {
@@ -187,5 +187,79 @@ describe('verify reads the record, not the code (SC-002, SC-012)', () => {
     const report = await verifyRecord(file, LIMITS);
     // A site being down is data. verify checks our conduct, not the sites'.
     assert.ok(report.checks.every((c) => c.pass || !/outcome/.test(c.name)));
+  });
+});
+
+/**
+ * The shared-hosting guarantee has to be checkable by a reader, not merely
+ * enforced by us. Principle V is the whole reason: a limit nobody outside can
+ * confirm is a promise, and this project publishes claims about named
+ * institutions on the strength of these promises.
+ */
+describe('verify proves the shared-hosting limit from the record alone', () => {
+  test('detects two distinct domains hitting one backend too fast', async () => {
+    const file = await writeRecord([
+      row({
+        target_id: 'aledoil',
+        host: 'aledoil.gov',
+        url: 'https://aledoil.gov/',
+        address: '89.106.200.153',
+        checked_at: '2026-07-31T06:00:00Z',
+      }),
+      row({
+        target_id: 'abingtonpa',
+        host: 'abingtonpa.gov',
+        url: 'https://abingtonpa.gov/',
+        address: '89.106.200.153',
+        checked_at: '2026-07-31T06:00:01Z',
+      }),
+    ]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, false, 'one second apart on one server must fail');
+    const check = report.checks.find((c) => c.name === 'per-address spacing');
+    assert.ok(check && !check.pass, JSON.stringify(report.checks));
+    assert.match(check.detail, /89\.106\.200\.153/, 'the report must name the backend');
+  });
+
+  test('passes distinct domains on one backend that are properly spaced', async () => {
+    const file = await writeRecord([
+      row({
+        target_id: 'aledoil',
+        host: 'aledoil.gov',
+        url: 'https://aledoil.gov/',
+        address: '89.106.200.153',
+        checked_at: '2026-07-31T06:00:00Z',
+      }),
+      row({
+        target_id: 'abingtonpa',
+        host: 'abingtonpa.gov',
+        url: 'https://abingtonpa.gov/',
+        address: '89.106.200.153',
+        checked_at: '2026-07-31T06:00:10Z',
+      }),
+    ]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, true, JSON.stringify(report.checks));
+  });
+
+  test('does not group address-less rows together as if they shared a backend', async () => {
+    // Rows predating the address field, or whose resolution failed, carry no
+    // address. Treating "absent" as a shared key would invent a violation out of
+    // missing data — the same mistake as reading absence as zero (Principle V).
+    const file = await writeRecord([
+      row({ target_id: 'a', host: 'a.gov', url: 'https://a.gov/', checked_at: '2026-07-31T06:00:00Z' }),
+      row({ target_id: 'b', host: 'b.gov', url: 'https://b.gov/', checked_at: '2026-07-31T06:00:01Z' }),
+    ]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, true, JSON.stringify(report.checks));
+  });
+
+  test('existing records without the address field still verify (FR-136)', async () => {
+    const file = await writeRecord([
+      row({ checked_at: '2026-07-31T06:00:00Z' }),
+      row({ checked_at: '2026-07-31T06:01:00Z' }),
+    ]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, true, 'the record is append-only; old rows must stay valid');
   });
 });

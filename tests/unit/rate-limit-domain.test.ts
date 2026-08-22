@@ -9,6 +9,7 @@ describe('per-registrable-domain rate limiting (FR-003a)', () => {
     const limiter = new RateLimiter({
       hostIntervalMs: 1,
       domainIntervalMs: DOMAIN_INTERVAL_MS,
+      addressIntervalMs: 1,
     });
     const stamps: number[] = [];
 
@@ -30,7 +31,7 @@ describe('per-registrable-domain rate limiting (FR-003a)', () => {
   });
 
   test('hosts on different domains are not serialized by the domain limiter', async () => {
-    const limiter = new RateLimiter({ hostIntervalMs: 1, domainIntervalMs: 5_000 });
+    const limiter = new RateLimiter({ hostIntervalMs: 1, domainIntervalMs: 5_000, addressIntervalMs: 1 });
     const started = Date.now();
     await limiter.acquire('www.irs.gov');
     await limiter.acquire('www.va.gov');
@@ -38,7 +39,7 @@ describe('per-registrable-domain rate limiting (FR-003a)', () => {
   });
 
   test('the stricter of the two limits governs', async () => {
-    const limiter = new RateLimiter({ hostIntervalMs: 200, domainIntervalMs: 20 });
+    const limiter = new RateLimiter({ hostIntervalMs: 200, domainIntervalMs: 20, addressIntervalMs: 1 });
     const stamps: number[] = [];
     for (let i = 0; i < 2; i++) {
       await limiter.acquire('www.irs.gov');
