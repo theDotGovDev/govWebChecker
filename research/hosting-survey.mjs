@@ -289,8 +289,17 @@ function cluster(rows, keysOf) {
 
 function concentration(clusters, covered, total) {
   const sizes = [...clusters.values()].map((v) => v.length);
-  const atLeast = (n) =>
-    sizes.filter((s) => s >= n).reduce((a, b) => a + b, 0);
+  // Distinct domains, not the sum of cluster sizes. A domain with several A
+  // records belongs to several clusters, so summing counts it once per address
+  // and inflates every figure it appears in — badly, since multi-A is the norm
+  // for exactly the platform-fronted domains that form the largest clusters.
+  const atLeast = (n) => {
+    const seen = new Set();
+    for (const members of clusters.values()) {
+      if (members.length >= n) for (const d of members) seen.add(d);
+    }
+    return seen.size;
+  };
   return {
     covered,
     coverage: total > 0 ? `${((covered / total) * 100).toFixed(1)}%` : '-',
@@ -489,8 +498,11 @@ async function main() {
   table(
     keys.map((k) => {
       let worstCluster = 0;
-      let atRisk = 0;
       let saturating = 0;
+      // Distinct domains again — see `concentration`. Summing cluster sizes here
+      // roughly doubled this figure, which is the difference between "half the
+      // frame is exposed" and "a quarter of it is".
+      const atRisk = new Set();
       for (let s = 0; s < SLICES; s++) {
         const inSlice = web.filter((r) => r.slice === s);
         const c = cluster(inSlice, k.of);
@@ -498,7 +510,7 @@ async function main() {
           worstCluster = Math.max(worstCluster, members.length);
           if (members.length >= WORKERS) {
             saturating++;
-            atRisk += members.length;
+            for (const d of members) atRisk.add(d);
           }
         }
       }
@@ -506,8 +518,8 @@ async function main() {
         k.name,
         worstCluster,
         saturating,
-        atRisk,
-        `${((atRisk / web.length) * 100).toFixed(1)}%`,
+        atRisk.size,
+        `${((atRisk.size / web.length) * 100).toFixed(1)}%`,
       ];
     }),
     [
