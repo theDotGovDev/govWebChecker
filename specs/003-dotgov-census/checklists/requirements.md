@@ -52,6 +52,33 @@ marked complete:
    record and to whether an ordinary clone stays usable — both checkable without
    predicting a compression ratio.
 
+## Second pass — after the DNS survey (2026-08-22)
+
+The absence/failure design (FR-116 to FR-125) and the canonical-URL rule
+(FR-126 to FR-130) were rewritten once the survey supplied real proportions,
+rather than left as open problems. Three checklist items changed status:
+
+1. **"Requirements are testable"** — FR-116 previously required distinguishing
+   absence from failure without saying how a test would know the distinction had
+   been drawn. It now names the fields and SC-103 measures it against the
+   survey's 1,807-domain baseline, so a regression is countable.
+
+2. **"Success criteria are measurable"** — SC-103 was a yes/no property. It now
+   carries the measured baseline, and SC-103a and SC-103b were added for the
+   `www` rule and for recomputability.
+
+3. **"Scope is clearly bounded"** — parked-page detection was implied as
+   in-scope by an earlier acceptance scenario. It cannot be done without
+   retaining page bodies, which the project forbids, so FR-124 declines it
+   explicitly instead of leaving a requirement nobody can satisfy.
+
+One prose claim was **corrected against the data**: User Story 2 asserted the
+risk fell on "thousands of small county, city and tribal governments". The
+survey shows cities have the lowest no-web-address rate of any large category
+(9.6%, below Federal Executive at 10.1%). The magnitude of the risk stands —
+1,807 false claims per cycle — but its distribution was wrong, and the story now
+says volume rather than bias is the danger.
+
 ## Deliberate deviations, called out for review
 
 - **Numbered `003`, not `002`.** Sequential numbering would assign `002`, but

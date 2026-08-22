@@ -55,6 +55,59 @@ so these are current measured figures rather than estimates:
 The registry carries per domain: domain name, domain type, organization name,
 suborganization name, city, state, security contact email.
 
+## Measured evidence
+
+Every figure below comes from a DNS-only survey of the whole registry
+(`survey-dns` run `32544034683`, 2026-08-22, 104 seconds). It sent no HTTP
+request to any government web server, so it cost the surveyed jurisdictions
+nothing. `research/dns-survey.mjs` re-runs it when the registry drifts.
+
+| What the domain publishes | Count | Share |
+| --- | ---: | ---: |
+| Address at both apex and `www` | 13,431 | 81.2% |
+| Address at apex only | 567 | 3.4% |
+| Address at `www` only | 348 | 2.1% |
+| Mail service only, no web address | 1,368 | 8.3% |
+| Name exists, publishes nothing | 439 | 2.7% |
+| Name does not exist | 0 | 0.0% |
+| Our resolution failed | 382 | 2.3% |
+
+Three findings drive the requirements:
+
+**1,807 domains (10.9%) publish no web address at all.** Roughly one registered
+`.gov` in nine is not a website. Checked without modelling absence, the census
+would publish 1,807 false claims of a broken government website every cycle.
+
+**Neither the apex nor `www` alone is sufficient.** 348 domains answer only at
+`www` and 567 only at the apex, so either single-form rule misreports hundreds
+as absent. Trying both covers 14,346 (86.8%). The `www`-only rate is also
+strikingly uneven — 0.9% for City Election domains, 41.7% for Federal Judicial —
+so a single-form rule would distort comparisons between jurisdiction types, not
+merely lose rows.
+
+**Zero non-existent names, and that figure is trustworthy.** The survey reports
+the resolver *did* distinguish NXDOMAIN, so 0 is a fact rather than an artefact
+of a resolver that collapses the two. It is also the expected result: a
+registered domain exists in DNS by definition.
+
+Absence is spread across government, not concentrated in small jurisdictions:
+
+| Registry type | Domains | No web address | `www`-only |
+| --- | ---: | ---: | ---: |
+| Federal - Judicial | 24 | 33.3% | 41.7% |
+| School district | 65 | 27.7% | 3.1% |
+| Tribal | 286 | 15.0% | 4.9% |
+| Special district | 1,104 | 13.9% | 2.6% |
+| County | 2,637 | 13.0% | 2.4% |
+| State or territory | 1,409 | 12.0% | 3.0% |
+| Federal - Executive | 1,174 | 10.1% | 4.9% |
+| City | 8,976 | 9.6% | 1.3% |
+
+Cities have the *lowest* rate of any large category, slightly below Federal
+Executive. In absolute terms they still dominate — 863 of the 1,807 — simply
+because there are 8,976 of them. The risk is therefore one of volume spread
+across all of government, not of a bias against small jurisdictions.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Every US `.gov` domain is covered, and coverage is provable (Priority: P1)
@@ -95,38 +148,54 @@ anything.
 
 ### User Story 2 - A domain with no website is not reported as a broken website (Priority: P1)
 
-Most of the 16,535 registered domains are not the front door of a public
-website. Many exist for email, for a redirect, for internal use, or are simply
-held. A reader — or a journalist, or the jurisdiction itself — must be able to
-tell "this government never published a website here" apart from "this
-government's website is down".
+1,807 of the 16,535 registered domains — one in nine — publish no web address at
+all. They exist for email, for a redirect, for internal use, or are simply held.
+A reader, a journalist, or the jurisdiction itself must be able to tell "this
+government never published a website here" apart from "this government's website
+is down".
 
-Getting this wrong publishes an accusation. At this scale it would be an
-accusation against thousands of small county, city and tribal governments at
-once, which is exactly what Principle IV exists to prevent.
+Getting this wrong publishes an accusation, and does so at a rate of 1,807 per
+cycle. The survey shows the burden is spread across all of government rather
+than falling on small jurisdictions in particular — cities have the lowest rate
+of any large category — but 863 of those false claims would still land on cities,
+simply because there are so many of them. Volume, not bias, is the danger, and
+Principle IV exists precisely for this.
 
 **Why this priority**: This is the largest correctness risk in the feature, and
 it is a reputational risk to real jurisdictions rather than a technical one. A
 census that cannot make this distinction should not be published at all.
 
-**Independent Test**: Point the checker at fixtures covering each case — no DNS
-record, DNS but no listener, a redirect to a non-`.gov` host, a parked holding
-page, and a working site that is currently down — and confirm each lands in a
-distinguishable recorded state.
+**Independent Test**: Point the checker at fixtures covering each case — a name
+that does not resolve, a name that resolves only at `www`, a name with mail
+service and no web address, a name that resolves but refuses connections, a
+redirect to a non-`.gov` host, and a working site that is currently down — and
+confirm each lands in a distinguishable recorded state.
 
 **Acceptance Scenarios**:
 
-1. **Given** a domain that does not resolve, **When** it is checked, **Then** the
-   record states that no website was found, distinguishably from a site that
-   answered with an error.
-2. **Given** a domain that resolves but refuses connections, **When** it is
-   checked, **Then** the record distinguishes that from a domain that never
-   resolved.
-3. **Given** a domain that redirects to a different organisation's site, **When**
+1. **Given** a domain that publishes no web address, **When** it is checked,
+   **Then** the record states that no website was found, distinguishably from a
+   site that answered with an error.
+2. **Given** a domain with mail service and no web address, **When** it is
+   checked, **Then** the record shows it as publishing no website rather than as
+   a failure.
+3. **Given** a domain reachable only at `www`, **When** it is checked, **Then**
+   it is recorded as a working site — not as absent because the apex had no
+   address.
+4. **Given** a domain that resolves but refuses connections, **When** it is
+   checked, **Then** the record distinguishes that from a domain that publishes
+   no address at all.
+5. **Given** our own resolution failed, **When** the observation is written,
+   **Then** the record attributes the failure to us rather than asserting the
+   domain publishes nothing.
+6. **Given** a domain that redirects to a different organisation's site, **When**
    it is checked, **Then** the record preserves where it landed so a reader can
    see the domain is a redirect rather than a site.
-4. **Given** a working site that is temporarily down, **When** it is checked,
+7. **Given** a working site that is temporarily down, **When** it is checked,
    **Then** it is recorded as a failing site — not as an absent one.
+8. **Given** a better presence rule is written later, **When** it is applied to
+   observations already stored, **Then** it yields a revised reading without any
+   target being checked again.
 
 ---
 
@@ -262,55 +331,107 @@ mixes populations.
 
 **Distinguishing absence from failure**
 
+The measured baseline is in *Measured evidence* below: **1,807 domains (10.9%)
+publish no web address at all**. Without these requirements the census would
+assert, every cycle, that all 1,807 have broken websites.
+
 - **FR-116**: The record MUST distinguish *no public website exists at this
   domain* from *a website exists and did not respond successfully*. These are
   different facts about a jurisdiction and MUST NOT share a recorded state.
-- **FR-117**: Where a domain does not resolve, that MUST be recorded as its own
-  state, separate from connection failure, timeout, and error response.
-- **FR-118**: Where a domain redirects away from itself, the record MUST preserve
+- **FR-117**: `outcome` MUST remain a statement of what happened at the protocol
+  level and nothing more. Whether a website appears to exist is a reading of
+  those facts, not one of them, and MUST NOT be encoded as an outcome value.
+
+  This is the difference between recording that a request returned 200 and
+  asserting that the 200 was a real site rather than a holding page. The first is
+  an observation; the second is a verdict (Principle IV).
+- **FR-118**: A separate field MUST carry that reading — whether a public website
+  appears to exist at the domain — alongside the version of the rule that
+  produced it.
+- **FR-119**: That reading MUST be derivable again from stored facts, so a better
+  rule can be applied to observations already collected without re-checking any
+  target. Changing the rule MUST NOT invalidate history. This is the same
+  guarantee FR-001c already makes for property mapping.
+- **FR-120**: A name-resolution result MUST be established for every census
+  target and recorded with the observation: whether the domain publishes a web
+  address, publishes mail service only, publishes nothing, or does not exist.
+
+  Resolution costs the target nothing — queries go to resolvers, never to the
+  jurisdiction's server — so this converts the largest category from inference
+  into evidence at no cost under Principle I.
+- **FR-121**: Resolution failures that may be ours MUST NOT be recorded as facts
+  about the jurisdiction. Where our own resolution failed, the record MUST say
+  so, distinctly from a domain that answered authoritatively that it publishes
+  nothing.
+
+  The survey measured 2.3% in this category. Some of those are genuinely the
+  domain's own broken nameservers rather than our failure, and the two are not
+  reliably separable from a single vantage — so the conservative reading is
+  required, and the record must not claim more than it knows.
+- **FR-122**: Where a domain redirects away from itself, the record MUST preserve
   where the request landed, so a redirect-only domain is visible as such.
-- **FR-119**: The system MUST NOT infer or assert that a jurisdiction has a
+- **FR-123**: The system MUST NOT infer or assert that a jurisdiction has a
   broken website from the absence of a website. Absence is recorded as absence
   (Principle V).
+- **FR-124**: Detecting a registrar parking page is explicitly NOT a goal.
+  Distinguishing a held domain's placeholder from a thin real site requires
+  inspecting page content, and this project does not retain page bodies. A
+  requirement that cannot be met without breaking that rule is not adopted
+  quietly — it is declined here in the open.
+- **FR-125**: Where the record holds enough history, a domain's presence status
+  MUST be strengthened by that history rather than resting on a single cycle: a
+  domain that has never once resolved differs from one that resolved last week
+  and does not today. A first observation MUST still yield a usable reading
+  without waiting for history to accumulate.
 
 **Canonical URL**
 
-- **FR-120**: The URL checked for a census domain MUST be derived by a single
+The measured baseline: **an apex-only rule would misreport 348 domains (2.1%)
+that answer only at `www`; a `www`-only rule would misreport 567 (3.4%) that
+answer only at the apex.** Neither form alone is sufficient, which settles the
+rule below.
+
+- **FR-126**: The URL checked for a census domain MUST be derived by a single
   stated, uniform rule, since a census supplies only a domain name and no curated
   URL.
-- **FR-121**: The rule MUST cover scheme, apex versus `www`, and how a redirect
-  between those forms is treated.
-- **FR-122**: The derived URL and the rule that produced it MUST be recoverable
+- **FR-127**: The rule MUST try both the apex and the `www` form before
+  concluding that no website exists. Trying only one would misreport hundreds of
+  domains as absent, and would do so unevenly across jurisdictions — the
+  `www`-only rate ranges from 0.9% to 41.7% depending on the registry type.
+- **FR-128**: The rule MUST cover scheme, the order the two forms are tried, and
+  how a redirect between them is treated.
+- **FR-129**: The derived URL and the rule that produced it MUST be recoverable
   from the observation, so a reader knows what was actually requested rather than
   inferring it (Principle V).
-- **FR-123**: Deriving a URL MUST NOT cost additional requests to the target
-  beyond what an ordinary visitor's first visit would cost.
+- **FR-130**: Deriving a URL MUST NOT cost the target more than an ordinary
+  visitor's first visit. Where resolution already shows only one of the two forms
+  has an address, the other MUST NOT be requested.
 
 **Politeness at census scale**
 
-- **FR-124**: The per-host and per-registrable-domain minimum intervals, the
+- **FR-131**: The per-host and per-registrable-domain minimum intervals, the
   request timeout, and the bound on hosts in flight MUST continue to be enforced
   inside the checker, unchanged in kind by the increase in scale.
-- **FR-125**: Hosts in flight MUST remain bounded at the order of a dozen. This
+- **FR-132**: Hosts in flight MUST remain bounded at the order of a dozen. This
   is a stated constraint of this feature, not a tuning parameter.
-- **FR-126**: Raising the bound in FR-125 MUST remain blocked until the
+- **FR-133**: Raising the bound in FR-132 MUST remain blocked until the
   shared-hosting gap (see *Known gap*) is closed. A future change that raises
   concurrency without addressing that gap is a Principle I violation, and the
   spec records this so the question cannot be bypassed silently.
-- **FR-127**: `robots.txt` MUST continue to be honored per target, and every
+- **FR-134**: `robots.txt` MUST continue to be honored per target, and every
   request MUST continue to identify itself (Principle II, Principle III).
-- **FR-128**: A run MUST NOT retry harder against a domain that has already
+- **FR-135**: A run MUST NOT retry harder against a domain that has already
   failed. A failing census entry is data (Principle IV).
 
 **The record**
 
-- **FR-129**: Existing observations MUST remain valid and MUST NOT require
+- **FR-136**: Existing observations MUST remain valid and MUST NOT require
   re-collection or rewriting.
-- **FR-130**: The record MUST remain append-only, committed, and checkable by the
+- **FR-137**: The record MUST remain append-only, committed, and checkable by the
   existing verification gate.
-- **FR-131**: Verification MUST continue to prove the spacing guarantee from
+- **FR-138**: Verification MUST continue to prove the spacing guarantee from
   stored timestamps alone at census scale.
-- **FR-132**: The record MUST carry enough per-observation context that a
+- **FR-139**: The record MUST carry enough per-observation context that a
   per-tier figure can be computed without joining against a target list that may
   since have changed.
 
@@ -352,6 +473,15 @@ never describe different intended behavior:
   cycle covered and name the ones it did not, without re-running any check.
 - **SC-103**: Given only the stored record, a domain with no public website is
   distinguishable from a domain whose website failed, for every recorded state.
+  Measured against the survey baseline, the ~1,807 domains that publish no web
+  address produce zero claims of a broken website.
+- **SC-103a**: A domain reachable only at `www` is recorded as reachable. On the
+  survey baseline that is ~348 domains that an apex-only rule would have lost,
+  and the residual disagreement between jurisdiction types is not attributable to
+  the URL rule.
+- **SC-103b**: The presence reading can be recomputed for observations already
+  stored, and a change to the rule alters no stored fact and requires no target
+  to be checked again.
 - **SC-104**: No two requests to the same host are closer together than the
   configured minimum, provable from stored timestamps alone — holding at census
   scale exactly as it holds today.
@@ -384,7 +514,7 @@ It is recorded here rather than omitted, and the project owner has decided to
 defer closing it to follow-up work.
 
 **Interim mitigation, binding on this feature**: hosts in flight stay at the
-order of a dozen (FR-125), which bounds aggregate pressure on any single shared
+order of a dozen (FR-132), which bounds aggregate pressure on any single shared
 backend regardless of how many distinct domains route to it. The rolling-slice
 cadence is what makes this affordable — a slice of roughly 2,362 domains
 completes in about an hour at that concurrency, well inside the per-job limit —
@@ -395,7 +525,7 @@ backend actually being contacted rather than the name used to reach it, so that
 domains sharing infrastructure share a budget. That is deliberately not specified
 here.
 
-FR-126 exists so that a future contributor who wants a faster sweep has to
+FR-133 exists so that a future contributor who wants a faster sweep has to
 confront this first.
 
 ## Assumptions
@@ -411,8 +541,13 @@ confront this first.
   rather than a defect.
 - A weekly cycle is an appropriate resolution for the broad tier's purpose, which
   is coverage and change over months, not outage detection.
-- Registry domain types (Federal, State, County, City, Tribal, Interstate) are
-  usable as jurisdiction classification without further normalisation.
+- Registry domain types are usable as jurisdiction classification without further
+  normalisation. The survey observed sixteen distinct values, more than the six
+  first assumed: the Federal branches are separate (`Federal - Executive`,
+  `- Judicial`, `- Legislative`, plus a bare `Federal`), `School district` and
+  `Special district` exist alongside `City` and `County`, and five types carry an
+  `- Election` variant. Any grouping for presentation must therefore be stated
+  rather than inferred from the type string.
 - One reading per broad-tier check is sufficient. Repeated samples seconds apart
   measure the same cache and would multiply census traffic for no statistical
   gain — the same reasoning `001` already applies.
