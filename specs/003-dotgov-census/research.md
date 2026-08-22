@@ -289,9 +289,34 @@ and the per-address limit bounds any shared backend — but the aggregate is
 genuinely higher, where R8a's change would have altered nothing a target can
 observe. The 45 minutes of margin this buys is real; so is the cost.
 
-R8a therefore remains available. If the frame grows, or a slice creeps back toward
-the cap, it is the next lever — and the better one, because it costs targets
-nothing. Reaching for more concurrency again would not be.
+R8a therefore remained available, and has now been taken. A slice creeping back
+toward the cap was not hypothetical: the second sweep finished in 99m42s, twenty
+minutes short of it.
+
+**Decided and implemented.** `robots.txt` and the page it governs are charged as
+one visit. The backend budget still charges — that is the limit protecting a
+shared machine, and a continuation must never escape it — but the name-keyed
+interval does not, because it exists to space two *independent* readings and this
+is not two.
+
+The precedent was already in the codebase and was approved with `003`: a redirect
+hop charges the backend budget and not the name-keyed interval, on exactly this
+reasoning. R8a applies the same rule one request earlier. Asking a site's
+permission and then acting on the answer is one visit, and a browser does it
+without pausing fifteen seconds in the middle.
+
+What it removes is a full per-host interval from every target that publishes a web
+address — roughly 2,045 of a slice — and it alters nothing any target can observe.
+
+**Sabotage found a hole the implementation did not.** Seeding every sample rather
+than the first passed all 274 tests, because the census takes one sample and
+nothing else supplied a seed. The rule keeping R8a from becoming a burst was a
+comment rather than a constraint. A test now drives `sampleTarget` with two
+samples and a seed, and all three sabotages bite: ignoring the seed, seeding every
+sample, and letting a continuation skip the backend budget.
+
+**Still to be measured.** The saving is not claimed until a dispatched slice shows
+it. Two projections of this duration have already been wrong, both optimistic.
 
 ---
 

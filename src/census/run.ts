@@ -252,6 +252,11 @@ async function checkOne(
     maxRedirects: config.maxRedirects,
     limiter,
     backends,
+    // Asking permission and then acting on the answer is one visit. The backend
+    // budget still charges — that is the limit protecting a shared machine — but
+    // the name-keyed interval does not, because it exists to space two
+    // *independent* readings and this is not two (R8a).
+    visiting: [robots.contacted],
   });
 
   const partial: Observation = {
@@ -275,6 +280,8 @@ async function checkOne(
 interface RobotsDecision {
   allowed: boolean;
   requestedAt: string;
+  /** The host this request contacted, so the page fetch continues the same visit. */
+  contacted: string;
 }
 
 async function robotsAllows(
@@ -296,8 +303,12 @@ async function robotsAllows(
       : {}),
   });
 
-  if (body === undefined) return { allowed: true, requestedAt };
-  return { allowed: isAllowed(parseRobots(body), new URL(url).pathname), requestedAt };
+  if (body === undefined) return { allowed: true, requestedAt, contacted: host };
+  return {
+    allowed: isAllowed(parseRobots(body), new URL(url).pathname),
+    requestedAt,
+    contacted: host,
+  };
 }
 
 export type { NameResolution };

@@ -474,6 +474,14 @@ rule below.
   separate government servers hear from us at the same moment; raising it further
   is a change to what this project does to public infrastructure and needs its own
   evidence, not this precedent.
+- **FR-134**: A `robots.txt` fetch and the page it governs MUST be charged as one
+  visit: the backend budget applies, the name-keyed interval does not. The
+  per-host interval exists to space two *independent* readings, and asking a
+  site's permission before acting on the answer is not two. This is the same rule
+  already applied to redirect hops (FR-003b), one request earlier.
+- **FR-134a**: The continuation MUST cover one visit only. A second *sample* is a
+  second independent reading and MUST pay the full interval, and a test MUST fail
+  if it does not — a limit nothing checks is a comment.
 - **FR-133**: Raising the bound in FR-132 MUST remain blocked until the
   shared-hosting limit (FR-140) is enforced and provable (FR-141). That condition
   is now met, so the block is discharged — but raising the bound remains a

@@ -18,29 +18,23 @@ name: census
 # nothing there and asking anyway would spend a jurisdiction's resources to learn
 # it twice.
 
-# SCHEDULE DISABLED — a slice does not fit inside the job cap.
+# SCHEDULE DISABLED — pending one measured run.
 #
-# The first live sweep (run 32554093317, slice 0) was cancelled at exactly 120
-# minutes with nothing published. Two hours of real requests to roughly two
-# thousand government domains, and every measurement discarded.
+# The first sweep (run 32554093317) was cancelled at the 120-minute cap with
+# nothing published. The second (run 32579108046) completed in 99m42s with every
+# conduct check passing, and was then rejected by a coverage check that compared
+# one day of a seven-day cycle against the whole frame. Both faults are fixed: the
+# coverage check is slice-aware, and the record now uploads as an artifact before
+# anything can reject it, so a rejection costs the commit and not the readings.
 #
-# Leaving the cron enabled would repeat that daily. Spending a jurisdiction's
-# resources on a request whose result we then throw away is not a measurement, it
-# is just traffic — and Principle I does not permit it. So the schedule is off
-# until a slice provably fits, and only `workflow_dispatch` remains for testing.
+# What remains is margin. 99m42s leaves twenty minutes against the cap, and two
+# projections of this duration have already been wrong, both optimistic. R8a is
+# now implemented — robots.txt and the page it governs are charged as one visit
+# rather than two — which removes a full per-host interval from every target that
+# publishes a web address, roughly 2,045 of a slice.
 #
-# The cause is measured, not guessed: the robots.txt fetch and the page check are
-# two requests to the same host, so the second pays the full 15s per-host
-# interval. Simulating the real limiter at 1/100 scale puts that at ~91 minutes of
-# pure waiting for ~2,045 web-publishing domains, before a single HTTP response is
-# accounted for. Timeouts then push it past the cap.
-#
-# The proposed fix is at research.md R8: treat robots.txt as a continuation of one
-# visit rather than a second independent reading — the backend budget still
-# charges, the name-keyed interval does not. Simulated at ~34 minutes. That is a
-# change to a politeness limit and awaits the project owner's decision.
-#
-# When the schedule returns, restore: - cron: '7 9 * * *'  (09:07 UTC, deliberately
+# The schedule returns when a dispatched slice demonstrates the margin, not when a
+# simulation predicts it. Restore: - cron: '7 9 * * *'  (09:07 UTC, deliberately
 # away from check.yml's hourly slot, per research.md R5).
 
 on:
@@ -69,10 +63,10 @@ permissions:
 jobs:
   census:
     runs-on: ubuntu-latest
-    # Measured, not assumed: the first live sweep hit this cap exactly and was
-    # cancelled with nothing published. The cap is not the problem — the per-host
-    # interval being charged twice per domain is — so raising it would only make
-    # the same wasted traffic take longer to discard.
+    # Measured, not assumed. The first sweep hit this cap exactly; the second
+    # finished in 99m42s. Raising it was never the answer — the per-host interval
+    # being charged twice per domain was the cost, and R8a removes that rather
+    # than giving the same waste more room.
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
