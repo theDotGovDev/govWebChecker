@@ -69,17 +69,55 @@ none of local government**.
 | `GSA/federal-website-index` | 200 — federal only |
 | `analytics.usa.gov/data/live/sites.csv` | 200 — 10,000 traffic-ranked hosts, also federal |
 | `api.gsa.gov` site scanning | 403 — needs an API key |
-| `crt.sh` certificate transparency | **502 on seven of seven attempts**, across two runs twelve minutes apart |
+| `crt.sh` certificate transparency | **502 on eight of eight attempts** across three runs |
+| **`api.certspotter.com`** (free tier) | **200 — answers for both federal and municipal domains** |
 
-Certificate transparency is the only route that would reach a small town's
-subdomains, and it is a different kind of source: unofficial, noisy, and full of
-hosts that never served a public website. D1 answers the "what counts" part by
-measuring rather than judging; what remains is that **no CT source has yet
-answered us**. `crt.sh` returned 502 to every attempt, which makes the yield
-unmeasured and, more to the point, makes a single volunteer-run service a poor
-foundation for half a feature. Establishing a CT source that answers reliably is a
-precondition of the local half, and is tracked by FR-436 alongside the count
-itself.
+### Certificate transparency: the source works, and shows both faces of the problem
+
+`certspotter` answered where `crt.sh` did not. Two samples, and they make the case
+for the feature and for its guardrails simultaneously.
+
+**`alamosa.gov`** — 7 certificate entries, **3 distinct names**:
+
+```
+alamosa.gov        www.alamosa.gov        help.alamosa.gov
+```
+
+`help.alamosa.gov` is the whole argument in one line. It is a real service of a
+small Colorado city that the domain-level census cannot see and never would have,
+and finding it cost the city nothing.
+
+**`nih.gov`** — first page only, 182 distinct names, including:
+
+```
+3d.nih.gov
+ai-puppetprd1.niaid.nih.gov              ← configuration-management infrastructure
+api.strap.trials-dev.nci.nih.gov         ← development
+api.strap.trials-stage.nci.nih.gov       ← staging
+api.strap.trials-staging.nci.nih.gov     ← staging, again
+api.strap.trials-prod.nci.nih.gov
+```
+
+This is the noise, and it is not hypothetical either. A Puppet host and three
+non-production environments are not public websites, and a list of them is not
+something this project should publish about NIH under any framing. FR-440 and
+FR-443 exist for exactly these rows: they are counted, validated, and — when they
+fail to answer publicly or demand credentials — dropped, never listed.
+
+**Two caveats on the numbers.** `nih.gov` returned exactly 100 entries, which is
+the free tier's page size, so 182 names is a floor rather than a count — GSA's
+index puts `nih.gov` at 1,995 hosts. Full discovery therefore needs pagination and
+must respect the tier's rate limits, which is a design constraint on the discovery
+job rather than a blocker.
+
+Certificate transparency is the route that reaches a small town's subdomains, and
+`certspotter` supplies it. It remains a different kind of source from GSA's index
+— unofficial, and full of hosts that never served a public website — which is what
+D1's measure-don't-judge answer and the FR-440 guardrails are for.
+
+`crt.sh` is not that source. Eight of eight attempts returned 502, and one
+volunteer-run service is a poor foundation regardless of what its yield would have
+been.
 
 ### The cost is structural, and the binding constraint is not the one expected
 
