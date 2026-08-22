@@ -1,0 +1,60 @@
+# NOT ACTIVE YET — this file must be moved to `.github/workflows/survey-dns.yml`
+# before GitHub will run it.
+#
+# It is parked here because the credential available to the agent that wrote it
+# lacks the `workflow` scope, so it could not push a file under
+# `.github/workflows/`. Parking it keeps the content in version control and
+# reviewable instead of losing it.
+#
+# To activate:
+#     git mv research/survey-dns.workflow.yml .github/workflows/survey-dns.yml
+#     git commit -m "chore: activate the DNS survey workflow" && git push
+#
+# Then dispatch it: Actions -> survey-dns -> Run workflow.
+#
+name: survey-dns
+
+# A DNS-only census of the published .gov registry.
+#
+# Answers, with evidence rather than assumption, how much of the registry has no
+# web address at all — the question feature 003's FR-116 turns on — and how many
+# domains are reachable only at `www`, which decides the canonical-URL rule in
+# FR-120.
+#
+# This sends DNS queries only. Not one HTTP request reaches a government web
+# server, which is what makes it safe to run against all 16,535 domains at once
+# under Principle I. The single HTTP request it does make is for the registry
+# CSV itself.
+#
+# Dispatch-only and deliberately re-runnable: the registry changes, so the answer
+# drifts, and re-measuring is cheaper than trusting a stale number.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  survey:
+    runs-on: ubuntu-latest
+    # Generous because ~16.5k domains times up to five lookups each is a lot of
+    # waiting on the network, and the concurrency bound is deliberately modest.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Survey the registry over DNS
+        run: node research/dns-survey.mjs
+        env:
+          SURVEY_OUT: ${{ runner.temp }}/dns-survey.csv
+
+      # Kept as an artifact rather than committed. This is research that informs
+      # a spec decision, not a measurement record — `data/` is reserved for the
+      # availability record and its guarantees.
+      - name: Keep the per-domain results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-survey
+          path: ${{ runner.temp }}/dns-survey.csv
+          retention-days: 30
