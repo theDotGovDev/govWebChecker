@@ -1,0 +1,123 @@
+name: census
+
+# The broad tier: every registered US `.gov` domain, covered over about a week.
+#
+# One seventh of the frame per day. The slice is a pure function of the date, so
+# seven consecutive runs cover the frame exactly once — no domain twice, none
+# missed — and a domain's slice never moves when the registry gains or loses
+# entries (spec.md FR-111 to FR-113).
+#
+# This is NOT an outage-detection instrument, and the record says so. A weekly
+# reading cannot see a thirty-minute interruption; that is what the hourly hot
+# tier in `check.yml` is for. This answers questions about coverage and change
+# over months.
+#
+# Cost per run: at most one reading plus one robots.txt per domain that publishes
+# a web address — roughly 2,045 of the ~2,364 in a slice. The rest publish no web
+# address and receive no request at all, because DNS already told us there is
+# nothing there and asking anyway would spend a jurisdiction's resources to learn
+# it twice.
+
+on:
+  schedule:
+    # 09:07 UTC. Deliberately away from `check.yml`'s hourly slot: the two tiers
+    # are separate processes with separate limiters, so where they overlap on a
+    # host or a backend they do not truly share a budget (plan.md, research.md
+    # R5). Scheduling them apart is a mitigation, not a fix — the concurrency
+    # bound is what actually caps the damage, and `verify` makes any violation
+    # visible in the record afterwards.
+    - cron: '7 9 * * *'
+  workflow_dispatch:
+    inputs:
+      slice:
+        description: 'Slice to run (0-6). Blank uses the slice for today.'
+        required: false
+        default: ''
+
+# Two census runs must never race the commit. Deliberately a DIFFERENT group from
+# `check.yml`: sharing one would make a two-hour census block the hourly check,
+# and GitHub cancels rather than queues a second pending run in a group — so the
+# hot tier would lose readings, which is the data loss this project exists to
+# avoid. The two tiers therefore overlap in principle, which is the carried risk
+# in research.md R5, bounded by the concurrency cap and visible afterwards through
+# `verify`. Both commit to the same file, and the rebase-retry below is what makes
+# that safe.
+concurrency:
+  group: census-record
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    # A slice is bounded by the limits rather than by the work: the largest
+    # single-slice backend cluster is 89 domains on one address, which the
+    # per-address interval serialises to about seven minutes. Generous headroom
+    # over that, well inside the per-job cap.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Run one slice of the census
+        # The slice is read from the environment rather than interpolated into the
+        # command. On a scheduled run `inputs` does not exist, and an expression
+        # that assumes it does would pass a bare `--slice` with no value.
+        env:
+          SLICE: ${{ github.event.inputs.slice }}
+        run: |
+          set -e
+          if [ -n "$SLICE" ]; then
+            node dist/src/cli/index.js census --slice "$SLICE"
+          else
+            node dist/src/cli/index.js census
+          fi
+
+      - name: Verify our own conduct before publishing it
+        # Identical in spirit to `check.yml`: a run that violated a politeness
+        # guarantee discards its readings rather than publishing them. Publishing
+        # data that fails our own stated checks would be worse than publishing
+        # nothing.
+        #
+        # Only observation files are verified. `data/runs/` holds run summaries,
+        # which have no host and are not what `verify` checks.
+        run: |
+          set -e
+          shopt -s nullglob
+          files=(data/availability/*.jsonl)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no observation files produced — nothing to verify or publish"
+            exit 0
+          fi
+          for file in "${files[@]}"; do
+            echo "verifying $file"
+            node dist/src/cli/index.js verify "$file"
+          done
+
+      - name: Commit the record
+        run: |
+          set -e
+          if [ -z "$(git status --porcelain data/)" ]; then
+            echo "no new observations — nothing to commit"
+            exit 0
+          fi
+          git config user.name 'govwebchecker[bot]'
+          git config user.email 'govwebchecker[bot]@users.noreply.github.com'
+          git add data/
+          git commit -m "data: census slice $(date -u +%Y-%m-%dT%H:%MZ)"
+          # Rebase rather than force. The record is append-only, and losing the
+          # hourly check's observations to a push race would be a silent hole.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "could not push the record after 3 attempts" >&2
+          exit 1

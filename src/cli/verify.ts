@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { registrableDomain } from '../politeness/domain.js';
 import { validateObservation } from '../record/validate.js';
 import type { Observation } from '../record/types.js';
+import type { Frame } from '../census/frame.js';
 
 export interface VerifyLimits {
   hostIntervalMs: number;
@@ -32,7 +33,11 @@ export interface VerifyReport {
  * It checks our conduct, not the sites'. A record full of timeouts passes; a
  * record showing we hammered someone does not.
  */
-export async function verifyRecord(file: string, limits: VerifyLimits): Promise<VerifyReport> {
+export async function verifyRecord(
+  file: string,
+  limits: VerifyLimits,
+  frame?: Frame,
+): Promise<VerifyReport> {
   const text = await fs.readFile(file, 'utf8');
   const lines = text.trimEnd().split('\n').filter((l) => l.trim() !== '');
   const rows: Observation[] = lines.map((line) => JSON.parse(line) as Observation);
@@ -57,6 +62,10 @@ export async function verifyRecord(file: string, limits: VerifyLimits): Promise<
     futureTimestampCheck(rows),
     orderingCheck(rows),
     validityCheck(rows),
+    // Absence of a frame is absence of a question. `verify` runs against records
+    // that predate the census, and inventing a failure for them would be reading
+    // absence as zero.
+    ...(frame ? [coverageCheck(rows, frame)] : []),
   ];
 
   return { ok: checks.every((c) => c.pass), checks, rows: rows.length };
@@ -130,6 +139,56 @@ function spacingCheck(
     pass: smallest >= requiredMs,
     detail: `min observed ${smallest}ms on ${where}, required ${requiredMs}ms`,
   };
+}
+
+/**
+ * Did each cycle reach the whole frame, and if not, which domains did it miss?
+ *
+ * Computed from the observations and the committed frame, never from our own run
+ * summaries. SC-102 promises a reader can answer this holding only the record —
+ * a coverage claim checked against our own account of what we did would be us
+ * marking our own homework.
+ *
+ * Naming the missing domains is the part that matters. A count alone leaves a gap
+ * uninvestigable, and an uninvestigable gap is indistinguishable from a
+ * jurisdiction that vanished.
+ */
+function coverageCheck(rows: Observation[], frame: Frame): VerifyCheck {
+  const expected = new Set(frame.domains.map((d) => d.domain));
+  const byCycle = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    // Hot-tier rows check curated hosts on a different cadence. Counting them
+    // would inflate coverage with domains the census never reached.
+    if (row.tier !== 'broad' || row.cycle === undefined) continue;
+    if (!byCycle.has(row.cycle)) byCycle.set(row.cycle, new Set());
+    byCycle.get(row.cycle)!.add(row.target_id);
+  }
+
+  if (byCycle.size === 0) {
+    return {
+      name: 'census coverage',
+      pass: true,
+      detail: `no census observations to check against a frame of ${expected.size}`,
+    };
+  }
+
+  const lines: string[] = [];
+  let pass = true;
+  for (const [cycle, covered] of [...byCycle.entries()].sort()) {
+    const missing = [...expected].filter((d) => !covered.has(d)).sort();
+    const reached = expected.size - missing.length;
+    if (missing.length > 0) pass = false;
+    const named = missing.slice(0, 10).join(', ');
+    lines.push(
+      `${cycle}: ${reached}/${expected.size}` +
+        (missing.length > 0
+          ? ` — missed ${missing.length}: ${named}${missing.length > 10 ? ', …' : ''}`
+          : ''),
+    );
+  }
+
+  return { name: 'census coverage', pass, detail: lines.join('; ') };
 }
 
 function methodCheck(rows: Observation[]): VerifyCheck {

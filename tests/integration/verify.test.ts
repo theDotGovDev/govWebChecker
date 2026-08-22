@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { verifyRecord } from '../../src/cli/verify.js';
 import type { Observation } from '../../src/record/types.js';
+import { sliceOf } from '../../src/census/slice.js';
 
 let dir: string;
 beforeEach(async () => {
@@ -261,5 +262,96 @@ describe('verify proves the shared-hosting limit from the record alone', () => {
     ]);
     const report = await verifyRecord(file, LIMITS);
     assert.equal(report.ok, true, 'the record is append-only; old rows must stay valid');
+  });
+});
+
+/**
+ * Coverage, provable by a reader holding only the record and the frame.
+ *
+ * SC-102 promises someone can state how many domains a cycle covered and name the
+ * ones it did not, without re-running anything and without trusting our code. So
+ * this is computed from observations and the committed frame — not from our run
+ * summaries, which are our own account of what we did.
+ */
+describe('verify proves census coverage (FR-114, SC-102)', () => {
+  const frame = {
+    source: 'test',
+    retrieved_at: '2026-08-22T00:00:00Z',
+    digest: 'sha256:test',
+    domains: ['a.gov', 'b.gov', 'c.gov'].map((domain) => ({
+      domain,
+      type: 'City',
+      organization: '',
+      suborganization: '',
+      city: '',
+      state: '',
+      slice: sliceOf(domain),
+    })),
+  };
+
+  function censusRow(domain: string, at: string): Observation {
+    return row({
+      target_id: domain,
+      host: domain,
+      url: `https://${domain}/`,
+      checked_at: at,
+      tier: 'broad',
+      cycle: '2026-W34',
+      slice: sliceOf(domain),
+      resolution: { status: 'address', apex: true, www: true },
+      presence: { state: 'website', rule: 'presence/1' },
+    });
+  }
+
+  test('a cycle that covered the whole frame passes and says so', async () => {
+    const file = await writeRecord(
+      frame.domains.map((d, i) =>
+        censusRow(d.domain, `2026-08-2${2 + i}T06:00:00Z`),
+      ),
+    );
+    const report = await verifyRecord(file, LIMITS, frame);
+    const check = report.checks.find((c) => c.name === 'census coverage');
+    assert.ok(check, JSON.stringify(report.checks.map((c) => c.name)));
+    assert.equal(check.pass, true, check.detail);
+    assert.match(check.detail, /3\/3/);
+  });
+
+  test('names the domains a cycle did not reach', async () => {
+    // "How many" is not enough. A reader has to be able to name them, or the
+    // gap cannot be investigated — and an uninvestigable gap is indistinguishable
+    // from a jurisdiction that vanished.
+    const file = await writeRecord([censusRow('a.gov', '2026-08-22T06:00:00Z')]);
+    const report = await verifyRecord(file, LIMITS, frame);
+    const check = report.checks.find((c) => c.name === 'census coverage')!;
+    assert.equal(check.pass, false);
+    assert.match(check.detail, /b\.gov/);
+    assert.match(check.detail, /c\.gov/);
+  });
+
+  test('an incomplete cycle is not reported as complete', async () => {
+    const file = await writeRecord([censusRow('a.gov', '2026-08-22T06:00:00Z')]);
+    const report = await verifyRecord(file, LIMITS, frame);
+    assert.equal(report.ok, false, 'a cycle missing two thirds of the frame must not pass');
+  });
+
+  test('hot-tier rows are not counted toward census coverage', async () => {
+    // The hot tier checks 58 curated hosts hourly. Counting those toward a census
+    // cycle would inflate coverage with domains the census never reached.
+    const file = await writeRecord([
+      censusRow('a.gov', '2026-08-22T06:00:00Z'),
+      row({ tier: 'hot', target_id: 'irs-gov', checked_at: '2026-08-22T07:00:00Z' }),
+    ]);
+    const report = await verifyRecord(file, LIMITS, frame);
+    const check = report.checks.find((c) => c.name === 'census coverage')!;
+    assert.match(check.detail, /1\/3/);
+  });
+
+  test('is skipped, not failed, when no frame is supplied', async () => {
+    // `verify` runs against records that predate the census. Absence of a frame
+    // is absence of a question, not a failed answer.
+    const file = await writeRecord([row()]);
+    const report = await verifyRecord(file, LIMITS);
+    assert.equal(report.ok, true);
+    assert.ok(!report.checks.some((c) => c.name === 'census coverage'));
   });
 });

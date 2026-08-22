@@ -356,3 +356,64 @@ describe('a run', () => {
     }
   });
 });
+
+describe('the hot tier names itself (FR-108, US3)', () => {
+  test('every observation carries tier "hot"', async () => {
+    const site = await fastServer();
+    try {
+      const summary = await executeRun({
+        targets: [target('t', site.url)],
+        dataDir: dir,
+        config: {
+          samples: 1,
+          timeoutMs: 2_000,
+          maxRedirects: 3,
+          hostIntervalMs: 1,
+          domainIntervalMs: 1,
+          addressIntervalMs: 1,
+          maxConcurrentHosts: 2,
+          vantage: 'test',
+          toolVersion: '0.1.0',
+        },
+      });
+      for (const o of summary.observations) assert.equal(o.tier, 'hot');
+      assert.equal(summary.tier, 'hot');
+    } finally {
+      await site.close();
+    }
+  });
+
+  test('a per-tier figure is computable from rows alone, with no target list', async () => {
+    // FR-139 and SC-107. The broad tier will have a far higher failure rate than
+    // 58 curated federal hosts — because the populations differ, not because
+    // government got worse — so a reader must be able to decompose any combined
+    // figure without joining against a list that may since have changed.
+    const site = await fastServer();
+    try {
+      const summary = await executeRun({
+        targets: [target('t', site.url)],
+        dataDir: dir,
+        config: {
+          samples: 1,
+          timeoutMs: 2_000,
+          maxRedirects: 3,
+          hostIntervalMs: 1,
+          domainIntervalMs: 1,
+          addressIntervalMs: 1,
+          maxConcurrentHosts: 2,
+          vantage: 'test',
+          toolVersion: '0.1.0',
+        },
+      });
+      const byTier = new Map<string, number>();
+      for (const o of summary.observations) {
+        const tier = o.tier ?? 'unknown';
+        byTier.set(tier, (byTier.get(tier) ?? 0) + 1);
+      }
+      assert.deepEqual([...byTier.keys()], ['hot']);
+      assert.ok(!byTier.has('unknown'), 'no row may be unattributable to a tier');
+    } finally {
+      await site.close();
+    }
+  });
+});

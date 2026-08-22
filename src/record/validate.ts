@@ -19,6 +19,18 @@ const CONTENT_FIELDS = ['body', 'html', 'screenshot', 'content', 'subresources']
 
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
+const TIERS = new Set(['hot', 'broad']);
+const RESOLUTION_STATUSES = new Set([
+  'address',
+  'mail_only',
+  'no_service',
+  'nxdomain',
+  'resolver_error',
+]);
+const PRESENCE_STATES = new Set(['website', 'no_website', 'undetermined']);
+/** One seventh of the frame per run, so a domain belongs to exactly one of these. */
+const SLICES = 7;
+
 /**
  * Checks a record against `contracts/observation.md`. Returns a list of problems;
  * an empty list means the record is valid.
@@ -54,6 +66,7 @@ export function validateObservation(record: unknown): string[] {
 
   problems.push(...validateLatency(r['latency']));
   problems.push(...validateMethod(r['method']));
+  problems.push(...validateCensus(r));
 
   for (const field of VERDICT_FIELDS) {
     if (field in r) {
@@ -69,6 +82,71 @@ export function validateObservation(record: unknown): string[] {
 
   if (r['outcome'] === 'skipped' && typeof r['skip_reason'] !== 'string') {
     problems.push('a skipped observation must record why');
+  }
+
+  return problems;
+}
+
+/**
+ * The census fields.
+ *
+ * All optional — the record is append-only, so rows written before this feature
+ * stay valid without being rewritten (FR-136, FR-142). Optional is not unchecked:
+ * these fields exist to be read by someone who does not trust our code, and a
+ * value outside its enumeration is one nobody can map back to an observation.
+ */
+function validateCensus(r: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+
+  if ('tier' in r && (typeof r['tier'] !== 'string' || !TIERS.has(r['tier']))) {
+    problems.push(`tier must be one of: ${[...TIERS].join(', ')}`);
+  }
+
+  if ('cycle' in r && (typeof r['cycle'] !== 'string' || r['cycle'] === '')) {
+    problems.push('cycle must be a non-empty string when present');
+  }
+
+  if ('slice' in r) {
+    const slice = r['slice'];
+    if (typeof slice !== 'number' || !Number.isInteger(slice) || slice < 0 || slice >= SLICES) {
+      problems.push(`slice must be an integer in 0..${SLICES - 1}`);
+    }
+  }
+
+  if ('url_rule' in r && (typeof r['url_rule'] !== 'string' || r['url_rule'] === '')) {
+    problems.push('url_rule must name the rule that produced the URL');
+  }
+
+  if ('resolution' in r) {
+    const res = r['resolution'];
+    if (typeof res !== 'object' || res === null) {
+      problems.push('resolution must be an object when present');
+    } else {
+      const v = res as Record<string, unknown>;
+      if (typeof v['status'] !== 'string' || !RESOLUTION_STATUSES.has(v['status'])) {
+        problems.push(`resolution.status must be one of: ${[...RESOLUTION_STATUSES].join(', ')}`);
+      }
+      for (const form of ['apex', 'www'] as const) {
+        if (typeof v[form] !== 'boolean') problems.push(`resolution.${form} must be a boolean`);
+      }
+    }
+  }
+
+  if ('presence' in r) {
+    const pres = r['presence'];
+    if (typeof pres !== 'object' || pres === null) {
+      problems.push('presence must be an object when present');
+    } else {
+      const v = pres as Record<string, unknown>;
+      if (typeof v['state'] !== 'string' || !PRESENCE_STATES.has(v['state'])) {
+        problems.push(`presence.state must be one of: ${[...PRESENCE_STATES].join(', ')}`);
+      }
+      // Without the version a reading cannot be superseded, and FR-119's promise
+      // that a better rule can be applied to history is void.
+      if (typeof v['rule'] !== 'string' || v['rule'] === '') {
+        problems.push('presence.rule must name the rule version that produced the reading');
+      }
+    }
   }
 
   return problems;
