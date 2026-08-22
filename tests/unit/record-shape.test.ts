@@ -83,3 +83,81 @@ describe('observation record contract', () => {
     assert.ok(validateObservation(local).length > 0);
   });
 });
+
+/**
+ * The census fields.
+ *
+ * All optional, because the record is append-only and rows written before this
+ * feature must stay valid without being rewritten (FR-136, FR-142). Optional is
+ * not the same as unchecked: a malformed value is rejected, because the point of
+ * these fields is to be readable by someone who does not trust our code.
+ */
+describe('census fields on the observation', () => {
+  test('a row carrying none of them is still valid', () => {
+    assert.deepEqual(validateObservation(wellFormed()), []);
+  });
+
+  test('a fully populated census row validates', () => {
+    const row = {
+      ...wellFormed(),
+      tier: 'broad',
+      cycle: '2026-W34',
+      slice: 3,
+      url_rule: 'canonical/1',
+      resolution: { status: 'address', apex: true, www: true },
+      presence: { state: 'website', rule: 'presence/1' },
+    };
+    assert.deepEqual(validateObservation(row), []);
+  });
+
+  test('rejects a tier outside the known set', () => {
+    const problems = validateObservation({ ...wellFormed(), tier: 'medium' });
+    assert.ok(problems.some((p) => p.includes('tier')), problems.join('; '));
+  });
+
+  test('rejects a slice outside 0..6', () => {
+    for (const slice of [-1, 7, 1.5, '3']) {
+      const problems = validateObservation({ ...wellFormed(), slice });
+      assert.ok(problems.some((p) => p.includes('slice')), `slice ${slice}: ${problems.join('; ')}`);
+    }
+  });
+
+  test('rejects a resolution status outside its enumeration', () => {
+    // An unrecognised status is a verdict nobody can interpret. Letting it
+    // through would put a value in the published record that no reader — and no
+    // later version of us — can map back to what was observed.
+    const problems = validateObservation({
+      ...wellFormed(),
+      resolution: { status: 'probably_fine', apex: true, www: true },
+    });
+    assert.ok(problems.some((p) => p.includes('resolution.status')), problems.join('; '));
+  });
+
+  test('rejects a presence state outside its enumeration', () => {
+    const problems = validateObservation({
+      ...wellFormed(),
+      presence: { state: 'up', rule: 'presence/1' },
+    });
+    assert.ok(problems.some((p) => p.includes('presence.state')), problems.join('; '));
+  });
+
+  test('a presence reading must say which rule produced it', () => {
+    // Without the version, a reading cannot be recomputed or superseded, and
+    // FR-119's guarantee that history survives a better rule is void.
+    const problems = validateObservation({
+      ...wellFormed(),
+      presence: { state: 'website' },
+    });
+    assert.ok(problems.some((p) => p.includes('presence.rule')), problems.join('; '));
+  });
+
+  test('presence stays out of outcome', () => {
+    // FR-117: outcome is a statement about the protocol and nothing more.
+    // Whether a website appears to exist is a reading of those facts, not one of
+    // them, and must never become an outcome value.
+    for (const outcome of ['no_website', 'absent', 'undetermined']) {
+      const problems = validateObservation({ ...wellFormed(), outcome });
+      assert.ok(problems.some((p) => p.includes('outcome')), `${outcome} must not be an outcome`);
+    }
+  });
+});
