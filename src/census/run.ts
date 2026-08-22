@@ -199,13 +199,27 @@ async function checkOne(
 
   // No web address, or none we could establish: nothing is requested. The record
   // says what DNS said and declines to claim more (FR-123, FR-121).
+  //
+  // The two reasons are different facts and get different outcomes. A resolver
+  // that failed us is `dns_failure`, because it did. A resolver that answered —
+  // mail only, no service, or no such name — did not fail: it told us there is no
+  // website to request, and nothing was requested, which is what `skipped` means.
+  // Calling that a DNS failure is this feature's own central error moved into the
+  // outcome field, and it published: the first real slice reported 282 DNS
+  // failures across 2,360 domains where roughly 36 were real.
   if (derived === undefined) {
+    const ourFailure = resolution.status === 'resolver_error';
     const partial: Observation = {
       ...base,
       host: entry.domain,
       url: `https://${entry.domain}/`,
       checked_at: new Date().toISOString(),
-      outcome: 'dns_failure',
+      ...(ourFailure
+        ? { outcome: 'dns_failure' as const }
+        : {
+            outcome: 'skipped' as const,
+            skip_reason: `no web address published (${resolution.status})`,
+          }),
       redirect_chain: [],
       latency: { samples: 0 },
       presence: { state: 'undetermined', rule: 'presence/1' },

@@ -200,6 +200,38 @@ describe('a domain with no website is never reported as a broken one', () => {
     assert.equal(row.latency.samples, 0, 'nothing was measured, because nothing was sent');
   });
 
+  test('a domain that publishes no web address is not recorded as a DNS failure', async () => {
+    // The bug this guards against is the feature's own central error, relocated.
+    // `presence` said `no_website` correctly while `outcome` said `dns_failure`,
+    // so the first real slice reported 282 DNS failures across 2,360 .gov domains
+    // when roughly 36 were real — the other 246 were mail-only domains whose DNS
+    // answered perfectly and said "no web address here".
+    //
+    // Nothing was requested, which is exactly what `skipped` means. A resolver
+    // that answers is not a resolver that failed.
+    const domain = 'mailonly.gov';
+    const frame = frameOf([domain]);
+    const dns = stubResolver({ [domain]: { MX: ['mail.mailonly.gov'] } });
+
+    await executeCensus({
+      frame,
+      slice: sliceOf(domain),
+      dataDir: dir,
+      config: CONFIG,
+      resolver: dns,
+      urlOverride: () => {
+        throw new Error('a domain with no web address must not be requested');
+      },
+      now: new Date('2026-08-22T04:00:00Z'),
+    });
+
+    const row = (await readRows())[0]!;
+    assert.notEqual(row.outcome, 'dns_failure', 'DNS answered; it did not fail');
+    assert.equal(row.outcome, 'skipped');
+    assert.match(row.skip_reason ?? '', /no web address/i);
+    assert.equal(row.presence?.state, 'no_website');
+  });
+
   test('a resolver failure is recorded as ours, not as the jurisdiction publishing nothing', async () => {
     const domain = 'unreachable.gov';
     const frame = frameOf([domain]);
