@@ -1,4 +1,4 @@
-import type { SiteModel, SiteView } from './model.js';
+import type { SiteModel, SiteView, TierView } from './model.js';
 
 function escape(text: string): string {
   return text
@@ -77,6 +77,41 @@ ${latencyCell(site)}
  * every outcome in words rather than by colour alone, and carries its
  * methodology on the page rather than behind a link.
  */
+/**
+ * What one tier says, with the population it covers attached.
+ *
+ * Every figure here is per-tier. There is deliberately no combined number: the
+ * two tiers are different populations, and the census will show a far higher
+ * failure and absence rate than 58 curated federal hosts — because the
+ * population differs, not because government websites got worse. A single
+ * headline across both would be wrong in a way that is very hard to retract
+ * (SC-107).
+ */
+function tierPanel(tier: TierView): string {
+  const measured = tier.presence.website + tier.presence.no_website + tier.presence.undetermined;
+  const presence =
+    measured > 0
+      ? `<p>
+        Of ${number(measured)} domains where we established what is published:
+        <strong>${number(tier.presence.website)}</strong> have a website,
+        <strong>${number(tier.presence.no_website)}</strong> publish no web address at all, and
+        <strong>${number(tier.presence.undetermined)}</strong> we could not determine.
+        A domain that publishes no website is not a broken website, and this page
+        never counts it as one.
+      </p>`
+      : '';
+
+  return `<div class="panel">
+  <h3>${escape(tier.tier === 'hot' ? 'Hourly tier' : tier.tier === 'broad' ? 'Census tier' : 'Earlier observations')}</h3>
+  <p><strong>Population:</strong> ${escape(tier.population)}.</p>
+  <p>
+    ${number(tier.domains)} domains, ${number(tier.observations)} observations,
+    ${number(tier.responded)} of which got a successful response.
+  </p>
+  ${presence}
+</div>`;
+}
+
 export function renderSite(model: SiteModel, generatedAt: string): string {
   const { summary } = model;
   const window =
@@ -148,13 +183,50 @@ export function renderSite(model: SiteModel, generatedAt: string): string {
     that produced it.
   </p>
   <ul class="stats">
-    <li><div>${number(summary.targets)}</div><span>sites measured</span></li>
+    <li><div>${number(summary.targets)}</div><span>sites in the hourly tier</span></li>
     <li><div>${number(summary.observations)}</div><span>observations recorded</span></li>
     <li><div>${escape(window)}</div><span>measurement window</span></li>
   </ul>
 </header>
 
-<h2>Latest measurement for each site</h2>
+<h2>Two tiers, two populations</h2>
+
+<p class="tagline">
+  This project measures government websites in two different ways, over two
+  different populations. Figures from one do not describe the other, and adding
+  them together describes neither — so they are never combined here.
+</p>
+
+${model.tiers.map(tierPanel).join('\n')}
+${
+  model.census
+    ? `<div class="panel">
+  <h3>Census coverage</h3>
+  <p>
+    The census covers every registered US <code>.gov</code> domain over a cycle
+    of about a week, one seventh each day. Coverage is checkable from the
+    published record rather than taken on trust.
+  </p>
+  <table>
+    <thead><tr><th scope="col">Cycle</th><th scope="col" class="num">Domains covered</th><th scope="col" class="num">Slices seen</th></tr></thead>
+    <tbody>
+    ${model.census.cycles
+      .map(
+        (c) =>
+          `<tr><th scope="row">${escape(c.cycle)}</th><td class="num">${number(c.domains)}</td><td class="num">${c.slices.length} of 7</td></tr>`,
+      )
+      .join('\n    ')}
+    </tbody>
+  </table>
+  <p>
+    A cycle showing fewer than seven slices is an incomplete cycle, and is shown
+    as incomplete rather than presented as a full sweep.
+  </p>
+</div>`
+    : ''
+}
+
+<h2>Latest measurement for each hourly-tier site</h2>
 
 <div class="scroll">
 <table>
@@ -180,6 +252,18 @@ ${model.sites.map(row).join('\n')}
 </div>
 
 <h2>How to read this</h2>
+
+<div class="panel">
+  <h3>Absence is not failure</h3>
+  <p>
+    Roughly one registered <code>.gov</code> domain in nine publishes no web
+    address at all. Those domains exist for email, for a redirect, for internal
+    use, or are simply held. A government that never published a website here is
+    a different fact from a government whose website is down, and this page keeps
+    them apart. Where our own name lookup failed, we say we could not determine
+    it rather than attributing anything to the jurisdiction.
+  </p>
+</div>
 
 <div class="panel">
   <h3>These are measurements, not verdicts</h3>

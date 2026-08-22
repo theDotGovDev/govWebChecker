@@ -209,3 +209,114 @@ describe('site model', () => {
     assert.equal(model.summary.firstObserved, undefined);
   });
 });
+
+/**
+ * User Story 4: aggregate figures must not be misread across tiers.
+ *
+ * The broad tier has a far higher failure and absence rate than 58 curated
+ * federal hosts — not because government websites got worse, but because the
+ * population is different. Anyone computing an ecosystem-level figure has to be
+ * able to see that, and a wrong headline about US government is hard to retract.
+ */
+describe('per-tier figures (FR-139, SC-107)', () => {
+  const rows = [
+    observation({ target_id: 'a', tier: 'hot', outcome: 'success' }),
+    observation({ target_id: 'b', tier: 'hot', outcome: 'timeout', latency: { samples: 0 } }),
+    observation({
+      target_id: 'alamosa.gov',
+      tier: 'broad',
+      cycle: '2026-W34',
+      slice: 3,
+      outcome: 'success',
+      resolution: { status: 'address', apex: true, www: true },
+      presence: { state: 'website', rule: 'presence/1' },
+    }),
+    observation({
+      target_id: 'mailonly.gov',
+      tier: 'broad',
+      cycle: '2026-W34',
+      slice: 3,
+      outcome: 'dns_failure',
+      latency: { samples: 0 },
+      resolution: { status: 'mail_only', apex: false, www: false },
+      presence: { state: 'no_website', rule: 'presence/1' },
+    }),
+    observation({
+      target_id: 'unreachable.gov',
+      tier: 'broad',
+      cycle: '2026-W34',
+      slice: 3,
+      outcome: 'dns_failure',
+      latency: { samples: 0 },
+      resolution: { status: 'resolver_error', apex: false, www: false },
+      presence: { state: 'undetermined', rule: 'presence/1' },
+    }),
+  ];
+
+  test('computes a figure per tier from rows alone, consulting no target list', () => {
+    // The target list is passed empty on purpose. A per-tier figure that needed
+    // it would break the moment the list changed, which is exactly what FR-139
+    // forbids — and target lists change constantly.
+    const model = buildSiteModel({ targets: [], observations: rows, runs: [] });
+    const hot = model.tiers.find((t) => t.tier === 'hot')!;
+    const broad = model.tiers.find((t) => t.tier === 'broad')!;
+    assert.equal(hot.observations, 2);
+    assert.equal(broad.observations, 3);
+    assert.equal(hot.responded, 1);
+    assert.equal(broad.responded, 1);
+  });
+
+  test('a broad-tier figure separates absence from failure', () => {
+    // Reporting 2 of 3 broad-tier domains as failing would be false: one of them
+    // never published a website, and one we could not resolve. Only the first is
+    // a statement about the jurisdiction at all.
+    const model = buildSiteModel({ targets: [], observations: rows, runs: [] });
+    const broad = model.tiers.find((t) => t.tier === 'broad')!;
+    assert.equal(broad.presence.website, 1);
+    assert.equal(broad.presence.no_website, 1);
+    assert.equal(broad.presence.undetermined, 1);
+  });
+
+  test('never publishes a single combined availability figure', () => {
+    // SC-107. The model has no field a caller could mistake for "availability
+    // across all of .gov". Anything that reads like one has to be built by the
+    // caller from per-tier parts, which is a decision they take visibly.
+    const model = buildSiteModel({ targets: [], observations: rows, runs: [] });
+    const keys = Object.keys(model.summary);
+    for (const forbidden of ['availability', 'uptime', 'combined', 'overall']) {
+      assert.ok(
+        !keys.some((k) => k.toLowerCase().includes(forbidden)),
+        `summary.${forbidden} would be a figure that silently mixes populations`,
+      );
+    }
+  });
+
+  test('every tier figure states the population it covers', () => {
+    const model = buildSiteModel({ targets: [], observations: rows, runs: [] });
+    for (const tier of model.tiers) {
+      assert.ok(tier.population.length > 0, `${tier.tier} must state its population`);
+      assert.equal(typeof tier.domains, 'number');
+    }
+  });
+
+  test('rows predating tiers are attributed rather than silently dropped', () => {
+    // The record is append-only and full of rows written before `tier` existed.
+    // Dropping them would understate history; guessing their tier would invent
+    // provenance. They are counted as untiered and named as such.
+    const model = buildSiteModel({
+      targets: [],
+      observations: [observation({ target_id: 'old' })],
+      runs: [],
+    });
+    const untiered = model.tiers.find((t) => t.tier === 'untiered');
+    assert.ok(untiered, 'pre-tier rows must appear somewhere a reader can see them');
+    assert.equal(untiered.observations, 1);
+  });
+
+  test('census coverage is reported per cycle from the rows', () => {
+    const model = buildSiteModel({ targets: [], observations: rows, runs: [] });
+    const cycle = model.census?.cycles.find((c) => c.cycle === '2026-W34');
+    assert.ok(cycle, 'a census cycle must be visible');
+    assert.equal(cycle.domains, 3);
+  });
+});
