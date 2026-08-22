@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { buildFrame, parseRegistry, frameDigest } from '../../src/census/frame.js';
 import { sliceOf } from '../../src/census/slice.js';
 
+// The real header, verbatim from the published registry. An invented column
+// order here would test the parser against our own assumption rather than
+// against the thing it parses — which is how `organization` silently came to
+// read the Suborganization column.
 const REGISTRY_CSV = [
-  'Domain name,Domain type,Agency,Organization name,City,State,Security contact email',
-  'alamosa.gov,City,Non-Federal Agency,City of Alamosa,Alamosa,CO,(blank)',
-  'abingtonpa.gov,City,Non-Federal Agency,"Abington Township, PA",Abington,PA,(blank)',
-  'nih.gov,Federal - Executive,HHS,National Institutes of Health,Bethesda,MD,(blank)',
-  'tsa.gov,Federal - Executive,DHS,Transportation Security Administration,Springfield,VA,(blank)',
+  'Domain name,Domain type,Organization name,Suborganization name,City,State,Security contact email',
+  'alamosa.gov,City,City of Alamosa,,Alamosa,CO,(blank)',
+  'abingtonpa.gov,City,"Abington Township, PA",,Abington,PA,(blank)',
+  'nih.gov,Federal - Executive,Department of Health and Human Services,National Institutes of Health,Bethesda,MD,(blank)',
+  'tsa.gov,Federal - Executive,Department of Homeland Security,Transportation Security Administration,Springfield,VA,(blank)',
 ].join('\n');
 
 describe('parsing the published registry', () => {
@@ -19,7 +23,17 @@ describe('parsing the published registry', () => {
     // The organization name contains a comma inside quotes — a naive split
     // shifts every later column and silently mislabels the jurisdiction.
     assert.equal(entries[1]!.organization, 'Abington Township, PA');
+    assert.equal(entries[1]!.city, 'Abington');
     assert.equal(entries[1]!.state, 'PA');
+  });
+
+  test('reads the accountable organization and the operating unit separately', () => {
+    // The department is who is accountable; the suborganization is who the public
+    // recognises — NIH under HHS. 001 keeps both for the same reason.
+    const entries = parseRegistry(REGISTRY_CSV);
+    assert.equal(entries[2]!.organization, 'Department of Health and Human Services');
+    assert.equal(entries[2]!.suborganization, 'National Institutes of Health');
+    assert.equal(entries[0]!.suborganization, '');
   });
 
   test('keeps the registry type verbatim', () => {

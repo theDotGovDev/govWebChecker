@@ -23,10 +23,12 @@ can tell "not checked" from "not registered at the time" by reading git history
   "domains": [
     {
       "domain": "alamosa.gov",
-      "type": "City",           // the registry's own value, unnormalised
-      "organization": "City of Alamosa",
+      "type": "City",              // the registry's own value, unnormalised
+      "organization": "City of Alamosa",     // who is accountable
+      "suborganization": "",       // the unit the public recognises, where named
+      "city": "Alamosa",
       "state": "CO",
-      "slice": 3                // fnv1a(domain) % 7 — stored for legibility, recomputable
+      "slice": 3                   // fnv1a(domain) % 7 — stored for legibility, recomputable
     }
   ]
 }
@@ -38,6 +40,18 @@ can tell "not checked" from "not registered at the time" by reading git history
 | `retrieved_at` | When the registry looked like this |
 | `digest` | Ties run summaries to an exact frame. A cycle is complete when all seven slices ran against the same digest (FR-115) |
 | `slice` | Stored so a reader need not reimplement the hash to check coverage. It is a pure function of `domain`, so it can never disagree with the code — a mismatch is a bug the frame builder must refuse to write |
+| `organization` / `suborganization` | The registry carries both, and they answer different questions: the department is who is accountable, the suborganization is who the public recognises — NIH under HHS. `001` keeps the same pair for the same reason. 872 of the 16,535 domains name a suborganization |
+
+**The digest covers the domain list and nothing else.** Not the fetch time, not
+the field values, not the order the registry listed them in. That is what lets a
+cycle be called complete: seven slices ran against one digest. A digest that
+moved whenever a jurisdiction corrected its own name would mean no cycle ever
+looked complete — and correcting a name is not a change to what is being checked.
+
+**Size**: the built frame is about 3.5 MB, roughly 300 KB compressed as git
+stores it, and a weekly refresh changes a few hundred lines. It is pretty-printed
+rather than compact deliberately: `refresh-frame.yml` opens a pull request, and a
+reviewable diff is the entire point of doing so.
 
 **`type` is deliberately not normalised.** The survey found sixteen distinct
 values, not the six first assumed — separate Federal branches, `School district`

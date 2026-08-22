@@ -15,7 +15,10 @@ import { sliceOf } from './slice.js';
 export interface RegistryEntry {
   domain: string;
   type: string;
+  /** Who is accountable — the department or the jurisdiction itself. */
   organization: string;
+  /** The operating unit the public recognises, where the registry names one. */
+  suborganization: string;
   city: string;
   state: string;
 }
@@ -106,11 +109,14 @@ export function parseRegistry(csv: string): RegistryEntry[] {
     .slice(1)
     .filter((line) => line.trim() !== '')
     .map((line) => {
-      const [domain, type, , organization, city, state] = splitCsvLine(line);
+      // Domain name, Domain type, Organization name, Suborganization name,
+      // City, State, Security contact email.
+      const [domain, type, organization, suborganization, city, state] = splitCsvLine(line);
       return {
         domain: (domain ?? '').toLowerCase().replace(/\.$/, ''),
         type: type || 'Unknown',
         organization: organization ?? '',
+        suborganization: suborganization ?? '',
         city: city ?? '',
         state: state ?? '',
       };

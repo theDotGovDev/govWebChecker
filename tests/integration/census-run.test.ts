@@ -31,6 +31,7 @@ function frameOf(domains: string[]): Frame {
       domain,
       type: 'City',
       organization: 'Test',
+      suborganization: '',
       city: '',
       state: '',
       slice: sliceOf(domain),

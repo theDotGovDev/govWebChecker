@@ -282,6 +282,7 @@ describe('verify proves census coverage (FR-114, SC-102)', () => {
       domain,
       type: 'City',
       organization: '',
+      suborganization: '',
       city: '',
       state: '',
       slice: sliceOf(domain),
