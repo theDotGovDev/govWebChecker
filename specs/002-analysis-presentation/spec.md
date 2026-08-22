@@ -331,9 +331,17 @@ Settles Q1 as option A.
 
 Settles Q2 as option A.
 
-- **FR-245**: Every domain in the frame MUST have its own listing carrying its
-  stored readings, the method behind them, and the route to correction or
-  removal. No jurisdiction is reachable only by knowing to search for it.
+- **FR-245**: Every **site** the record knows MUST have its own listing carrying
+  its stored readings, the method behind them, and the route to correction or
+  removal. No site is reachable only by knowing to search for it.
+- **FR-245a**: A listing is about one host. A domain page groups the sites beneath
+  it and MUST NOT present a reading taken at one host as a reading about another —
+  `www.nih.gov` answering says nothing about `pubmed.ncbi.nlm.nih.gov`.
+- **FR-245b**: A domain page MUST state which of its sites were checked and MUST
+  NOT imply that its unlisted sites were. Today the census checks only the apex
+  and `www` forms, so for most domains that is one site out of an unknown number,
+  and presenting it as the domain's state would be the same error as reading
+  absence as zero.
 - **FR-246**: A listing whose readings are `undetermined` MUST lead with what is
   unknown and MUST NOT be presented as a finding about the jurisdiction. This is
   FR-212 at the page level, and it is where the risk actually lands: roughly one
@@ -366,8 +374,14 @@ Settles Q2 as option A.
   that tier cannot answer.
 - **Cycle reading** — one census cycle's result: its coverage, its three presence
   counts, and whether the cycle completed.
-- **Domain listing** — what the site says about one named domain, and the route to
-  challenge it. One exists for every domain in the frame (FR-245).
+- **Site** — one host, and the unit a listing is about. `pubmed.ncbi.nlm.nih.gov`
+  and `www.nih.gov` are two sites, not two views of one, because they are two
+  websites run by different people for different readers.
+- **Domain** — a registered `.gov` name, and a grouping of the sites beneath it.
+  It is the unit the registry allocates and the unit accountability attaches to,
+  which is why it groups rather than replaces the site.
+- **Listing** — what the site says about one site, and the route to challenge it.
+  One exists for every site the record knows (FR-245).
 
 ---
 
@@ -389,8 +403,10 @@ Settles Q2 as option A.
   from a period in which government websites failed.
 - **SC-207**: A census cycle in progress is never rendered as a decline.
 - **SC-208**: Zero individuals are named anywhere in the published output.
-- **SC-209**: Every domain in the frame has a reachable listing, and no listing
-  presents our own failure to reach a domain as a finding about it.
+- **SC-209**: Every site the record knows has a reachable listing, and no listing
+  presents our own failure to reach a site as a finding about it.
+- **SC-211**: No reading taken at one host is presented as a reading about
+  another, and no domain page implies coverage of sites that were not checked.
 - **SC-210**: No published ordering assigns a rate to a target that has none —
   checkable against the four federal hosts that currently have no rate.
 
@@ -400,6 +416,10 @@ Settles Q2 as option A.
 
 - The record is the only input. If a question cannot be answered from stored
   observations and the committed frame, this feature does not answer it.
+- The record's coverage of sites is what it is. The census reaches the apex and
+  `www` forms of 16,535 registered domains; the hot tier reaches 58 named hosts.
+  Every other `.gov` host is uncovered, and this feature shows that as uncovered
+  rather than inferring anything about it (D3).
 - Availability is the only dimension with data. Performance, accessibility and
   technology findings (`001` FR-018, FR-018a) are anticipated by the structure
   but not presented, because nothing collects them yet.
@@ -479,6 +499,42 @@ jurisdiction.
 Not symmetrically reversible: withdrawing listings after they are indexed leaves
 cached copies and broken links behind, which is why the trade is recorded here
 rather than treated as a layout choice.
+
+### D3 — The listing unit is the site, not the domain
+
+A registered domain is not a website. `nih.gov`, `www.nlm.nih.gov` and
+`pubmed.ncbi.nlm.nih.gov` are run by different people for different readers, and
+the hot tier already treats them that way — 18 of its 58 hosts are subdomains
+other than `www`, including `pubmed.ncbi.nlm.nih.gov`, `forecast.weather.gov` and
+`travel.state.gov`.
+
+The two tiers therefore already disagree about what is being counted:
+
+| | Unit | Count |
+| --- | --- | ---: |
+| Census frame | bare registered domains, no subdomains | 16,535 |
+| Hot tier | hosts, of which 18 are non-`www` subdomains | 58 |
+
+**Decided**: a listing is about one site. Domains group their sites rather than
+standing in for them. This costs nothing today — the census knows the apex and
+`www` forms, so most domains group one site — and it means listings extend when
+subdomain coverage arrives rather than being rebuilt around a different unit.
+
+FR-245a and FR-245b carry the consequence. A reading at one host is never
+presented as a reading about another, and a domain page states which of its sites
+were checked rather than implying the rest were.
+
+**What this does not do**: it does not make subdomains appear. Nothing collects
+them, and this feature generates no traffic. The registry publishes registered
+domains only and no authoritative list of the hosts beneath them, so discovering
+them needs a data source this project does not have — certificate transparency
+being the usual one — and the cost is structural rather than incremental. `.gov`
+plausibly runs several hosts per domain, and the census already takes 99 minutes
+to cover one seventh of 16,535 domains against a 120-minute cap. A frame of hosts
+rather than domains would multiply that severalfold.
+
+That is a collection question, it is a large one, and it belongs in its own spec
+rather than being absorbed here or quietly widened into `003`.
 
 ## Constitution Check
 
