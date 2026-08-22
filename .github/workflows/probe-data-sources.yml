@@ -80,3 +80,45 @@ jobs:
 
           echo "Probe complete. A 200 with a plausible head means the source is usable;"
           echo "anything else means the target list needs a different basis."
+
+      - name: Characterise the federal website index
+        # A source existing is not the same as a source being usable. This asks the
+        # questions that decide whether a host-level frame is feasible at all: how
+        # many hosts, over how many registered domains, and — the one that matters
+        # — whether it covers anything beyond federal. The census is 92% local
+        # government, so a federal-only index closes the subdomain gap for the
+        # small part of the frame and none of the large part.
+        run: |
+          set -uo pipefail
+          url="https://raw.githubusercontent.com/GSA/federal-website-index/main/data/site-scanning-target-url-list.csv"
+          curl -sS -L --max-time 60 "$url" -o /tmp/index.csv || { echo "fetch failed"; exit 0; }
+
+          python3 - <<'PY'
+          import csv, collections
+          rows = list(csv.DictReader(open('/tmp/index.csv', newline='')))
+          print(f"rows: {len(rows)}")
+          print(f"columns: {', '.join(rows[0].keys())}")
+
+          hosts = {r['initial_url'] for r in rows if r.get('initial_url')}
+          bases = {r['base_domain'] for r in rows if r.get('base_domain')}
+          print(f"distinct initial_url: {len(hosts)}")
+          print(f"distinct base_domain: {len(bases)}")
+          if bases:
+              print(f"hosts per registered domain: {len(hosts)/len(bases):.1f}")
+
+          for col in ('top_level_domain', 'branch'):
+              if col in rows[0]:
+                  c = collections.Counter(r[col] for r in rows)
+                  print(f"\n{col}: " + ", ".join(f"{k or '(blank)'}={v}" for k, v in c.most_common(8)))
+
+          print("\nper-domain host counts, largest:")
+          c = collections.Counter(r['base_domain'] for r in rows)
+          for d, n in c.most_common(8):
+              print(f"  {d}: {n}")
+
+          print("\nsource lists each host came from:")
+          for col in rows[0]:
+              if col.startswith('source_list_'):
+                  n = sum(1 for r in rows if r[col] and r[col].lower() not in ('false', '0', ''))
+                  print(f"  {col}: {n}")
+          PY
