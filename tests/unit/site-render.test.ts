@@ -92,3 +92,82 @@ describe('site rendering', () => {
     assert.match(html, /<caption>/);
   });
 });
+
+describe('the page never publishes a figure without its population (SC-107)', () => {
+  const model = {
+    sites: [],
+    tiers: [
+      {
+        tier: 'hot',
+        population: 'federal hosts selected by measured public traffic, checked hourly',
+        observations: 100,
+        domains: 58,
+        responded: 90,
+        outcomes: { success: 90, timeout: 10 },
+        presence: { website: 0, no_website: 0, undetermined: 0 },
+      },
+      {
+        tier: 'broad',
+        population: 'all registered US .gov domains, checked on a rolling weekly cycle',
+        observations: 2364,
+        domains: 2364,
+        responded: 1900,
+        outcomes: { success: 1900, dns_failure: 300, timeout: 164 },
+        presence: { website: 2000, no_website: 300, undetermined: 64 },
+      },
+    ],
+    census: {
+      cycles: [
+        {
+          cycle: '2026-W34',
+          domains: 2364,
+          slices: [0],
+          presence: { website: 2000, no_website: 300, undetermined: 64 },
+        },
+      ],
+    },
+    summary: {
+      targets: 58,
+      withData: 58,
+      withoutData: 0,
+      observations: 2464,
+      vantages: ['github-actions/Linux'],
+    },
+    discardedRuns: 0,
+  };
+
+  test('states each tier population in words next to its numbers', () => {
+    const prose = renderSite(model, '2026-08-22T06:00:00Z').replace(/\s+/g, ' ');
+    assert.match(prose, /federal hosts selected by measured public traffic/);
+    assert.match(prose, /all registered US \.gov domains/);
+  });
+
+  test('says plainly that absence is not failure', () => {
+    // The page carries the largest correctness risk in the feature, so it has to
+    // explain it rather than leave a reader to infer that 300 dns_failures mean
+    // 300 broken government websites.
+    //
+    // Whitespace is collapsed first: the assertion is about the prose a reader
+    // sees, not about where the source happens to wrap, and a test that breaks
+    // on reflowing a paragraph is a test people learn to ignore.
+    const prose = renderSite(model, '2026-08-22T06:00:00Z').replace(/\s+/g, ' ');
+    assert.match(prose, /publishes no web address/i);
+    assert.match(prose, /is not a broken website|different fact/i);
+  });
+
+  test('shows an incomplete cycle as incomplete', () => {
+    const html = renderSite(model, '2026-08-22T06:00:00Z');
+    assert.match(html, /1 of 7/);
+    assert.match(html, /incomplete/i);
+  });
+
+  test('does not print a single combined availability headline', () => {
+    // Both tiers appear, so a reader can compute what they like — but the page
+    // itself never does the mixing for them.
+    const html = renderSite(model, '2026-08-22T06:00:00Z');
+    assert.ok(
+      !/overall availability|total uptime|availability across/i.test(html),
+      'a combined headline would mix two populations into one wrong number',
+    );
+  });
+});

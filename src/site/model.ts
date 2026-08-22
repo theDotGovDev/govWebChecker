@@ -52,8 +52,49 @@ export interface SiteView {
   latest?: LatestView;
 }
 
+/**
+ * What one tier's rows say, computed from the rows alone.
+ *
+ * The two tiers are different populations, and the broad one will have a far
+ * higher failure and absence rate than 58 curated federal hosts — because the
+ * population differs, not because government websites got worse. A figure that
+ * silently mixes them is a wrong headline about US government, and those are
+ * hard to retract (FR-139, SC-107).
+ *
+ * Every field here is derived from observations. None consults a target list,
+ * because a list can change after the fact and a historical figure that moves
+ * when the list moves is not a measurement.
+ */
+export interface TierView {
+  tier: string;
+  /** Stated in words, so a figure never travels without the population it covers. */
+  population: string;
+  observations: number;
+  /** Distinct targets, which is not the same as observations at any cadence. */
+  domains: number;
+  responded: number;
+  outcomes: Record<string, number>;
+  /** Only meaningful for the census; absent readings stay absent, not zero. */
+  presence: { website: number; no_website: number; undetermined: number };
+}
+
+export interface CensusCycleView {
+  cycle: string;
+  domains: number;
+  slices: number[];
+  presence: { website: number; no_website: number; undetermined: number };
+}
+
+export interface CensusView {
+  cycles: CensusCycleView[];
+}
+
 export interface SiteModel {
   sites: SiteView[];
+  /** One entry per tier present in the record. Never summed into one figure. */
+  tiers: TierView[];
+  /** Present only when the record holds census rows. */
+  census?: CensusView;
   summary: {
     targets: number;
     withData: number;
@@ -71,6 +112,84 @@ export interface ModelInput {
   targets: Target[];
   observations: Observation[];
   runs: RunRow[];
+}
+
+const POPULATIONS: Record<string, string> = {
+  hot: 'federal hosts selected by measured public traffic, checked hourly',
+  broad: 'all registered US .gov domains, checked on a rolling weekly cycle',
+  untiered: 'observations recorded before the record distinguished tiers',
+};
+
+function emptyPresence(): { website: number; no_website: number; undetermined: number } {
+  return { website: 0, no_website: 0, undetermined: 0 };
+}
+
+/**
+ * One view per tier, and deliberately no total.
+ *
+ * There is no field here a caller could mistake for "availability across all of
+ * .gov". Anything that reads like one has to be assembled from these parts,
+ * which makes mixing populations a decision somebody takes visibly rather than
+ * one the model makes for them.
+ */
+function tierViews(rows: Observation[]): TierView[] {
+  const byTier = new Map<string, Observation[]>();
+  for (const o of rows) {
+    // Rows written before the record distinguished tiers are counted and named,
+    // not dropped and not guessed at. Dropping them would understate history;
+    // inferring a tier would invent provenance.
+    const tier = o.tier ?? 'untiered';
+    const list = byTier.get(tier);
+    if (list) list.push(o);
+    else byTier.set(tier, [o]);
+  }
+
+  return [...byTier.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([tier, list]) => {
+      const presence = emptyPresence();
+      for (const o of list) {
+        if (o.presence) presence[o.presence.state] += 1;
+      }
+      return {
+        tier,
+        population: POPULATIONS[tier] ?? 'population not stated in the record',
+        observations: list.length,
+        domains: new Set(list.map((o) => o.target_id)).size,
+        responded: list.filter((o) => o.outcome === 'success').length,
+        outcomes: list.reduce<Record<string, number>>((counts, o) => {
+          counts[o.outcome] = (counts[o.outcome] ?? 0) + 1;
+          return counts;
+        }, {}),
+        presence,
+      };
+    });
+}
+
+/** Coverage per cycle, read from the rows rather than from our run summaries. */
+function censusView(rows: Observation[]): CensusView {
+  const byCycle = new Map<string, Observation[]>();
+  for (const o of rows) {
+    if (o.tier !== 'broad' || o.cycle === undefined) continue;
+    const list = byCycle.get(o.cycle);
+    if (list) list.push(o);
+    else byCycle.set(o.cycle, [o]);
+  }
+
+  return {
+    cycles: [...byCycle.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([cycle, list]) => {
+        const presence = emptyPresence();
+        for (const o of list) if (o.presence) presence[o.presence.state] += 1;
+        return {
+          cycle,
+          domains: new Set(list.map((o) => o.target_id)).size,
+          slices: [...new Set(list.map((o) => o.slice).filter((s): s is number => s !== undefined))].sort(),
+          presence,
+        };
+      }),
+  };
 }
 
 /**
@@ -154,6 +273,8 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
 
   return {
     sites,
+    tiers: tierViews(usable),
+    ...(usable.some((o) => o.tier === 'broad') ? { census: censusView(usable) } : {}),
     summary: {
       targets: targets.length,
       withData: sites.filter((s) => s.latest).length,

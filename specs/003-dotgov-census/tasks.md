@@ -40,7 +40,7 @@ Structure.
 **Purpose**: Nothing structural. The project builds and ships; this feature adds
 directories to it.
 
-- [ ] T001 Create `src/census/` and `tests/fixtures/dns.ts`, the injected-resolver fixture every test below depends on — no test may resolve a real name (SC-110)
+- [x] T001 Create `src/census/` and `tests/fixtures/dns.ts`, the injected-resolver fixture every test below depends on — no test may resolve a real name (SC-110)
 
 ---
 
@@ -49,12 +49,12 @@ directories to it.
 **Purpose**: The record and resolution changes that both P1 stories sit on. Until
 these land, nothing can be recorded about a census domain.
 
-- [ ] T002 Add `tier`, `cycle`, `slice`, `url_rule`, `resolution` and `presence` as optional fields on `Observation` in `src/record/types.ts`, per data-model.md
-- [ ] T003 Write failing tests in `tests/unit/record-shape.test.ts` for the new fields: each optional, each rejected when malformed, and a row written before this feature still valid (FR-136, FR-142)
-- [ ] T004 Extend `validateObservation` in `src/record/validate.ts` to satisfy T003 — including rejecting a `presence.state` or `resolution.status` outside its enumeration, since an unknown value there is a verdict nobody can interpret
-- [ ] T005 Write failing tests in `tests/unit/resolve-classify.test.ts` for classifying a name into `address` / `mail_only` / `no_service` / `nxdomain` / `resolver_error`, using the injected resolver from T001
-- [ ] T006 Extend `src/checker/resolve.ts` to satisfy T005, returning the classification and the raw resolver codes. Keep `ENODATA` and `ENOTFOUND` distinct — collapsing them is the mistake the DNS survey exists to avoid
-- [ ] T007 Write a failing test in `tests/unit/resolve-classify.test.ts` asserting a resolver failure classifies as `resolver_error` and never as `no_service` (FR-121)
+- [x] T002 Add `tier`, `cycle`, `slice`, `url_rule`, `resolution` and `presence` as optional fields on `Observation` in `src/record/types.ts`, per data-model.md
+- [x] T003 Write failing tests in `tests/unit/record-shape.test.ts` for the new fields: each optional, each rejected when malformed, and a row written before this feature still valid (FR-136, FR-142)
+- [x] T004 Extend `validateObservation` in `src/record/validate.ts` to satisfy T003 — including rejecting a `presence.state` or `resolution.status` outside its enumeration, since an unknown value there is a verdict nobody can interpret
+- [x] T005 Write failing tests in `tests/unit/resolve-classify.test.ts` for classifying a name into `address` / `mail_only` / `no_service` / `nxdomain` / `resolver_error`, using the injected resolver from T001
+- [x] T006 Extend `src/checker/resolve.ts` to satisfy T005, returning the classification and the raw resolver codes. Keep `ENODATA` and `ENOTFOUND` distinct — collapsing them is the mistake the DNS survey exists to avoid
+- [x] T007 Write a failing test in `tests/unit/resolve-classify.test.ts` asserting a resolver failure classifies as `resolver_error` and never as `no_service` (FR-121)
 
 **Checkpoint**: the record can hold a census observation and DNS can be classified.
 
@@ -77,49 +77,49 @@ its stated `resolution` and `presence` pair.
 
 ### Slices and the frame
 
-- [ ] T008 [P] [US1] Write failing tests in `tests/unit/slice.test.ts`: assignment is deterministic per domain, independent of registry membership, and partitions the frame into exactly seven disjoint sets whose union is the frame (FR-112, FR-113)
-- [ ] T009 [US1] Implement `sliceOf(domain)` in `src/census/slice.ts` to satisfy T008 — a pure function of the name, so a domain's slice cannot move when the registry changes
-- [ ] T010 [P] [US1] Write failing tests in `tests/unit/frame.test.ts` for building a frame from a fixture registry: one entry per domain, exclusions removed, `slice` matching recomputation
-- [ ] T011 [US1] Write failing tests in `tests/unit/frame.test.ts` for the refusals in contracts/census-cli.md — empty registry, a frame more than 20% smaller than its predecessor, and stored `slice` values disagreeing with the hash. Each must exit non-zero and write nothing
-- [ ] T012 [US1] Implement `buildFrame` in `src/census/frame.ts` to satisfy T010 and T011, including the exclusions file and the frame digest
-- [ ] T013 [P] [US1] Create `targets/excluded.json` with an empty list and a comment naming its purpose, so a removal request has somewhere to go before the first one arrives
+- [x] T008 [P] [US1] Write failing tests in `tests/unit/slice.test.ts`: assignment is deterministic per domain, independent of registry membership, and partitions the frame into exactly seven disjoint sets whose union is the frame (FR-112, FR-113)
+- [x] T009 [US1] Implement `sliceOf(domain)` in `src/census/slice.ts` to satisfy T008 — a pure function of the name, so a domain's slice cannot move when the registry changes
+- [x] T010 [P] [US1] Write failing tests in `tests/unit/frame.test.ts` for building a frame from a fixture registry: one entry per domain, exclusions removed, `slice` matching recomputation
+- [x] T011 [US1] Write failing tests in `tests/unit/frame.test.ts` for the refusals in contracts/census-cli.md — empty registry, a frame more than 20% smaller than its predecessor, and stored `slice` values disagreeing with the hash. Each must exit non-zero and write nothing
+- [x] T012 [US1] Implement `buildFrame` in `src/census/frame.ts` to satisfy T010 and T011, including the exclusions file and the frame digest
+- [x] T013 [P] [US1] Create `targets/excluded.json` with an empty list and a comment naming its purpose, so a removal request has somewhere to go before the first one arrives
 
 ### The canonical URL rule
 
-- [ ] T014 [P] [US1] Write failing tests in `tests/unit/canonical-url.test.ts` for the rule in research.md R4: `https`, apex preferred when both resolve, the resolving form used when only one does, and the rule version recorded
-- [ ] T015 [US1] Write a failing test in `tests/integration/canonical-url.test.ts` asserting the **absence** of a request to the second form when resolution shows it has no address (FR-130) — a fixture that counts requests, since this requirement is about what we do not send
-- [ ] T016 [US1] Implement `canonicalUrl` in `src/census/url.ts` to satisfy T014 and T015
+- [x] T014 [P] [US1] Write failing tests in `tests/unit/canonical-url.test.ts` for the rule in research.md R4: `https`, apex preferred when both resolve, the resolving form used when only one does, and the rule version recorded
+- [x] T015 [US1] Write a failing test in `tests/integration/canonical-url.test.ts` asserting the **absence** of a request to the second form when resolution shows it has no address (FR-130) — a fixture that counts requests, since this requirement is about what we do not send
+- [x] T016 [US1] Implement `canonicalUrl` in `src/census/url.ts` to satisfy T014 and T015
 
 ### Absence versus failure
 
-- [ ] T017 [P] [US2] Write failing tests in `tests/unit/presence.test.ts` covering every row of the quickstart.md § 3 table, including the two that carry the feature's risk: a 500 reads `website`, a resolver error reads `undetermined`
-- [ ] T018 [US2] Write a failing test in `tests/unit/presence.test.ts` proving recomputability — `presence` computed from a hand-written stored `Observation` matches what a check recorded, so a later rule applies to history without re-checking anything (FR-119)
-- [ ] T019 [US2] Implement `presenceOf(observation)` in `src/census/presence.ts` as a pure function of a stored row and nothing else, satisfying T017 and T018, tagged `presence/1`
-- [ ] T020 [US2] Write a failing test in `tests/integration/census-run.test.ts` asserting no census observation carries a presence reading inside `outcome` — `outcome` values stay exactly `001`'s protocol set (FR-117)
+- [x] T017 [P] [US2] Write failing tests in `tests/unit/presence.test.ts` covering every row of the quickstart.md § 3 table, including the two that carry the feature's risk: a 500 reads `website`, a resolver error reads `undetermined`
+- [x] T018 [US2] Write a failing test in `tests/unit/presence.test.ts` proving recomputability — `presence` computed from a hand-written stored `Observation` matches what a check recorded, so a later rule applies to history without re-checking anything (FR-119)
+- [x] T019 [US2] Implement `presenceOf(observation)` in `src/census/presence.ts` as a pure function of a stored row and nothing else, satisfying T017 and T018, tagged `presence/1`
+- [x] T020 [US2] Write a failing test in `tests/integration/census-run.test.ts` asserting no census observation carries a presence reading inside `outcome` — `outcome` values stay exactly `001`'s protocol set (FR-117)
 
 ### Running a slice
 
-- [ ] T021 [US1] Write failing tests in `tests/integration/census-run.test.ts`: one slice produces one observation per domain in that slice, each carrying `tier`, `cycle`, `slice`, `url_rule`, `resolution` and `presence`
-- [ ] T022 [US1] Implement the census run in `src/census/run.ts`, reusing `executeRun`'s limiter, worker and append machinery rather than duplicating it — the checker is how to check, the census is what to check
-- [ ] T023 [US1] Add `frame_digest`, `frame_size`, `slice_size`, `tier`, `cycle` and `slice` to the run summary in `src/checker/run.ts` per data-model.md § Run summary
-- [ ] T024 [US1] Write a failing test in `tests/integration/census-run.test.ts` asserting an empty slice exits non-zero rather than recording a successful sweep of nothing (FR-115, contracts/census-cli.md)
+- [x] T021 [US1] Write failing tests in `tests/integration/census-run.test.ts`: one slice produces one observation per domain in that slice, each carrying `tier`, `cycle`, `slice`, `url_rule`, `resolution` and `presence`
+- [x] T022 [US1] Implement the census run in `src/census/run.ts`, reusing `executeRun`'s limiter, worker and append machinery rather than duplicating it — the checker is how to check, the census is what to check
+- [x] T023 [US1] Add `frame_digest`, `frame_size`, `slice_size`, `tier`, `cycle` and `slice` to the run summary in `src/checker/run.ts` per data-model.md § Run summary
+- [x] T024 [US1] Write a failing test in `tests/integration/census-run.test.ts` asserting an empty slice exits non-zero rather than recording a successful sweep of nothing (FR-115, contracts/census-cli.md)
 
 ### The redirect scope decision (research.md R8)
 
-- [ ] T025 [US1] Write failing tests in `tests/integration/redirect-limits.test.ts` pinning the new boundary in **both** directions: a redirect hop charges the backend limit, and a hop to a host not yet contacted in this check charges the name-keyed intervals too
-- [ ] T026 [US1] Implement the scope change in `src/checker/check.ts` and `src/checker/sample.ts` to satisfy T025, without adding any option that lets a caller widen or narrow it
+- [x] T025 [US1] Write failing tests in `tests/integration/redirect-limits.test.ts` pinning the new boundary in **both** directions: a redirect hop charges the backend limit, and a hop to a host not yet contacted in this check charges the name-keyed intervals too
+- [x] T026 [US1] Implement the scope change in `src/checker/check.ts` and `src/checker/sample.ts` to satisfy T025, without adding any option that lets a caller widen or narrow it
 
 ### Coverage, provable from the record
 
-- [ ] T027 [US1] Write failing tests in `tests/integration/verify.test.ts` for the coverage check: a complete cycle passes, a cycle missing a slice reports which, and a cycle whose slices ran against different frame digests is reported as incomplete rather than complete
-- [ ] T028 [US1] Implement the coverage check in `src/cli/verify.ts` to satisfy T027, reading the record and the committed frame and nothing else
-- [ ] T029 [US1] Add `census` and `build-frame` to `src/cli/index.ts` per contracts/census-cli.md, with none of the options listed as deliberately absent
+- [x] T027 [US1] Write failing tests in `tests/integration/verify.test.ts` for the coverage check: a complete cycle passes, a cycle missing a slice reports which, and a cycle whose slices ran against different frame digests is reported as incomplete rather than complete
+- [x] T028 [US1] Implement the coverage check in `src/cli/verify.ts` to satisfy T027, reading the record and the committed frame and nothing else
+- [x] T029 [US1] Add `census` and `build-frame` to `src/cli/index.ts` per contracts/census-cli.md, with none of the options listed as deliberately absent
 
 ### Shipping it
 
-- [ ] T030 [P] [US1] Create `.github/workflows/refresh-frame.yml` — weekly, rebuilds the frame, opens a **pull request** when it changed, matching `refresh-targets.yml`
-- [ ] T031 [US1] Create `.github/workflows/census.yml` — daily, one slice, `verify` before commit, scheduled at an hour `check.yml` does not occupy (research.md R5)
-- [ ] T032 [US1] Dispatch `refresh-frame.yml` on a runner to generate the first real `targets/dotgov-frame.json`, and confirm its size against the registry's 16,535
+- [x] T030 [P] [US1] Create `.github/workflows/refresh-frame.yml` — weekly, rebuilds the frame, opens a **pull request** when it changed, matching `refresh-targets.yml`
+- [x] T031 [US1] Create `.github/workflows/census.yml` — daily, one slice, `verify` before commit, scheduled at an hour `check.yml` does not occupy (research.md R5)
+- [x] T032 [US1] Dispatch `refresh-frame.yml` on a runner to generate the first real `targets/dotgov-frame.json`, and confirm its size against the registry's 16,535
 
 **Checkpoint**: the census runs, covers the frame weekly, and never calls an
 absent website a broken one.
@@ -134,10 +134,10 @@ reader can tell which tier produced any observation.
 **Independent test**: confirm hot-tier rows keep appearing hourly while broad-tier
 rows appear on the cycle cadence, and that tier is readable on every row.
 
-- [ ] T033 [P] [US3] Write a failing test in `tests/integration/run.test.ts` asserting every hot-tier observation carries `tier: "hot"` (FR-108)
-- [ ] T034 [US3] Set the tier on hot-tier runs in `src/checker/run.ts` to satisfy T033
-- [ ] T035 [P] [US3] Write a failing test in `tests/integration/run.test.ts` asserting a domain present in both tiers produces observations under both cadences, separable by tier and not double-counted per domain (FR-110)
-- [ ] T036 [US3] Update `.github/workflows/check.yml` to state its tier explicitly in its header comment and its run summary
+- [x] T033 [P] [US3] Write a failing test in `tests/integration/run.test.ts` asserting every hot-tier observation carries `tier: "hot"` (FR-108)
+- [x] T034 [US3] Set the tier on hot-tier runs in `src/checker/run.ts` to satisfy T033
+- [x] T035 [P] [US3] Write a failing test in `tests/integration/run.test.ts` asserting a domain present in both tiers produces observations under both cadences, separable by tier and not double-counted per domain (FR-110)
+- [x] T036 [US3] Update `.github/workflows/check.yml` to state its tier explicitly in its header comment and its run summary
 
 ---
 
@@ -150,18 +150,18 @@ and a figure that mixes tiers is detectable as such.
 tiers and confirm the record carries what is needed to detect that it mixes
 populations.
 
-- [ ] T037 [P] [US4] Write a failing test in `tests/unit/site-model.test.ts` asserting a per-tier figure is computable from rows alone, with no target list consulted (FR-139, SC-107)
-- [ ] T038 [US4] Update `src/site/model.ts` to satisfy T037, keeping tiers as a dimension rather than aggregating across them
-- [ ] T039 [US4] Update `src/site/render.ts` so any published figure states the population it covers rather than implying it (Principle V, SC-107)
+- [x] T037 [P] [US4] Write a failing test in `tests/unit/site-model.test.ts` asserting a per-tier figure is computable from rows alone, with no target list consulted (FR-139, SC-107)
+- [x] T038 [US4] Update `src/site/model.ts` to satisfy T037, keeping tiers as a dimension rather than aggregating across them
+- [x] T039 [US4] Update `src/site/render.ts` so any published figure states the population it covers rather than implying it (Principle V, SC-107)
 
 ---
 
 ## Phase 6: Polish and cross-cutting
 
-- [ ] T040 Update `ARCHITECTURE.md` with `src/census/`, the frame, the two tiers and the coverage check — in this change, not as a later pass
-- [ ] T041 Update `specs/003-dotgov-census/spec.md` where implementation revealed intended behavior differs, and `specs/001-record-availability/spec.md` if anything further contradicts it. FR-001a and FR-009 are already revised
-- [ ] T042 Update the published site with what the census is and how to read a per-tier figure, per the project's site rule
-- [ ] T043 [P] Verify by sabotage that the politeness tests still bite: remove each limit in turn, confirm tests fail, restore. The constitution's one thing that cannot regress unnoticed
+- [x] T040 Update `ARCHITECTURE.md` with `src/census/`, the frame, the two tiers and the coverage check — in this change, not as a later pass
+- [x] T041 Update `specs/003-dotgov-census/spec.md` where implementation revealed intended behavior differs, and `specs/001-record-availability/spec.md` if anything further contradicts it. FR-001a and FR-009 are already revised
+- [x] T042 Update the published site with what the census is and how to read a per-tier figure, per the project's site rule
+- [x] T043 [P] Verify by sabotage that the politeness tests still bite: remove each limit in turn, confirm tests fail, restore. The constitution's one thing that cannot regress unnoticed
 - [ ] T044 Run `verify` against a real dispatched census slice and confirm every guarantee holds at census scale (FR-138, SC-104)
 
 ---
