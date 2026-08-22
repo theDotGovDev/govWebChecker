@@ -12,6 +12,15 @@ export interface SampleOptions {
   lookup?: LookupFunction;
   /** Resolves and pins each request's backend. Shared across a run. */
   backends?: ResolutionCache;
+  /**
+   * Hosts this visit has already contacted before sampling began — in practice,
+   * the host whose `robots.txt` was just fetched.
+   *
+   * Seeds the *first* sample only. Asking a site's permission and then acting on
+   * the answer is one visit; a second sample is a second independent reading and
+   * pays the full interval regardless (R8a).
+   */
+  visiting?: Iterable<string>;
 }
 
 export interface SampleResult {
@@ -102,7 +111,10 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
     // full interval. Hoisting this out of the loop silently turns every sample
     // after the first into a continuation, which is a burst wearing the costume
     // of an optimisation.
-    const contacted = new Set<string>();
+    //
+    // The seed applies to the first sample alone, for the same reason: the
+    // `robots.txt` fetch belongs to this visit, not to the ones after it.
+    const contacted = new Set<string>(i === 0 ? (options.visiting ?? []) : []);
     const result = await performCheck(url, {
       timeoutMs: options.timeoutMs,
       maxRedirects: options.maxRedirects,

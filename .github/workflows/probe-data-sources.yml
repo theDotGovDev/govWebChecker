@@ -54,5 +54,159 @@ jobs:
           probe "cisagov current-full.csv" \
             "https://raw.githubusercontent.com/cisagov/dotgov-data/main/current-full.csv"
 
+          echo "=== Candidate sources of .gov HOSTNAMES (not just registered domains) ==="
+          echo "The registry publishes registered domains and no list of the hosts"
+          echo "beneath them. A census keyed on domains therefore cannot see"
+          echo "pubmed.ncbi.nlm.nih.gov or forecast.weather.gov, which are distinct"
+          echo "websites. These are the candidates for closing that gap; whichever"
+          echo "answer 200 with a plausible shape decide what a host-level frame can"
+          echo "be built from."
+          echo
+
+          probe "GSA federal-website-index (site scanning list)" \
+            "https://raw.githubusercontent.com/GSA/federal-website-index/main/data/site-scanning-target-url-list.csv"
+          probe "GSA federal-website-index (repo root listing)" \
+            "https://api.github.com/repos/GSA/federal-website-index/contents/data"
+          probe "GSA data dotgov-websites (repo listing)" \
+            "https://api.github.com/repos/GSA/data/contents/dotgov-websites"
+          probe "GSA site-scanning-snapshots (repo listing)" \
+            "https://api.github.com/repos/GSA/site-scanning-snapshots/contents/"
+          probe "CISA/GSA site scanning API (websites)" \
+            "https://api.gsa.gov/technology/site-scanning/v1/websites?limit=1"
+          probe "analytics.usa.gov sites.csv (hostnames DAP tracks)" \
+            "https://analytics.usa.gov/data/live/sites.csv"
+          probe "crt.sh certificate transparency (nih.gov sample)" \
+            "https://crt.sh/?q=%25.nih.gov&output=json&exclude=expired"
+          probe "crt.sh (small municipal sample: alamosa.gov)" \
+            "https://crt.sh/?q=%25.alamosa.gov&output=json&exclude=expired"
+
           echo "Probe complete. A 200 with a plausible head means the source is usable;"
           echo "anything else means the target list needs a different basis."
+
+      - name: Characterise the federal website index
+        # A source existing is not the same as a source being usable. This asks the
+        # questions that decide whether a host-level frame is feasible at all: how
+        # many hosts, over how many registered domains, and — the one that matters
+        # — whether it covers anything beyond federal. The census is 92% local
+        # government, so a federal-only index closes the subdomain gap for the
+        # small part of the frame and none of the large part.
+        run: |
+          set -uo pipefail
+          url="https://raw.githubusercontent.com/GSA/federal-website-index/main/data/site-scanning-target-url-list.csv"
+          curl -sS -L --max-time 60 "$url" -o /tmp/index.csv || { echo "fetch failed"; exit 0; }
+
+          python3 - <<'PY'
+          import csv, collections
+          rows = list(csv.DictReader(open('/tmp/index.csv', newline='')))
+          print(f"rows: {len(rows)}")
+          print(f"columns: {', '.join(rows[0].keys())}")
+
+          hosts = {r['initial_url'] for r in rows if r.get('initial_url')}
+          bases = {r['base_domain'] for r in rows if r.get('base_domain')}
+          print(f"distinct initial_url: {len(hosts)}")
+          print(f"distinct base_domain: {len(bases)}")
+          if bases:
+              print(f"hosts per registered domain: {len(hosts)/len(bases):.1f}")
+
+          for col in ('top_level_domain', 'branch'):
+              if col in rows[0]:
+                  c = collections.Counter(r[col] for r in rows)
+                  print(f"\n{col}: " + ", ".join(f"{k or '(blank)'}={v}" for k, v in c.most_common(8)))
+
+          print("\nper-domain host counts, largest:")
+          c = collections.Counter(r['base_domain'] for r in rows)
+          for d, n in c.most_common(8):
+              print(f"  {d}: {n}")
+
+          print("\nsource lists each host came from:")
+          for col in rows[0]:
+              if col.startswith('source_list_'):
+                  n = sum(1 for r in rows if r[col] and r[col].lower() not in ('false', '0', ''))
+                  print(f"  {col}: {n}")
+          PY
+
+      - name: Measure the certificate-transparency candidate yield
+        # FR-436: the candidate count decides the cycle length, and this project
+        # has twice been wrong about a duration it projected rather than measured.
+        #
+        # Sampled, not exhaustive, and the sample is stated: a handful of domains
+        # spanning a large federal agency, a mid-size one, and small municipalities,
+        # because the yield per domain is exactly what differs between them. This
+        # reads a certificate log. It sends nothing to any government server.
+        run: |
+          set -uo pipefail
+          for d in nih.gov nasa.gov weather.gov alamosa.gov 29palms.gov aledoil.gov; do
+            code=$(curl -sS -o /tmp/ct.json -w '%{http_code}' -L --max-time 90 \
+              "https://crt.sh/?q=%25.$d&output=json&exclude=expired" 2>/dev/null || echo 000)
+            if [ "$code" != "200" ]; then
+              printf '%-16s HTTP %s — no answer\n' "$d" "$code"
+              continue
+            fi
+            python3 - "$d" <<'PY'
+          import json, sys
+          d = sys.argv[1]
+          try:
+              rows = json.load(open('/tmp/ct.json'))
+          except Exception as e:
+              print(f"{d:16s} unparseable: {e}")
+              sys.exit(0)
+          names = set()
+          for r in rows:
+              for n in (r.get('name_value') or '').split('\n'):
+                  n = n.strip().lower().lstrip('*.')
+                  if n.endswith('.gov'):
+                      names.add(n)
+          wild = sum(1 for r in rows if '*' in (r.get('common_name') or ''))
+          print(f"{d:16s} cert rows {len(rows):7d}  distinct .gov names {len(names):6d}  wildcard certs {wild}")
+          PY
+          done
+          echo
+          echo "Yield per domain is what decides whether a host-level cycle is a week"
+          echo "or a month. A large agency and a small town are expected to differ by"
+          echo "orders of magnitude, and the design has to survive the larger case."
+
+      - name: Alternative certificate-transparency sources
+        # crt.sh answered 502 on seven of seven attempts across two runs twelve
+        # minutes apart, so the yield is unmeasured and — more importantly — a
+        # single volunteer-run service is not a dependency this project should
+        # rest half a feature on. These are the alternatives. Reads certificate
+        # logs; sends nothing to any government server.
+        run: |
+          set -uo pipefail
+          try() {
+            local label="$1" url="$2"
+            local code
+            code=$(curl -sS -o /tmp/ct2.json -w '%{http_code}' -L --max-time 45 \
+              -H 'User-Agent: govWebChecker (+https://github.com/theDotGovDev/govWebChecker)' \
+              "$url" 2>/dev/null || echo 000)
+            printf '%-40s %s  %s bytes\n' "$label" "$code" "$(wc -c < /tmp/ct2.json)"
+            if [ "$code" = "200" ]; then
+              python3 -c "
+          import json
+          try:
+              d = json.load(open('/tmp/ct2.json'))
+          except Exception as e:
+              print('    unparseable:', e); raise SystemExit
+          names = set()
+          if isinstance(d, list):
+              for r in d:
+                  for n in (r.get('dns_names') or []):
+                      names.add(n.lower().lstrip('*.'))
+                  for n in (r.get('name_value') or '').split(chr(10)):
+                      if n.strip(): names.add(n.strip().lower().lstrip('*.'))
+          print(f'    entries {len(d) if isinstance(d,list) else 0}  distinct names {len(names)}')
+          for n in sorted(names)[:6]: print('      ', n)
+          " || true
+            fi
+          }
+
+          echo "=== certspotter (free tier, unauthenticated) ==="
+          try "certspotter nih.gov" \
+            "https://api.certspotter.com/v1/issuances?domain=nih.gov&include_subdomains=true&expand=dns_names"
+          try "certspotter alamosa.gov" \
+            "https://api.certspotter.com/v1/issuances?domain=alamosa.gov&include_subdomains=true&expand=dns_names"
+
+          echo
+          echo "=== crt.sh again, to confirm the 502 is persistent ==="
+          try "crt.sh alamosa.gov" \
+            "https://crt.sh/?q=%25.alamosa.gov&output=json"
