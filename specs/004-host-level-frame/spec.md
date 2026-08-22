@@ -69,12 +69,17 @@ none of local government**.
 | `GSA/federal-website-index` | 200 — federal only |
 | `analytics.usa.gov/data/live/sites.csv` | 200 — 10,000 traffic-ranked hosts, also federal |
 | `api.gsa.gov` site scanning | 403 — needs an API key |
-| `crt.sh` certificate transparency | 502 — transient, and the general-purpose fallback |
+| `crt.sh` certificate transparency | **502 on seven of seven attempts**, across two runs twelve minutes apart |
 
 Certificate transparency is the only route that would reach a small town's
-subdomains, and it is a different kind of source: unofficial, noisy, includes
-hosts that never served a public website, and requires its own judgement about
-what counts. That is not a small addendum to this feature.
+subdomains, and it is a different kind of source: unofficial, noisy, and full of
+hosts that never served a public website. D1 answers the "what counts" part by
+measuring rather than judging; what remains is that **no CT source has yet
+answered us**. `crt.sh` returned 502 to every attempt, which makes the yield
+unmeasured and, more to the point, makes a single volunteer-run service a poor
+foundation for half a feature. Establishing a CT source that answers reliably is a
+precondition of the local half, and is tracked by FR-436 alongside the count
+itself.
 
 ### The cost is structural, and the binding constraint is not the one expected
 
