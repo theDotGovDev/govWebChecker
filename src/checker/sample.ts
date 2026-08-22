@@ -46,10 +46,17 @@ export interface SampleResult {
 async function acquireHop(
   url: string,
   options: SampleOptions,
+  contacted: Set<string>,
 ): Promise<{ grantedAt: number; address?: string; lookup?: LookupFunction }> {
   const host = new URL(url).hostname;
   const backend = (await options.backends?.get(host)) ?? {};
-  const grantedAt = await options.limiter.acquire(host, backend.address);
+  // A hop to a host not yet touched by this check is a first contact and pays
+  // everything. A hop back to one already contacted pays the backend budget only.
+  const continuing = contacted.has(host);
+  contacted.add(host);
+  const grantedAt = continuing
+    ? await options.limiter.acquireContinuation(host, backend.address)
+    : await options.limiter.acquire(host, backend.address);
 
   if (backend.address === undefined || backend.family === undefined) return { grantedAt };
   // A caller-supplied lookup is a test seam and outranks the pin, which is how a
@@ -90,12 +97,18 @@ export async function sampleTarget(url: string, options: SampleOptions): Promise
   let address: string | undefined;
 
   for (let i = 0; i < options.samples; i++) {
+    // Reset per sample, not per call. A redirect hop back to a host is one visit
+    // continuing; a second *sample* is a second independent reading and pays the
+    // full interval. Hoisting this out of the loop silently turns every sample
+    // after the first into a continuation, which is a burst wearing the costume
+    // of an optimisation.
+    const contacted = new Set<string>();
     const result = await performCheck(url, {
       timeoutMs: options.timeoutMs,
       maxRedirects: options.maxRedirects,
       ...(options.lookup ? { lookup: options.lookup } : {}),
       acquire: async (hopUrl) => {
-        const grant = await acquireHop(hopUrl, options);
+        const grant = await acquireHop(hopUrl, options, contacted);
         // The first hop is the one the record timestamps and names a backend for.
         requestedAt ??= new Date(grant.grantedAt).toISOString();
         address ??= grant.address;

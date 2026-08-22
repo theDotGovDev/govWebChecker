@@ -88,7 +88,39 @@ export class RateLimiter {
     return mine;
   }
 
-  async #waitForSlot(host: string, address?: string): Promise<number> {
+  /**
+   * A slot for a request that continues a visit already under way — a redirect
+   * hop back to a host this check has already contacted.
+   *
+   * Waits on the backend budget only. The name-keyed intervals exist so two
+   * *independent readings* of one site are not taken closer together than an
+   * ordinary visitor would reload a page; a redirect is not a second reading, it
+   * is the same visit continuing, and a visitor follows it immediately. Waiting
+   * fifteen seconds mid-chain models no real behaviour and protects nobody.
+   *
+   * The backend budget is a different question — how much aggregate pressure one
+   * machine takes from unrelated parties — and a hop onto a vendor's shared host
+   * is exactly that, so it still charges and still waits.
+   *
+   * It does not wait on the name keys but it does advance them, so the *next*
+   * independent reading of that host is spaced from the last request actually
+   * sent rather than from the one before the redirect. That errs toward more
+   * spacing, which is the only direction Principle I permits erring in.
+   *
+   * Measured justification: charging hops the name intervals cost the 58-target
+   * hot tier 125s for 14 hops, and would add on the order of an hour to a census
+   * slice whose job cap is one hour.
+   */
+  async acquireContinuation(host: string, address?: string): Promise<number> {
+    const mine = this.#tail.then(() => this.#waitForSlot(host, address, true));
+    this.#tail = mine.then(
+      () => undefined,
+      () => undefined,
+    );
+    return mine;
+  }
+
+  async #waitForSlot(host: string, address?: string, continuation = false): Promise<number> {
     // Every key is namespaced, because the three key spaces overlap and a
     // collision silently downgrades a limit to the weakest one that shares its
     // string.
@@ -101,11 +133,13 @@ export class RateLimiter {
     const domainKey = `domain:${registrableDomain(host)}`;
     const addressKey = address === undefined ? undefined : `addr:${address}`;
     const now = Date.now();
-    const readyAt = Math.max(
-      this.#nextFree.get(hostKey) ?? now,
-      this.#nextFree.get(domainKey) ?? now,
-      addressKey === undefined ? now : (this.#nextFree.get(addressKey) ?? now),
-    );
+    const readyAt = continuation
+      ? (addressKey === undefined ? now : (this.#nextFree.get(addressKey) ?? now))
+      : Math.max(
+          this.#nextFree.get(hostKey) ?? now,
+          this.#nextFree.get(domainKey) ?? now,
+          addressKey === undefined ? now : (this.#nextFree.get(addressKey) ?? now),
+        );
 
     // setTimeout may fire slightly early, so sleep until the clock actually says
     // we are clear rather than trusting one timer. Undershooting by even a
@@ -116,6 +150,8 @@ export class RateLimiter {
     }
 
     const granted = Date.now();
+    // Advanced even for a continuation, so the next independent reading is spaced
+    // from the last request actually sent.
     this.#nextFree.set(hostKey, granted + this.#hostIntervalMs + GUARD_MS);
     this.#nextFree.set(domainKey, granted + this.#domainIntervalMs + GUARD_MS);
     if (addressKey !== undefined) {
