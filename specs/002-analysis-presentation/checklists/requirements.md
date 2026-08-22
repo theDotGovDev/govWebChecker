@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **two open questions stand (Q1, Q2)**, both deliberate and both requiring the project owner
+- [x] No [NEEDS CLARIFICATION] markers remain — both open questions decided (D1, D2)
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic
@@ -31,12 +31,16 @@
 
 ## Notes
 
-Q1 and Q2 are not gaps to be filled by a reasonable default. Both decide what
-this project is willing to publish about named public institutions at a scale of
-16,535 jurisdictions, and both are the project owner's call. `/speckit-plan`
-should not run until they are answered.
+Both open questions are decided by the project owner and recorded as D1 and D2
+with their reasoning: per-dimension standings with no composite, and a listing for
+every domain in the frame.
 
-US5 depends on Q2 and is priority P3 for that reason.
+US5 rose from P3 to P2 as a consequence of D2. Naming every jurisdiction whether
+or not anyone came looking makes the route by which one sees and challenges what
+is published the thing that makes the naming defensible.
+
+FR-246 carries the cost of D2 and should be checked hardest in review: roughly one
+listing in seven will have nothing to report but our own failure.
 
 The census schedule is disabled, so the census views specified here will show one
 cycle until collection resumes. That constrains demonstration, not design.

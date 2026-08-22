@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-22
 
-**Status**: Draft — awaiting decisions on Q1 and Q2
+**Status**: Draft — Q1 and Q2 decided, ready for `/speckit-plan`
 
 **Input**: Turn the stored record into answers a reader can trust, and publish
 them.
@@ -185,7 +185,7 @@ incomplete rather than dipping.
 
 ---
 
-### User Story 5 — A named jurisdiction can see and challenge what is published (Priority: P3)
+### User Story 5 — A named jurisdiction can see and challenge what is published (Priority: P2)
 
 An operator at a named jurisdiction finds what this project says about their
 domain, when it was measured, what was requested, and how to have it corrected
@@ -193,8 +193,13 @@ or to be removed.
 
 **Why this priority**: The constitution requires a removal request to be honored
 without argument, and `003` already implements exclusions. This story makes that
-reachable by the person it exists for — but it depends on the naming decisions in
-Q1 and Q2, so it follows them.
+reachable by the person it exists for.
+
+It was drafted at P3 while Q2 was open and rose when Q2 was decided. Publishing a
+listing for all 16,535 domains means every jurisdiction is named whether or not
+anyone came looking, so the route by which a named jurisdiction sees and
+challenges what is published stops being a courtesy and becomes the thing that
+makes naming them defensible.
 
 **Independent Test**: From any place a domain is named, reach the readings behind
 that naming and a stated route to correction, in one step.
@@ -308,6 +313,39 @@ that naming and a stated route to correction, in one step.
 - **FR-244**: The site MUST NOT publish any content identifying an individual —
   named officials, contact people, or security contacts carried in the registry.
 
+### Standings, and what is never computed
+
+Settles Q1 as option A.
+
+- **FR-260**: The site MUST NOT compute or publish a composite score, index,
+  rating or grade combining more than one measure. Standings are per-dimension,
+  each traceable to one published methodology.
+- **FR-261**: A target with no rate MUST NOT be assigned one. A host that refused
+  automated traffic, or that `robots.txt` told us not to check, has no
+  availability rate — it MUST NOT be rendered as zero and MUST NOT appear in any
+  ordering by that rate.
+- **FR-262**: Any ordering MUST name the single measure it sorts on, and MUST
+  state the population and window it sorts within.
+
+### A listing for every domain
+
+Settles Q2 as option A.
+
+- **FR-245**: Every domain in the frame MUST have its own listing carrying its
+  stored readings, the method behind them, and the route to correction or
+  removal. No jurisdiction is reachable only by knowing to search for it.
+- **FR-246**: A listing whose readings are `undetermined` MUST lead with what is
+  unknown and MUST NOT be presented as a finding about the jurisdiction. This is
+  FR-212 at the page level, and it is where the risk actually lands: roughly one
+  listing in seven will have nothing to report but our own failure to establish a
+  connection.
+- **FR-247**: A listing MUST state when the domain was last checked and at what
+  cadence, so a weekly reading is never read as a current one.
+- **FR-248**: An excluded domain's listing MUST be withdrawn from the site while
+  its existing observations remain readable in the record (with FR-241).
+- **FR-249**: A listing MUST NOT assert anything the record does not contain. A
+  domain checked once carries one reading, presented as one reading.
+
 ### Building and publishing
 
 - **FR-250**: The site MUST be generated from the stored record and MUST send no
@@ -328,8 +366,8 @@ that naming and a stated route to correction, in one step.
   that tier cannot answer.
 - **Cycle reading** — one census cycle's result: its coverage, its three presence
   counts, and whether the cycle completed.
-- **Jurisdiction page** — what the site says about one named domain, and the route
-  to challenge it. Its existence and scale are Q2.
+- **Domain listing** — what the site says about one named domain, and the route to
+  challenge it. One exists for every domain in the frame (FR-245).
 
 ---
 
@@ -351,6 +389,10 @@ that naming and a stated route to correction, in one step.
   from a period in which government websites failed.
 - **SC-207**: A census cycle in progress is never rendered as a decline.
 - **SC-208**: Zero individuals are named anywhere in the published output.
+- **SC-209**: Every domain in the frame has a reachable listing, and no listing
+  presents our own failure to reach a domain as a finding about it.
+- **SC-210**: No published ordering assigns a rate to a target that has none —
+  checkable against the four federal hosts that currently have no rate.
 
 ---
 
@@ -383,44 +425,60 @@ that naming and a stated route to correction, in one step.
 
 ---
 
-## Open Questions
+## Decisions
 
-Both must be settled before `/speckit-plan`. Neither has a reasonable default,
-and both are decisions about what this project is willing to say about named
-public institutions.
+Both questions the draft left open are settled. They are recorded with their
+reasoning rather than as bare answers, because both decide what this project is
+willing to say about named public institutions and both will look arbitrary later
+if the reasoning is not written down.
 
-### Q1 — Does the site rank named jurisdictions on a composite score?
+### D1 — Per-dimension standings, no composite  *(was Q1, option A)*
 
-Carried forward from `001` Open Questions, where it was recorded early precisely
-because it decides nothing about what is stored and everything about what is
-published. `003` raised the stakes: the question was about 58 federal hosts and
-is now about 16,535 jurisdictions.
+Carried forward from `001`, where it was recorded early precisely because it
+decides nothing about what is stored and everything about what is published. `003`
+raised the stakes: the question was about 58 federal hosts and became a question
+about 16,535 jurisdictions.
 
-**Context**: Principle V, and the project's stated goal of showing which sites
-are doing best.
+**Decided: A.** Standings are per-dimension. No composite, index or grade.
 
-| Option | Answer | Implications |
+The record settled it. Over nineteen days, four of the 58 federal hosts answered
+nothing successfully — and none of them was down:
+
+| Host | 64 of 64 readings | What it means |
 | --- | --- | --- |
-| A | Per-dimension standings, no composite | Every number traces to one published methodology. No weighting to defend. Readers do their own synthesis, and most will not |
-| B | Composite, with the weighting published and every component openly breakable out | Shareable and defensible provided the weighting is stated and admitted to be arbitrary — which it is |
-| C | Composite letter grade per site | Most engaging, hardest to defend. A single letter over one vantage and a weekly reading invites a fair complaint from a specific town, and the town would be right |
-| Custom | Something else | — |
+| `secure.login.gov` | `skipped` | `robots.txt` tells us not to check it |
+| `www.ssa.gov` | `blocked` 403 | refuses automated traffic |
+| `travel.state.gov` | `blocked` 403 | refuses automated traffic |
+| `tools.usps.com` | `blocked` 403 | refuses automated traffic |
 
-### Q2 — Does the site publish a page for every domain in the frame?
+Any composite has to carve these four out or publish Social Security at zero
+availability. Once the carve-out exists, the composite is doing no work the
+per-dimension columns were not already doing, and it costs a weighting nobody can
+defend. FR-261 makes the carve-out a requirement rather than a special case.
 
-**Context**: FR-240 requires an operator to reach their own readings. The obvious
-route is a page per domain, but that means publishing 16,535 pages naming 16,535
-jurisdictions, most of which will carry one weekly reading and, for one in seven,
-a reading that says we could not establish anything.
+Revisitable: this is the smaller and more reversible of the two, and adding a
+sortable derived column later changes nothing already published.
 
-| Option | Answer | Implications |
-| --- | --- | --- |
-| A | A page for every domain in the frame | Every operator reachable, complete and symmetrical. Also 16,535 indexable pages asserting a state about a named town on thin evidence |
-| B | Aggregate views plus lookup — a domain's page exists only when a reader asks for it | Operators can still reach their own data. Nothing is broadcast about a town that nobody sought out. Less useful for research and harder to link to |
-| C | Pages only for the hot tier's 58; the census published as aggregates and a downloadable dataset | Smallest published surface. Naming at scale happens only in a dataset a reader must deliberately open, not on pages a search engine indexes |
-| Custom | Something else | — |
+### D2 — A listing for every domain in the frame  *(was Q2, option A)*
 
----
+**Decided: A.** All 16,535 domains get a listing.
+
+Every option published the same data — the record is a public file in a public
+repository regardless. What differed was whether a jurisdiction is reachable only
+by knowing to search for it. A census that names 16,535 jurisdictions in aggregate
+while giving none of them a page of their own would be asserting things about
+places it declined to address directly.
+
+The cost is real and is stated rather than hidden: roughly one listing in seven
+will report nothing but our own failure to establish a connection, and unlike a
+missing page, a published one is found by people who were not looking for it.
+FR-246 is the mitigation and it is a requirement, not a style note — such a
+listing leads with what is unknown and does not read as a finding about the
+jurisdiction.
+
+Not symmetrically reversible: withdrawing listings after they are indexed leaves
+cached copies and broken links behind, which is why the trade is recorded here
+rather than treated as a layout choice.
 
 ## Constitution Check
 
