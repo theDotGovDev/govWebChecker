@@ -48,6 +48,7 @@ const CONFIG = {
   maxRedirects: 3,
   hostIntervalMs: 1,
   domainIntervalMs: 1,
+    addressIntervalMs: 1,
   maxConcurrentHosts: 4,
   vantage: 'test',
   toolVersion: '0.1.0',
@@ -335,6 +336,7 @@ describe('a run', () => {
           ...CONFIG,
           hostIntervalMs: HOST_INTERVAL_MS,
           domainIntervalMs: 1,
+    addressIntervalMs: 1,
           maxConcurrentHosts: 2,
         },
       });
@@ -343,6 +345,7 @@ describe('a run', () => {
       const report = await verifyRecord(file, {
         hostIntervalMs: HOST_INTERVAL_MS,
         domainIntervalMs: 1,
+    addressIntervalMs: 1,
       });
       const spacing = report.checks.find((c) => c.name === 'per-host spacing');
       assert.ok(spacing, 'verify must report on per-host spacing');

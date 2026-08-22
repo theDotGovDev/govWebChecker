@@ -31,6 +31,15 @@ export interface Observation {
   url: string;
   dimension: string;
   checked_at: string;
+  /**
+   * The backend address this check was sent to, when it could be established.
+   *
+   * Present so the shared-hosting spacing guarantee is provable by a reader from
+   * the record alone rather than taken on trust (Principle V, FR-141). Optional
+   * because resolution can fail, and because rows written before this field
+   * existed stay valid — the record is append-only and never rewritten.
+   */
+  address?: string;
   outcome: Outcome;
   status_code?: number;
   redirect_chain: string[];

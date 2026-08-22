@@ -11,7 +11,7 @@ after(() => removeNoNetworkGuard());
 const HOST_INTERVAL_MS = 100;
 
 function limiter() {
-  return new RateLimiter({ hostIntervalMs: HOST_INTERVAL_MS, domainIntervalMs: 1 });
+  return new RateLimiter({ hostIntervalMs: HOST_INTERVAL_MS, domainIntervalMs: 1, addressIntervalMs: 1 });
 }
 
 describe('multi-sample timing (FR-011a, FR-011b)', () => {

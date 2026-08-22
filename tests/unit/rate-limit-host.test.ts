@@ -10,6 +10,7 @@ describe('per-host rate limiting', () => {
     const limiter = new RateLimiter({
       hostIntervalMs: HOST_INTERVAL_MS,
       domainIntervalMs: DOMAIN_INTERVAL_MS,
+      addressIntervalMs: 1,
     });
     const stamps: number[] = [];
 
@@ -34,6 +35,7 @@ describe('per-host rate limiting', () => {
     const limiter = new RateLimiter({
       hostIntervalMs: 5_000,
       domainIntervalMs: DOMAIN_INTERVAL_MS,
+      addressIntervalMs: 1,
     });
     const started = Date.now();
     await limiter.acquire('first.example.gov');
@@ -44,6 +46,7 @@ describe('per-host rate limiting', () => {
     const limiter = new RateLimiter({
       hostIntervalMs: HOST_INTERVAL_MS,
       domainIntervalMs: DOMAIN_INTERVAL_MS,
+      addressIntervalMs: 1,
     });
     const order: string[] = [];
 
@@ -72,10 +75,35 @@ describe('per-host rate limiting', () => {
     const limiter = new RateLimiter({
       hostIntervalMs: 5_000,
       domainIntervalMs: DOMAIN_INTERVAL_MS,
+      addressIntervalMs: 1,
     });
     const started = Date.now();
     await limiter.acquire('a.example.gov');
     await limiter.acquire('b.other.gov');
     assert.ok(Date.now() - started < 1_000, 'unrelated hosts must not serialize');
+  });
+});
+
+describe('the three key spaces do not collide', () => {
+  test('a host that is its own registrable domain keeps the per-host floor', async () => {
+    // `alamosa.gov` is its own registrable domain, so the host and domain keys
+    // are the same string. Writing both into one map let the shorter domain
+    // deadline overwrite the longer host one, quietly downgrading a 15s floor to
+    // 5s. Four of the 58 federal targets are shaped this way, and a census of
+    // apex domains would be shaped this way in its entirety.
+    const limiter = new RateLimiter({
+      hostIntervalMs: 200,
+      domainIntervalMs: 20,
+      addressIntervalMs: 1,
+    });
+    const stamps: number[] = [];
+    for (let i = 0; i < 2; i++) {
+      await limiter.acquire('alamosa.gov');
+      stamps.push(Date.now());
+    }
+    assert.ok(
+      stamps[1]! - stamps[0]! >= 200,
+      `gap ${stamps[1]! - stamps[0]!}ms: the domain limit overwrote the stricter host limit`,
+    );
   });
 });

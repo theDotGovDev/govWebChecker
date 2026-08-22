@@ -46,6 +46,12 @@ export function validateObservation(record: unknown): string[] {
 
   if (!Array.isArray(r['redirect_chain'])) problems.push('redirect_chain is required');
 
+  // Optional, but an empty string would silently join every address-less row
+  // into one bogus cluster when `verify` checks backend spacing.
+  if ('address' in r && (typeof r['address'] !== 'string' || r['address'] === '')) {
+    problems.push('address must be a non-empty string when present');
+  }
+
   problems.push(...validateLatency(r['latency']));
   problems.push(...validateMethod(r['method']));
 
