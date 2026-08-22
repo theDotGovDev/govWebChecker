@@ -77,6 +77,8 @@ jobs:
             "https://analytics.usa.gov/data/live/sites.csv"
           probe "crt.sh certificate transparency (nih.gov sample)" \
             "https://crt.sh/?q=%25.nih.gov&output=json&exclude=expired"
+          probe "crt.sh (small municipal sample: alamosa.gov)" \
+            "https://crt.sh/?q=%25.alamosa.gov&output=json&exclude=expired"
 
           echo "Probe complete. A 200 with a plausible head means the source is usable;"
           echo "anything else means the target list needs a different basis."
@@ -122,3 +124,43 @@ jobs:
                   n = sum(1 for r in rows if r[col] and r[col].lower() not in ('false', '0', ''))
                   print(f"  {col}: {n}")
           PY
+
+      - name: Measure the certificate-transparency candidate yield
+        # FR-436: the candidate count decides the cycle length, and this project
+        # has twice been wrong about a duration it projected rather than measured.
+        #
+        # Sampled, not exhaustive, and the sample is stated: a handful of domains
+        # spanning a large federal agency, a mid-size one, and small municipalities,
+        # because the yield per domain is exactly what differs between them. This
+        # reads a certificate log. It sends nothing to any government server.
+        run: |
+          set -uo pipefail
+          for d in nih.gov nasa.gov weather.gov alamosa.gov 29palms.gov aledoil.gov; do
+            code=$(curl -sS -o /tmp/ct.json -w '%{http_code}' -L --max-time 90 \
+              "https://crt.sh/?q=%25.$d&output=json&exclude=expired" 2>/dev/null || echo 000)
+            if [ "$code" != "200" ]; then
+              printf '%-16s HTTP %s — no answer\n' "$d" "$code"
+              continue
+            fi
+            python3 - "$d" <<'PY'
+          import json, sys
+          d = sys.argv[1]
+          try:
+              rows = json.load(open('/tmp/ct.json'))
+          except Exception as e:
+              print(f"{d:16s} unparseable: {e}")
+              sys.exit(0)
+          names = set()
+          for r in rows:
+              for n in (r.get('name_value') or '').split('\n'):
+                  n = n.strip().lower().lstrip('*.')
+                  if n.endswith('.gov'):
+                      names.add(n)
+          wild = sum(1 for r in rows if '*' in (r.get('common_name') or ''))
+          print(f"{d:16s} cert rows {len(rows):7d}  distinct .gov names {len(names):6d}  wildcard certs {wild}")
+          PY
+          done
+          echo
+          echo "Yield per domain is what decides whether a host-level cycle is a week"
+          echo "or a month. A large agency and a small town are expected to differ by"
+          echo "orders of magnitude, and the design has to survive the larger case."

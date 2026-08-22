@@ -4,9 +4,10 @@
 
 **Created**: 2026-08-22
 
-**Status**: Draft — one decision open (Q1)
+**Status**: Draft — D1 decided; one measurement gates planning
 
-**Input**: A registered domain is not a website. Check the hosts beneath it.
+**Input**: Use all available information to discover sites and domains, then
+determine which are valid and reachable by probing.
 
 ---
 
@@ -232,6 +233,58 @@ they differ.
   NOT lose its readings when rejected — `003`'s artifact-first behaviour applies
   unchanged.
 
+### Discovery, then validation — two different things
+
+- **FR-430**: Discovery MUST draw on every available published source. A name
+  appearing in any of them makes it a **candidate**, not a frame entry.
+- **FR-431**: Validation MUST be staged so the cheap step runs first:
+  1. **Resolution** — does the name publish a web address? This goes to a
+     resolver, never to the jurisdiction's server, so it costs the target nothing
+     and is how the bulk of a certificate-transparency candidate set is settled.
+  2. **One request** — only for names that passed resolution, and only ever one,
+     under every existing politeness limit.
+  A candidate that fails at stage 1 MUST NOT reach stage 2.
+- **FR-432**: A candidate's outcome MUST be recorded with the reason it was
+  rejected, so the frame's exclusions are inspectable rather than a silent filter.
+- **FR-433**: A candidate MUST NOT be retried to establish validity. One
+  resolution and at most one request; a name that did not answer is recorded as
+  not having answered and revisited on the next cycle, not immediately.
+- **FR-434**: Validity MUST be recorded as an observation with its timestamp and
+  method, never as a permanent property of the name. A host that stops answering
+  has changed, and the record shows when.
+- **FR-435**: The frame MUST carry every source that named a host, not just the
+  first. A host named by GSA's index *and* found in certificate transparency is
+  better attested than one found only in the latter, and FR-402's provenance is
+  what lets a reader see that.
+- **FR-436**: The candidate count MUST be measured before any target is probed.
+  The cycle length depends on it, and this project has twice been wrong about a
+  duration it projected rather than measured.
+
+### Discovery must not become reconnaissance
+
+Certificate transparency lists names from certificates, not websites. It includes
+internal hostnames, decommissioned services, wildcards, and names that never
+served the public. That creates two risks this feature must foreclose, and they
+are the reason D1 needs guardrails rather than just enthusiasm.
+
+- **FR-440**: A candidate that did not validate MUST NOT be published. Discovered
+  names are counted, never listed. Publishing an inventory of internal-looking
+  hostnames we found in certificates would be reconnaissance output, whatever our
+  intent — and it would be this project handing an attacker a map of a
+  jurisdiction it was supposed to be helping.
+- **FR-441**: The frame MUST contain only names that resolved publicly and were
+  reachable. A name's presence in the published frame is therefore evidence it is
+  a public surface, which is what Principle II requires.
+- **FR-442**: Validation traffic MUST be indistinguishable from ordinary checking
+  traffic: same limits, same User-Agent naming the project and how to stop it.
+  There MUST be no faster or heavier path for validation, because "we were only
+  finding out what exists" is precisely what an operator cannot tell from
+  scanning.
+- **FR-443**: A host that returns an authentication challenge MUST be dropped from
+  the frame rather than recorded as a failing website. Per the constitution, a
+  target that begins requiring credentials is dropped rather than worked around,
+  and a candidate that never was public is the same case arriving earlier.
+
 ### Honesty about depth
 
 - **FR-420**: Every coverage figure MUST state the frame it counts within and the
@@ -264,8 +317,14 @@ they differ.
   margin, measured on a real run rather than projected.
 - **SC-405**: No published figure compares federal depth against local depth
   without stating that the sources differ.
-- **SC-406**: A reader holding only the record can tell which frame source named
-  any given host.
+- **SC-406**: A reader holding only the record can tell which frame sources named
+  any given host, and how many independently did.
+- **SC-407**: No name that failed validation appears anywhere in published output,
+  the frame included — only counts of how many failed and why.
+- **SC-408**: No candidate receives more than one resolution and one request per
+  cycle, provable from the record by the same spacing checks `verify` already runs.
+- **SC-409**: The candidate count is measured and published before the first
+  validation sweep runs.
 
 ---
 
@@ -274,8 +333,9 @@ they differ.
 - The published index remains published. It is a GSA repository, and `003`'s
   frame already depends on a CISA repository in the same way; `probe-data-sources`
   is how that dependence stays checkable.
-- Federal hosts are the scope. Local government subdomains have no source and are
-  out of scope here (Q1).
+- Every source is in scope for discovery (D1). Federal hosts have an attributable
+  published index; local government hosts will come predominantly from certificate
+  transparency, and the frame records that difference rather than hiding it.
 - The existing checker needs no change. A host is a host; the census already
   resolves, pins and checks one. This feature changes the frame, not the check.
 - `002` D3 already made the listing unit a site, so presentation absorbs this
@@ -293,22 +353,43 @@ they differ.
 
 ---
 
+## Decisions
+
+### D1 — Discover from everything; establish validity by measurement, not judgement
+
+**Decided**: every available source feeds discovery. Which candidates are real is
+then settled by probing, not by us deciding which names look like websites.
+
+This is a better answer than the draft's recommendation, and it dissolves the
+objection that recommendation rested on. The worry about certificate transparency
+was that its entries would need a judgement we would be *making* rather than
+*citing*. But "does this name resolve, and does something answer at it" is not a
+judgement — it is an observation, which is what this project produces. Principle
+IV already governs it: the result is recorded as fact, and a name that answers
+nothing is data rather than a verdict.
+
+It does mean discovery and validation are two different things and must stay
+separate. A candidate is a name someone published. A frame entry is a name we
+established answers. Conflating them would publish a list of names we merely found
+— which is the failure mode set out under *Discovery must not become
+reconnaissance* below.
+
+The staging in FR-430 to FR-434 is what makes this affordable and polite. DNS
+answers most of the question at no cost to any target, so the expensive step runs
+only against names already known to publish a web address.
+
+**Domains are already solved.** CISA's registry is authoritative for `.gov`
+registrations, so there is no discovery problem at the domain level — `003`'s frame
+is complete by construction. The discovery problem is hosts, and that is what this
+feature addresses.
+
+---
+
 ## Open Questions
 
-### Q1 — Does this feature attempt local government subdomains?
+### Q1 — none blocking, but one measurement gates planning
 
-**Context**: The published index is federal. Roughly 15,200 of the frame's 16,535
-domains are local, and after this feature they would be covered one host deep
-while federal domains are covered twenty-one deep.
-
-| Option | Answer | Implications |
-| --- | --- | --- |
-| A | Federal only. Local stays domain-level, and the asymmetry is stated | Ships on published, attributable sources. The gap is visible and honest. Local government — the part with the least capacity and the most to gain from attention — stays shallowly covered |
-| B | Add certificate transparency for all domains | The only route that reaches a small town's subdomains. CT lists names from certificates, not websites: it includes hosts that never served the public, internal names, and wildcards. Every entry needs a judgement we would be making rather than citing, which is a different kind of claim than "GSA published this" |
-| C | Federal now, CT as its own later feature | Ships the attributable half, keeps the judgement-heavy half as a decision with its own spec rather than a footnote in this one |
-| Custom | Something else | — |
-
-**Recommendation**: C. B's cost is not the engineering, it is that CT changes the
-provenance of the frame from *published by the government* to *inferred by us* —
-and FR-402 exists precisely to keep those distinguishable. That is worth its own
-spec rather than being settled inside this one.
+How many candidates certificate transparency yields for `.gov` is unknown; the
+probe returned 502 on its one attempt. The number decides the cycle length and
+whether the pipeline is a week or a month, so FR-436 requires it be measured
+before any target is probed. That is a task, not a decision.
