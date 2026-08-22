@@ -533,8 +533,12 @@ plausibly runs several hosts per domain, and the census already takes 99 minutes
 to cover one seventh of 16,535 domains against a 120-minute cap. A frame of hosts
 rather than domains would multiply that severalfold.
 
-That is a collection question, it is a large one, and it belongs in its own spec
-rather than being absorbed here or quietly widened into `003`.
+That is a collection question, it is a large one, and it has its own spec:
+`004-host-level-frame`, which discovers hosts from every available source and
+establishes which are real by measurement. This feature presents whatever that
+frame yields, and FR-245b is what keeps it honest in the meantime — while local
+government is covered one host deep and federal many, a domain page says which of
+its sites were checked rather than implying the rest were.
 
 ## Constitution Check
 
