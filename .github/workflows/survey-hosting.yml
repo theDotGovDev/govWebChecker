@@ -1,0 +1,62 @@
+name: survey-hosting
+
+# How concentrated is `.gov` web hosting, and would a per-IP rate-limit key work?
+#
+# Feature 003 carries the shared-hosting gap as a named open question: 001's
+# limits key on hostname and registrable domain, but thousands of small city and
+# county `.gov` sites sit behind a handful of shared vendors, so many *distinct
+# registrable domains* can resolve to one origin. FR-133 blocks raising
+# concurrency until that is closed, and closing it needs a rate-limit key chosen
+# against real numbers rather than an assumption about how much sharing exists.
+#
+# This measures the numbers. It resolves the whole registry and reports
+# concentration by address, /24, origin ASN, CNAME target and nameserver — with
+# each cluster named, because a CDN's anycast address is shared by thousands of
+# unrelated sites without being a shared origin, and a key that cannot tell those
+# apart is not a key worth having.
+#
+# This sends DNS queries only: to the runner's resolver, and to Team Cymru's
+# public IP-to-ASN service, which is published over DNS precisely so it can be
+# read without a client library or an API key. Not one HTTP request reaches a
+# government web server, which is what makes it safe to run against all 16,535
+# domains at once under Principle I. The single HTTP request it does make is for
+# the registry CSV itself.
+#
+# Dispatch-only and deliberately re-runnable: hosting arrangements change, so the
+# answer drifts, and re-measuring is cheaper than trusting a stale number.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Survey only the first N domains (0 = the whole registry). For smoke-testing the script; the reported figures are only meaningful over the whole frame.'
+        required: false
+        default: '0'
+
+jobs:
+  survey:
+    runs-on: ubuntu-latest
+    # Generous because every domain costs up to a dozen lookups across both the
+    # apex and `www` forms, and the concurrency bound is deliberately modest.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Survey .gov hosting concentration over DNS
+        run: node research/hosting-survey.mjs
+        env:
+          SURVEY_OUT: ${{ runner.temp }}/hosting-survey.csv
+          SURVEY_LIMIT: ${{ inputs.limit }}
+
+      # Kept as an artifact rather than committed, the same as `survey-dns`. This
+      # is research that informs a spec decision, not a measurement record —
+      # `data/` is reserved for the availability record and its guarantees.
+      - name: Keep the per-domain results
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosting-survey
+          path: ${{ runner.temp }}/hosting-survey.csv
+          retention-days: 30
