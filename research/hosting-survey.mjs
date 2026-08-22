@@ -431,6 +431,52 @@ async function main() {
     );
   }
 
+  // Is a large address cluster a shared origin, or a CDN's shared front door?
+  //
+  // This is the distinction the whole design turns on, and it cannot be read off
+  // a cluster size — a Cloudflare anycast address and a municipal vendor's server
+  // both look like "one address, many domains". Rather than assert the answer
+  // from a hardcoded CDN list, ask the members: a domain fronted by a platform
+  // CNAMEs to that platform's own name, and the platform names itself. So the
+  // dominant CNAME target among a cluster's members is measured evidence of what
+  // the cluster is, and a cluster of direct-A domains with no CNAME at all is the
+  // signature of ordinary shared hosting.
+  const ipClusters = cluster(web, (r) => r.v4);
+  const byIp = new Map();
+  for (const r of web) for (const ip of r.v4) {
+    if (!byIp.has(ip)) byIp.set(ip, []);
+    byIp.get(ip).push(r);
+  }
+
+  console.log('\n=== What is behind each large address cluster ===\n');
+  console.log(
+    'The members name it. "(direct A)" means the domains publish an address with no\n' +
+      'CNAME, which is what ordinary shared hosting looks like — and what a per-address\n' +
+      'key is for. A platform name means the cluster is that platform\'s front door.\n',
+  );
+  table(
+    [...ipClusters.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 20)
+      .map(([ip, members]) => {
+        const rows = byIp.get(ip) ?? [];
+        const vendors = new Map();
+        for (const r of rows) {
+          const v = r.cname_vendor || '(direct A)';
+          vendors.set(v, (vendors.get(v) ?? 0) + 1);
+        }
+        const ranked = [...vendors.entries()].sort((a, b) => b[1] - a[1]);
+        const [topVendor, topCount] = ranked[0] ?? ['?', 0];
+        return [
+          members.length,
+          ip,
+          label(origins.get(ip)?.asn ?? ''),
+          `${topVendor} (${((topCount / rows.length) * 100).toFixed(0)}%)`,
+        ];
+      }),
+    ['domains', 'address', 'network', 'what its members say they are'],
+  );
+
   // The number the design actually turns on. Whole-frame concentration says how
   // much sharing exists; this says how much of it a single run can deliver at
   // once, which is what a backend experiences and what FR-132 is holding back.
@@ -471,6 +517,34 @@ async function main() {
       'domains in them',
       'share of frame',
     ],
+  );
+
+  // The aggregate of the same question, over every domain a per-address key would
+  // actually bind. If most of them are platform-fronted, a per-address key mostly
+  // throttles capacity providers and the gap needs a different answer. If most are
+  // direct-A or vendor-fronted, it binds the shared origins it was meant to.
+  const saturating = new Set();
+  for (let sl = 0; sl < SLICES; sl++) {
+    const inSlice = web.filter((r) => r.slice === sl);
+    for (const members of cluster(inSlice, (r) => r.v4).values()) {
+      if (members.length >= WORKERS) for (const d of members) saturating.add(d);
+    }
+  }
+  const bound = web.filter((r) => saturating.has(r.domain));
+  const boundBy = new Map();
+  for (const r of bound) {
+    const v = r.cname_vendor || '(direct A)';
+    boundBy.set(v, (boundBy.get(v) ?? 0) + 1);
+  }
+  console.log(
+    `\n=== What the ${bound.length} domains in saturating address clusters actually are ===\n`,
+  );
+  table(
+    [...boundBy.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([v, n]) => [n, `${((n / bound.length) * 100).toFixed(1)}%`, v]),
+    ['domains', 'share', 'fronted by'],
   );
 
   const v6only = web.filter((r) => r.v4.length === 0).length;
