@@ -155,8 +155,13 @@ async function chase(name) {
     current = next;
   }
   const a = await ask(() => resolver.resolve4(name));
-  const aaaa = a.ok ? { ok: false, value: [] } : await ask(() => resolver.resolve6(name));
-  return { chain, v4: a.value.slice().sort(), v6: aaaa.value.slice().sort() };
+  const aaaa = a.ok ? { ok: false, value: [], code: null } : await ask(() => resolver.resolve6(name));
+  return {
+    chain,
+    v4: a.value.slice().sort(),
+    v6: aaaa.value.slice().sort(),
+    code: a.ok || aaaa.ok ? '' : (a.code ?? 'UNKNOWN'),
+  };
 }
 
 /**
@@ -193,6 +198,9 @@ async function resolveWebPresence(domain) {
     cname_vendor: target ? registrableDomain(target) : '',
     ns_vendor: ns.ok ? nameserverFamily(ns.value[0]) : '',
     has_web: v4.length > 0 || v6.length > 0,
+    // Why we saw no address. A resolver that is failing us looks identical to a
+    // domain that publishes nothing unless the codes are kept and read.
+    code: [apex.code, www.code].filter(Boolean).join('|'),
   };
 }
 
@@ -324,7 +332,49 @@ async function main() {
   // only they can contribute pressure to a shared backend. The other ~10.9%
   // are `003`'s absence problem (FR-116), not this one.
   const web = resolved.filter((r) => r.has_web);
-  console.log(`\n${web.length} domains publish a web address; ${resolved.length - web.length} do not\n`);
+  const noWeb = resolved.filter((r) => !r.has_web);
+
+  // Self-diagnosis, before any figure below is worth reading.
+  //
+  // A resolver that fails us produces exactly the same observation as a domain
+  // that publishes no website: no address. The runner-vantage baseline from
+  // `survey-dns` run 32544034683 is 10.9% with no web address, and this survey's
+  // whole subject — small municipal domains — is the population a weak resolver
+  // loses first. A materially higher rate here means the concentration figures
+  // below are drawn from a biased subset and must not be read as a census.
+  const BASELINE_NO_WEB = 10.9;
+  const noWebPct = (noWeb.length / resolved.length) * 100;
+  console.log(
+    `\n${web.length} domains publish a web address; ${noWeb.length} do not ` +
+      `(${noWebPct.toFixed(1)}%, runner baseline ${BASELINE_NO_WEB}%)`,
+  );
+
+  const codes = new Map();
+  for (const r of noWeb) if (r.code) codes.set(r.code, (codes.get(r.code) ?? 0) + 1);
+  console.log('\nResolver codes for domains where we saw no web address:\n');
+  table(
+    [...codes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([c, n]) => [c, n]),
+    ['code', 'count'],
+  );
+
+  // ENODATA is the domain answering that it publishes nothing. ESERVFAIL and
+  // ETIMEOUT are our path failing, and are the signature of a vantage that
+  // cannot see the small domains this survey is about.
+  const ours = [...codes.entries()]
+    .filter(([c]) => /ESERVFAIL|ETIMEOUT|ECONNREFUSED|EREFUSED/.test(c))
+    .reduce((a, [, n]) => a + n, 0);
+  const oursPct = (ours / resolved.length) * 100;
+  const trustworthy = noWebPct <= BASELINE_NO_WEB + 3 && oursPct <= 3;
+  console.log(
+    `\nfailures attributable to us: ${ours} (${oursPct.toFixed(1)}%)\n` +
+      `vantage verdict: ${
+        trustworthy
+          ? 'OK — resolution matches the runner baseline, figures below are a census'
+          : 'NOT A CENSUS — this resolver lost materially more domains than a runner does. ' +
+            'The figures below describe the subset it could see, and understate concentration ' +
+            'among exactly the small jurisdictions this survey is about. Re-run on a runner.'
+      }\n`,
+  );
 
   const ips = [...new Set(web.flatMap((r) => r.v4))];
   console.log(`looking up origin ASN for ${ips.length} distinct addresses (Team Cymru, over DNS)`);
