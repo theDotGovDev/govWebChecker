@@ -54,5 +54,29 @@ jobs:
           probe "cisagov current-full.csv" \
             "https://raw.githubusercontent.com/cisagov/dotgov-data/main/current-full.csv"
 
+          echo "=== Candidate sources of .gov HOSTNAMES (not just registered domains) ==="
+          echo "The registry publishes registered domains and no list of the hosts"
+          echo "beneath them. A census keyed on domains therefore cannot see"
+          echo "pubmed.ncbi.nlm.nih.gov or forecast.weather.gov, which are distinct"
+          echo "websites. These are the candidates for closing that gap; whichever"
+          echo "answer 200 with a plausible shape decide what a host-level frame can"
+          echo "be built from."
+          echo
+
+          probe "GSA federal-website-index (site scanning list)" \
+            "https://raw.githubusercontent.com/GSA/federal-website-index/main/data/site-scanning-target-url-list.csv"
+          probe "GSA federal-website-index (repo root listing)" \
+            "https://api.github.com/repos/GSA/federal-website-index/contents/data"
+          probe "GSA data dotgov-websites (repo listing)" \
+            "https://api.github.com/repos/GSA/data/contents/dotgov-websites"
+          probe "GSA site-scanning-snapshots (repo listing)" \
+            "https://api.github.com/repos/GSA/site-scanning-snapshots/contents/"
+          probe "CISA/GSA site scanning API (websites)" \
+            "https://api.gsa.gov/technology/site-scanning/v1/websites?limit=1"
+          probe "analytics.usa.gov sites.csv (hostnames DAP tracks)" \
+            "https://analytics.usa.gov/data/live/sites.csv"
+          probe "crt.sh certificate transparency (nih.gov sample)" \
+            "https://crt.sh/?q=%25.nih.gov&output=json&exclude=expired"
+
           echo "Probe complete. A 200 with a plausible head means the source is usable;"
           echo "anything else means the target list needs a different basis."
