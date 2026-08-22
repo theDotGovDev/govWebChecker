@@ -459,9 +459,13 @@ async function main() {
 
   console.log('\n=== What is behind each large address cluster ===\n');
   console.log(
-    'The members name it. "(direct A)" means the domains publish an address with no\n' +
-      'CNAME, which is what ordinary shared hosting looks like — and what a per-address\n' +
-      'key is for. A platform name means the cluster is that platform\'s front door.\n',
+    'A platform name is reliable evidence: a domain fronted by a platform CNAMEs to\n' +
+      "that platform's own name. \"(direct A)\" is NOT the converse and must not be read\n" +
+      'as "ordinary shared hosting" — a domain can point an apex A record straight at an\n' +
+      'anycast front door, and many do. Measured on run 32548354070, 631 of the 1,020\n' +
+      'direct-A domains a per-address key would bind sit on AWS Global Accelerator or\n' +
+      'Cloudflare Spectrum addresses, against 184 on one Liquid Web server. So an\n' +
+      'unnamed cluster is undetermined by this survey, not confirmed shared.\n',
   );
   table(
     [...ipClusters.entries()]
