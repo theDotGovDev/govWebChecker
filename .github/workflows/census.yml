@@ -98,6 +98,24 @@ jobs:
             node dist/src/cli/index.js census
           fi
 
+      - name: Keep the readings before anything can reject them
+        # A slice costs about a hundred minutes of real requests to roughly two
+        # thousand government servers. Twice now that traffic has been spent and
+        # discarded — once to the job cap, once to a `verify` check that was wrong
+        # about what it was measuring. Both times the readings existed on disk and
+        # died with the runner.
+        #
+        # Uploading first means a rejection costs the commit, not the measurements.
+        # Whatever the gate below decides, the data can be inspected, and published
+        # after review rather than re-collected at the targets' expense.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: census-record-${{ github.run_id }}
+          path: data/
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Verify our own conduct before publishing it
         # Identical in spirit to `check.yml`: a run that violated a politeness
         # guarantee discards its readings rather than publishing them. Publishing

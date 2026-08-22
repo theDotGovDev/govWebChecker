@@ -70,12 +70,22 @@ a jurisdiction, so the check refuses to make it: an incomplete cycle reads
 `3/7 slices (in progress)` and passes, while a slice that skipped a domain it
 owned fails and names it.
 
-It is a reader's check, not the publication gate. `census.yml` verifies conduct
-before committing — spacing, method, ordering — and deliberately does not pass a
-frame. The frame is refreshed weekly by pull request, so a domain added to a slice
-that already ran this cycle would fail a coverage check through no fault of the
-run; gating on it would discard a slice of good measurements to report a registry
-edit. Coverage is answered afterwards, over the record, by anyone holding it.
+**It does gate publication, and that is worth stating plainly**, because it was
+briefly documented here as not doing so. `--frame` defaults to the committed
+`targets/dotgov-frame.json`, so `census.yml` loads a frame whether or not it names
+one, and a failed coverage check fails the workflow. That is exactly what happened
+on the first completed slice: every conduct check passed, coverage compared one
+day's slice against the whole frame, and 99 minutes of real requests to 2,360
+government servers were discarded over a check that was wrong about what it was
+measuring.
+
+One residual risk remains and is accepted rather than hidden. The frame is
+refreshed weekly by pull request, so a domain added to a slice that already ran
+this cycle will read as missed and fail the gate through no fault of the run. It
+no longer costs the measurements: `census.yml` uploads the record as an artifact
+*before* verifying, so a rejection costs the commit and not the readings, and the
+data can be reviewed and published rather than re-collected at the targets'
+expense.
 
 Like every other check it reads the record, not the code. A reader holding only
 the published record and the committed frame reaches the same verdict without
