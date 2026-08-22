@@ -106,9 +106,17 @@ stricter, they win.
   metadata. Don't commit or archive fetched page bodies.
 - **Re-probe only when the question needs it.** Answer from stored results where
   they exist rather than generating fresh traffic to look something up twice.
-- **Checks run in GitHub Actions, never from a development sandbox.** This is the
-  intended production path, and running from anywhere else produces measurements
-  of that machine's network rather than of the target.
+- **Checks run in GitHub Actions, never from a development sandbox.** The
+  division of labour is the point: an AI coding session is ephemeral and its
+  container is reclaimed, while GitHub Actions persists. Ongoing computing —
+  anything on a schedule, anything that must still be running next week — belongs
+  where it can keep running. The agent writes the code and config; GHA does the
+  work. A session cannot hold an hourly schedule no matter how good its network
+  is, so this is a structural fact rather than a restriction.
+
+  Measurement validity is the second reason, and it is why the rule is worth
+  stating rather than leaving implicit: running from anywhere else produces
+  measurements of that machine's network rather than of the target.
 
   This is not theoretical. A run from a cloud sandbox whose egress refused
   `CONNECT` returned three federal sites as `blocked` with a 403 — individually
@@ -116,11 +124,12 @@ stricter, they win.
   refuse automated traffic. See the FR-024 note in
   `specs/001-record-availability/spec.md`.
 
-  Working internet does not lift this rule — it makes breaking it more dangerous.
-  The sandbox above failed loudly because its egress was broken. A machine with
-  unrestricted access produces measurements that look entirely healthy while
-  describing that machine's network, latency and resolver rather than the
-  target's. `vantage()` labels such rows `local` rather than `github-actions/*`,
+  Working internet does not lift this rule. Durability is unaffected by network
+  quality — an ephemeral container is still ephemeral. And on validity, working
+  egress is the more dangerous case, not the safer one: the sandbox above failed
+  loudly because its egress was broken, whereas a machine with unrestricted
+  access produces measurements that look entirely healthy while describing that
+  machine's network, latency and resolver rather than the target's. `vantage()` labels such rows `local` rather than `github-actions/*`,
   so they are at least honest, but nothing rejects them: `verify` checks shape,
   spacing, method, ordering and timestamps, not vantage. A local run will write
   into `data/`, pass the gate, and be committable.
@@ -129,9 +138,16 @@ stricter, they win.
   run's output. If you must run it locally to debug, point it at local fixtures,
   and never at a real government site.
 
-  DNS-only work is the exception, and is why `research/dns-survey.mjs` exists: it
-  queries resolvers rather than the jurisdictions' servers, so it costs targets
-  nothing. Even so, resolver behaviour varies by vantage — this sandbox returns
+  Gathering information to inform that code and config is a different activity
+  and is what a session's internet access is for: read published datasets, probe
+  whether a source still exists, measure something once to settle a design
+  question. The output belongs in the repo as code, config or spec — not in
+  `data/`, and not in a conversation that ends with the container.
+
+  DNS-only work is the clearest case, and is why `research/dns-survey.mjs`
+  exists: it queries resolvers rather than the jurisdictions' servers, so it
+  costs targets nothing. Note it still ships as a workflow, so the answer can be
+  recomputed after this session is gone. Even so, resolver behaviour varies by vantage — this sandbox returns
   `ESERVFAIL` for small municipal domains that a runner resolves fine, and
   collapses NXDOMAIN into NODATA — so run it on a runner and read its
   self-diagnosing resolver-code histogram before trusting a negative result.
