@@ -24,6 +24,8 @@ flowchart LR
     politeness[politeness<br/>per host, per domain, per backend<br/>backoff, identification]
     dns{{resolve + pin<br/>backend address}} --> politeness
     checker --> dns
+    frame[targets/dotgov-frame.json<br/>the census frame, generated] --> census
+    census[census<br/>frame, slices, URL rule, presence] --> checker
     checker --> record[record<br/>validate then append]
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
     data --> verify[verify<br/>checks our conduct from the record]
@@ -58,6 +60,32 @@ caller cannot route around it.
   what an outside reader can check.
 - `backoff.ts` — the wait after a failure, which only ever grows.
 - `user-agent.ts` — identification that a caller cannot override.
+
+### `src/census/` — what to check, and when
+
+Deliberately separate from `checker/`. The census decides *what* to check and
+*when*; the checker decides *how*. That boundary means the census can change its
+frame, its tiers and its cadence without touching the code that talks to a
+government server — which is the code the constitution constrains most tightly.
+
+- `frame.ts` — builds the census frame from the published `.gov` registry and
+  applies removal requests. Refuses to write a frame that is empty or more than
+  20% smaller than the one it replaces: a truncated download would otherwise
+  publish as a coverage collapse across US government rather than as our own
+  failed HTTP request.
+- `slice.ts` — which seventh of the frame a domain belongs to. A pure function of
+  the domain name, so a domain's slice never moves when the registry gains or
+  loses entries. Keying on registry *position* instead would shift six sevenths
+  of the frame on a single insertion, producing double-coverage and gaps that the
+  coverage count would not reveal.
+- `url.ts` — the rule that turns a bare domain into the URL requested, versioned
+  and recorded. HTTPS, both forms considered, the non-resolving one never
+  requested.
+- `presence.ts` — whether a public website appears to exist. The one judgement in
+  the record, fenced into its own field and required to be a pure function of a
+  stored observation, so a better rule can be applied to everything already
+  collected without re-checking a target.
+- `run.ts` — one slice, reusing the checker's limiter and sampling.
 
 ### `src/record/` — the stored measurements
 
@@ -101,9 +129,12 @@ assumed.
 
 ### `src/cli/` — the command surface
 
-`check` runs a pass. `verify` reads a record and reports whether the politeness
+`check` runs a hot-tier pass. `census` runs one broad-tier slice. `build-frame`
+rebuilds the census frame. `verify` reads a record and reports whether the
 guarantees hold, printing expected versus actual — including backend spacing,
-which it can only check because each observation records the address contacted.
+which it can only check because each observation records the address contacted,
+and census coverage, which it computes from the record and the committed frame
+rather than from our own run summaries.
 
 `verify` matters more than it looks: it reads the *record*, never the code, so
 someone who has never seen this repository can run the same check against the
@@ -156,7 +187,13 @@ rather than per-file.
   address the socket is pinned to.
 - **The stored record holds no verdicts.** Whether a site counts as "up" is a
   question for the analysis half, where the threshold can change without
-  rewriting history.
+  rewriting history. The one reading the record does carry — whether a website
+  appears to exist at all — is fenced into its own versioned field, never into
+  `outcome`, and is recomputable from stored facts alone.
+- **Absence is not failure.** One registered `.gov` in nine publishes no web
+  address. A domain that resolves to nothing receives no request and is recorded
+  as absent; a resolution failure that might be ours is recorded as undetermined,
+  never as the jurisdiction publishing nothing.
 - **No page content is persisted.** Analysis of a page happens in memory during a
   check; only findings survive.
 

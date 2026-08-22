@@ -32,6 +32,8 @@ export interface RunInput {
 
 export interface RunSummary {
   run_id: string;
+  /** Which tier this run belongs to. */
+  tier: 'hot';
   started_at: string;
   finished_at: string;
   targets_attempted: number;
@@ -147,6 +149,7 @@ export async function executeRun({ targets, dataDir, config }: RunInput): Promis
 
   const summary: RunSummary = {
     run_id,
+    tier: 'hot',
     started_at,
     finished_at: new Date().toISOString(),
     targets_attempted: active.length,
@@ -195,6 +198,12 @@ async function checkOne(
     host: target.host,
     url: target.url,
     dimension: DIMENSION,
+    // Named on every row so a reader can separate the populations without
+    // consulting a target list that may since have changed (FR-108, FR-139). The
+    // two tiers have very different failure rates for reasons that are about the
+    // populations rather than about government, and a combined figure that cannot
+    // be decomposed is a headline nobody can retract.
+    tier: 'hot' as const,
     method,
   };
 

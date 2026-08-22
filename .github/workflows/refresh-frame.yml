@@ -1,0 +1,68 @@
+name: refresh-frame
+
+# Rebuilds the census frame from the published `.gov` registry.
+#
+# Opens a PULL REQUEST rather than committing, matching `refresh-targets.yml`.
+# The frame is the definition of what this project sends traffic to. Four hundred
+# domains appearing, or four thousand vanishing, is something a person should see
+# before it takes effect — and the second of those is exactly what a truncated
+# download looks like.
+#
+# Sends one HTTP request, to the registry. It contacts no government web server.
+
+on:
+  schedule:
+    - cron: '13 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Rebuild the frame
+        # Exits non-zero if the new frame is empty or more than 20% smaller than
+        # the one it replaces. That refusal is the point: a truncated download
+        # would otherwise publish as a coverage collapse across US government
+        # rather than as our own failed request.
+        run: node dist/src/cli/index.js build-frame
+
+      - name: Open a pull request if the frame changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: refresh-frame
+          title: 'data: refresh the .gov census frame'
+          commit-message: 'data: refresh the .gov census frame'
+          body: |
+            Automated refresh of `targets/dotgov-frame.json` from the published
+            CISA `.gov` registry.
+
+            The frame defines what this project sends traffic to, so this is a
+            pull request rather than a commit. Worth checking before merging:
+
+            - **Is the size plausible?** A large drop is what a truncated download
+              looks like. `build-frame` refuses anything more than 20% smaller,
+              so a change that got this far is within tolerance — but tolerance is
+              not the same as intended.
+            - **Do added domains belong?** Every one of them starts receiving
+              traffic on the next cycle that includes its slice.
+            - **Do removed domains have history?** Their observations stay in the
+              record and stay readable; they simply stop being checked.
+
+            Slices are hashed from the domain name, so nothing already in the
+            frame moves slice because of this change.
+          add-paths: targets/dotgov-frame.json
+          delete-branch: true
