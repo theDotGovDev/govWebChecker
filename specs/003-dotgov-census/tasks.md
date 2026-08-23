@@ -162,7 +162,7 @@ populations.
 - [x] T041 Update `specs/003-dotgov-census/spec.md` where implementation revealed intended behavior differs, and `specs/001-record-availability/spec.md` if anything further contradicts it. FR-001a and FR-009 are already revised
 - [x] T042 Update the published site with what the census is and how to read a per-tier figure, per the project's site rule
 - [x] T043 [P] Verify by sabotage that the politeness tests still bite: remove each limit in turn, confirm tests fail, restore. The constitution's one thing that cannot regress unnoticed
-- [ ] T044 Run `verify` against a real dispatched census slice and confirm every guarantee holds at census scale (FR-138, SC-104)
+- [x] T044 Run `verify` against a real dispatched census slice and confirm every guarantee holds at census scale (FR-138, SC-104) — run 32605088681, slice 1, 2,310 domains in 40m38s: every conduct check passed at census scale, per-address minimum 5,010ms against a 5,000ms floor
 
 ---
 

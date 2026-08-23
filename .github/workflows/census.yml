@@ -18,26 +18,25 @@ name: census
 # nothing there and asking anyway would spend a jurisdiction's resources to learn
 # it twice.
 
-# SCHEDULE DISABLED — pending one measured run.
+# Runs daily at 09:07 UTC — deliberately away from check.yml's hourly slot
+# (research.md R5).
 #
-# The first sweep (run 32554093317) was cancelled at the 120-minute cap with
-# nothing published. The second (run 32579108046) completed in 99m42s with every
-# conduct check passing, and was then rejected by a coverage check that compared
-# one day of a seven-day cycle against the whole frame. Both faults are fixed: the
-# coverage check is slice-aware, and the record now uploads as an artifact before
-# anything can reject it, so a rejection costs the commit and not the readings.
+# The schedule was disabled through three runs and is back on the evidence of the
+# fourth. Run 32554093317 was cancelled at the 120-minute cap. Run 32579108046
+# finished in 99m42s and was rejected by a coverage check comparing one day of a
+# seven-day cycle against the whole frame. Run 32605088681 finished in 40m38s with
+# every guarantee holding, and failed only to push, because two appends to one
+# append-only file are not a conflict git can resolve.
 #
-# What remains is margin. 99m42s leaves twenty minutes against the cap, and two
-# projections of this duration have already been wrong, both optimistic. R8a is
-# now implemented — robots.txt and the page it governs are charged as one visit
-# rather than two — which removes a full per-host interval from every target that
-# publishes a web address, roughly 2,045 of a slice.
-#
-# The schedule returns when a dispatched slice demonstrates the margin, not when a
-# simulation predicts it. Restore: - cron: '7 9 * * *'  (09:07 UTC, deliberately
-# away from check.yml's hourly slot, per research.md R5).
+# All three causes are fixed: coverage is slice-aware, R8a charges robots.txt and
+# the page it governs as one visit, and publication no longer rebases. What made
+# the schedule safe to restore is the last one plus the artifact upload — a run
+# that fails now costs the commit, not the readings, which is not a claim: run
+# 32605088681's 2,310 observations were recovered from its artifact and published.
 
 on:
+  schedule:
+    - cron: '7 9 * * *'
   workflow_dispatch:
     inputs:
       slice:
