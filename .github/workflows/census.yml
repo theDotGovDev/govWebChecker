@@ -131,22 +131,10 @@ jobs:
             node dist/src/cli/index.js verify "$file"
           done
 
-      - name: Commit the record
+      - name: Publish the record
+        # Append-only rows, published past whatever else landed while this slice
+        # was running — which for a forty-minute census is an hourly check, every
+        # time. The script holds the logic and is tested; see
+        # tests/integration/publish-record.test.ts.
         run: |
-          set -e
-          if [ -z "$(git status --porcelain data/)" ]; then
-            echo "no new observations — nothing to commit"
-            exit 0
-          fi
-          git config user.name 'govwebchecker[bot]'
-          git config user.email 'govwebchecker[bot]@users.noreply.github.com'
-          git add data/
-          git commit -m "data: census slice $(date -u +%Y-%m-%dT%H:%MZ)"
-          # Rebase rather than force. The record is append-only, and losing the
-          # hourly check's observations to a push race would be a silent hole.
-          for attempt in 1 2 3; do
-            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
-            sleep $((attempt * 5))
-          done
-          echo "could not push the record after 3 attempts" >&2
-          exit 1
+          scripts/publish-record.sh "${GITHUB_REF_NAME}" "data: census slice $(date -u +%Y-%m-%dT%H:%MZ)"
