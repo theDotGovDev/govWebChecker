@@ -113,7 +113,7 @@ src/
 │   ├── render.ts        # EXTENDED — accepts Figure, never number
 │   └── pages.ts         # NEW — writes index, tier pages, and ~16,535 listings
 └── cli/
-    └── index.js         # EXTENDED — build-site gains listing output
+    └── build-site.ts    # EXTENDED — gains the contract's options and refusals
 
 tests/
 ├── unit/

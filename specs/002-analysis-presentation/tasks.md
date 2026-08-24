@@ -35,8 +35,9 @@ has no network path, and the tests run against fixtures or the committed record.
 needed before the stories.
 
 - [ ] T101 Extract the current `build-site` entry (`src/cli/build-site.ts`) into
-  a thin shell over `src/site/pages.ts` so page-writing logic is testable without
-  the CLI; behavior unchanged, existing site-render tests still pass
+  a thin shell over a testable page-writing function; behavior unchanged, existing
+  site-render tests still pass. (T129 later grows this into `src/site/pages.ts`'s
+  streaming writer — this task only creates the seam)
 
 ---
 
@@ -90,6 +91,11 @@ watch the build fail.
 - [ ] T111 [US1] Failing test in `tests/integration/site-guarantees.test.ts`: the
   built site links the record and the verification tool (FR-206); implement in
   `src/site/render.ts`
+- [ ] T111a [US1] Failing test in `tests/integration/site-guarantees.test.ts`:
+  the site states when it was built and how current each tier's readings are
+  (FR-252), and describes single-vantage figures as the network path from that
+  vantage, never as a property of the site alone (FR-203); implement in
+  `src/site/render.ts`
 
 **Checkpoint**: US1 shippable. A site of one honest page would already be worth
 deploying.
@@ -113,8 +119,12 @@ of the three states, and that each aggregate's denominator is recoverable.
   rendered output never places a `no_website` or `undetermined` site under any
   heading containing failure vocabulary; a 500 renders as a website that is
   broken, distinct from both (FR-213, FR-214)
+- [ ] T113a [US2] Failing test in `tests/unit/site-model.test.ts`: a derived
+  reading is shown with the rule that produced it, named and versioned —
+  `presence/1` beside presence counts, `canonical/1` where a derived URL is
+  stated (FR-205)
 - [ ] T114 [US2] Extend `src/site/model.ts` and `src/site/render.ts` to pass
-  T112–T113; run the census section against the committed record and confirm the
+  T112–T113a; run the census section against the committed record and confirm the
   three counts match `data/runs/` summaries (readable check, no traffic)
 
 **Checkpoint**: US1+US2 together are the honest-aggregates site.
@@ -135,7 +145,10 @@ tier's.
   blended figure sneaks back as a "convenience")
 - [ ] T116 [US3] Failing test in `tests/integration/site-guarantees.test.ts`: the
   rendered tier sections each state population and cadence adjacent to every
-  figure; a domain present in both tiers renders two separable histories (FR-222)
+  figure; a domain present in both tiers renders two separable histories (FR-222);
+  and every surface that names a jurisdiction — standings rows and census tables
+  included — links to its listing, so readings and the correction route stay one
+  step away from any naming (FR-240)
 - [ ] T117 [US3] Implement in `src/site/model.ts` / `src/site/render.ts`; both
   tests pass. Include the FR-223 statement of what each tier cannot answer
 
