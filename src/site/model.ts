@@ -1,6 +1,7 @@
 import type { Observation } from '../record/types.js';
 import type { Target } from '../targets/load.js';
 import { figure, type Figure } from './figure.js';
+import { censusSeries, type CensusSeries } from './series.js';
 
 export interface RunRow {
   run_id: string;
@@ -10,6 +11,13 @@ export interface RunRow {
   targets_succeeded: number;
   all_targets_failed: boolean;
   vantage: string;
+  /** Census summaries carry their coverage accounting; hot-tier runs do not. */
+  tier?: string;
+  cycle?: string;
+  slice?: number;
+  frame_digest?: string;
+  frame_size?: number;
+  slice_size?: number;
 }
 
 /** What the site shows for one site's most recent measurement. */
@@ -105,6 +113,8 @@ export interface CensusView {
 
 export interface SiteModel {
   sites: SiteView[];
+  /** Present when the record holds census rows: the discrete, cadence-aware series. */
+  censusSeries?: CensusSeries;
   /** One entry per tier present in the record. Never summed into one figure. */
   tiers: TierView[];
   /** Present only when the record holds census rows. */
@@ -345,9 +355,31 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
 
   const timestamps = usable.map((o) => o.checked_at).sort();
 
+  const broadRows = usable.filter((o) => o.tier === 'broad');
+  const censusRuns = runs.filter(
+    (r): r is RunRow & { cycle: string; slice: number; frame_digest: string } =>
+      r.tier === 'broad' && r.cycle !== undefined && r.slice !== undefined && r.frame_digest !== undefined,
+  );
+
   return {
     sites,
     tiers: tierViews(usable),
+    ...(broadRows.length > 0
+      ? {
+          censusSeries: censusSeries(
+            broadRows,
+            censusRuns.map((r) => ({
+              tier: 'broad',
+              cycle: r.cycle,
+              slice: r.slice,
+              frame_digest: r.frame_digest,
+              frame_size: r.frame_size ?? 0,
+              slice_size: r.slice_size ?? 0,
+            })),
+            7,
+          ),
+        }
+      : {}),
     ...(usable.some((o) => o.tier === 'broad') ? { census: censusView(usable) } : {}),
     summary: {
       targets: targets.length,

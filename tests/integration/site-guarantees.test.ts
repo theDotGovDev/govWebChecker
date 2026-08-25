@@ -63,8 +63,12 @@ function fixtureRows(): Observation[] {
   return rows;
 }
 
-function render(rows: Observation[], targets = [target('www.example.gov', 'www-example-gov')]): string {
-  const model = buildSiteModel({ targets, observations: rows, runs: [] });
+function render(
+  rows: Observation[],
+  targets = [target('www.example.gov', 'www-example-gov')],
+  runs: import('../../src/site/model.js').RunRow[] = [],
+): string {
+  const model = buildSiteModel({ targets, observations: rows, runs });
   return renderSite(model, '2026-08-24 17:00 UTC');
 }
 
@@ -182,14 +186,30 @@ function censusFixture(): Observation[] {
 }
 
 describe('absence, uncertainty and failure never merge (FR-210 to FR-214, SC-202)', () => {
-  test('the three presence states render as three figures sharing one stated denominator', () => {
+  test('presence renders as three figures per context, sharing one stated denominator', () => {
+    // The invariant holds everywhere presence appears — the tier panel and each
+    // census mark alike: exactly three figures (website, no_website,
+    // undetermined) per context, one denominator, the rule named on each.
     const html = render([...fixtureRows(), ...censusFixture()]);
     const figures = body(html).match(/<span class="figure">[\s\S]*?<\/span><\/span>/g) ?? [];
     const presence = figures.filter((f) => /presence\/1/.test(f));
-    assert.equal(presence.length, 3, 'website, no_website and undetermined — each its own figure, none merged');
+    assert.ok(presence.length >= 3, 'presence must be published');
+    assert.equal(presence.length % 3, 0,
+      'every context shows all three states — a missing one is a merged or dropped state');
     for (const f of presence) {
-      assert.match(f, /4 sites/, `the shared denominator must be stated: ${f}`);
+      assert.match(f, /\d+ sites?/, `the shared denominator must be stated: ${f}`);
       assert.match(f, /rule presence\/1/, `the versioned rule must travel with the reading (FR-205): ${f}`);
+    }
+    // Context = the paragraph the figures share. Three states per paragraph,
+    // and within one paragraph all three carry the same denominator.
+    const paragraphs = body(html).match(/<p>[\s\S]*?<\/p>/g) ?? [];
+    for (const para of paragraphs) {
+      const inPara = para.match(/<span class="figure">[\s\S]*?<\/span><\/span>/g)?.filter((f) => /presence\/1/.test(f)) ?? [];
+      if (inPara.length === 0) continue;
+      assert.equal(inPara.length, 3,
+        `a context showing presence shows all three states — a missing one is a merged or dropped state: ${para.slice(0, 120)}`);
+      const denominators = new Set(inPara.map((f) => f.match(/(\d+) sites?/)?.[1]));
+      assert.equal(denominators.size, 1, 'one shared denominator per context');
     }
   });
 
@@ -240,5 +260,75 @@ describe('absence, uncertainty and failure never merge (FR-210 to FR-214, SC-202
       /down|broken|unavailable|failing/i.test(n.split('.').pop() ?? ''),
     );
     assert.deepEqual(merged, [], `no field may be a merged verdict: ${merged.join(', ')}`);
+  });
+});
+
+describe('tiers never blend (FR-220 to FR-223, SC-203)', () => {
+  test('every rendered figure names exactly one tier', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    const figures = body(html).match(/<span class="figure">[\s\S]*?<\/span><\/span>/g) ?? [];
+    assert.ok(figures.length > 0);
+    for (const f of figures) {
+      const hot = /hot tier/.test(f);
+      const broad = /broad tier/.test(f);
+      assert.ok(hot !== broad, `a figure must belong to exactly one tier: ${f}`);
+    }
+  });
+
+  test('each tier panel states what its tier cannot answer (FR-223)', () => {
+    const prose = body(render([...fixtureRows(), ...censusFixture()])).replace(/\s+/g, ' ');
+    assert.match(prose, /cannot (see|detect|answer)[^.]{0,80}(short|interruption)/i,
+      'the weekly census cannot detect a short interruption, and must say so');
+    assert.match(prose, /says nothing about[^.]{0,60}other/i,
+      'the hourly tier says nothing about the domains it does not check');
+  });
+});
+
+describe('change over time is drawn at its cadence (FR-230 to FR-233, SC-207)', () => {
+  function censusRuns(): import('../../src/site/model.js').RunRow[] {
+    const base = {
+      run_id: 'r', started_at: '2026-08-22T09:00:00Z', finished_at: '2026-08-22T10:00:00Z',
+      targets_attempted: 2, targets_succeeded: 2, all_targets_failed: false,
+      vantage: 'github-actions/test-runner-7',
+      frame_digest: 'sha256:frame-a', frame_size: 16535, slice_size: 2300, tier: 'broad',
+    };
+    return [
+      { ...base, run_id: 'cr1', cycle: '2026-W34', slice: 1 },
+      { ...base, run_id: 'cr2', cycle: '2026-W35', slice: 4 },
+    ] as unknown as import('../../src/site/model.js').RunRow[];
+  }
+
+  function twoCycles(): Observation[] {
+    return [
+      ...censusFixture(),
+      censusRow('w35.gov', { run_id: 'c5', cycle: '2026-W35', slice: 4 }),
+    ];
+  }
+
+  test('the census series renders one mark per cycle and draws nothing between them', () => {
+    const html = render([...fixtureRows(), ...twoCycles()], undefined, censusRuns());
+    const section = body(html).match(/<section class="census-series">[\s\S]*?<\/section>/)?.[0];
+    assert.ok(section, 'the census series section must exist when census rows do');
+    const marks = section.match(/class="mark/g) ?? [];
+    assert.equal(marks.length, 2, 'one mark per cycle');
+    assert.doesNotMatch(section, /<path|<line|polyline/i,
+      'a path between weekly readings asserts knowledge of the days between (FR-230)');
+  });
+
+  test('an in-progress cycle is marked in progress and never as a movement', () => {
+    const html = render([...fixtureRows(), ...twoCycles()], undefined, censusRuns());
+    const prose = body(html).replace(/\s+/g, ' ');
+    assert.match(prose, /2026-W35[\s\S]{0,200}?in progress/i);
+    assert.match(prose, /1 of 7 slices/i, 'how much of the cycle has run must be stated');
+  });
+
+  test('a mid-cycle frame change is disclosed where the trend is shown (FR-232)', () => {
+    const runs = censusRuns();
+    (runs[1] as unknown as { cycle: string; frame_digest: string }).cycle = '2026-W34';
+    (runs[1] as unknown as { frame_digest: string }).frame_digest = 'sha256:frame-b';
+    const html = render([...fixtureRows(), ...censusFixture()], undefined, runs);
+    const prose = body(html).replace(/\s+/g, ' ');
+    assert.match(prose, /frame changed|registry changed/i,
+      'slices against two digests are not one coverage claim');
   });
 });

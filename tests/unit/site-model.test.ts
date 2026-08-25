@@ -320,3 +320,29 @@ describe('per-tier figures (FR-139, SC-107)', () => {
     assert.equal(cycle.domains, 3);
   });
 });
+
+describe('no model function computes across tiers (FR-220)', () => {
+  test('tier views partition rows; no view mixes observations of two tiers', () => {
+    const rows = [
+      observation({ checked_at: '2026-08-03T10:00:00Z' }),
+      observation({
+        checked_at: '2026-08-03T11:00:00Z',
+        target_id: 'town.gov',
+        host: 'town.gov',
+        tier: 'broad',
+        cycle: '2026-W32',
+        slice: 0,
+        presence: { state: 'website', rule: 'presence/1' },
+      } as Partial<Observation>),
+    ];
+    const model = buildSiteModel({ targets: [target('a', 'a.gov')], observations: rows, runs: [] });
+    const tiers = model.tiers.map((t) => t.tier).sort();
+    assert.deepEqual(tiers, ['broad', 'untiered'], 'each row lands in exactly one tier view');
+    for (const t of model.tiers) {
+      assert.equal(t.observations, 1, 'no view absorbed the other tier\u2019s row');
+      if (t.answered) {
+        assert.equal(t.answered.samples, 1, 'a tier figure rests only on its own tier\u2019s readings');
+      }
+    }
+  });
+});
