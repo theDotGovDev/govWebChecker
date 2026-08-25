@@ -80,12 +80,34 @@ describe('site rendering', () => {
     assert.match(html, /&lt;script&gt;/);
   });
 
-  test('is a complete, self-contained document with no external requests', () => {
+  test('no asset is fetched from a third-party origin (FR-270)', () => {
+    // Links TO other sites are fine — the measured site, the repository. What
+    // never leaves the origin is an ASSET: anything a visitor's browser fetches
+    // automatically. That is the rule D4 decided; the old blanket no-script,
+    // no-external test enforced a stricter rule no spec had ever stated.
     const html = renderSite(buildSiteModel({ targets: [target], observations: [obs()], runs: [] }), 'now');
     assert.match(html, /^<!doctype html>/);
     assert.match(html, /<\/html>\s*$/);
-    assert.doesNotMatch(html, /<script/i);
-    assert.doesNotMatch(html, /https?:\/\/(?!a\.gov|github\.com)/);
+    const assetTags =
+      html.match(/<(script|img|source|iframe|embed|object|track|video|audio|use)\b[^>]*>/gi) ?? [];
+    const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
+    for (const tag of [...assetTags, ...linkTags]) {
+      const url = tag.match(/(?:src|href|data)\s*=\s*"([^"]*)"/i)?.[1];
+      if (url === undefined) continue;
+      assert.doesNotMatch(url, /^(https?:)?\/\//i, `asset fetched off-origin: ${tag}`);
+    }
+    // @import and url() in styles are asset fetches too.
+    assert.doesNotMatch(html, /@import\s+url?\(?\s*["']?https?:/i);
+    assert.doesNotMatch(html, /url\(\s*["']?https?:/i);
+  });
+
+  test('every reading is in the HTML itself — script is never the only path (FR-271)', () => {
+    const html = renderSite(buildSiteModel({ targets: [target], observations: [obs()], runs: [] }), 'now');
+    // The page is server-rendered: figures, methods, and disclosures are markup,
+    // not the product of a script. If a script tag exists it must be same-origin
+    // (checked above) and the content must already be present without it.
+    assert.match(html, /class="figure"/);
+    assert.match(html, /<details/);
   });
 
   test('uses table semantics a screen reader can navigate', () => {
