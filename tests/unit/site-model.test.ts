@@ -162,8 +162,8 @@ describe('site model', () => {
       runs: [],
     });
     const typical = model.sites[0]!.typical!;
-    assert.equal(typical.median_ms, 200, 'the outlier must not drag the figure');
-    assert.equal(typical.readings, 3, 'the count it was computed from travels with it');
+    assert.equal(typical.median.value, 200, 'the outlier must not drag the figure');
+    assert.equal(typical.median.samples, 3, 'the count it was computed from travels with it');
   });
 
   test('a lone reading yields no typical figure', () => {
@@ -200,7 +200,7 @@ describe('site model', () => {
       ],
       runs: [],
     });
-    assert.equal(model.sites[0]!.typical!.readings, 2, 'a timeout is not a slow reading');
+    assert.equal(model.sites[0]!.typical!.median.samples, 2, 'a timeout is not a slow reading');
   });
 
   test('an empty record produces an empty model rather than throwing', () => {

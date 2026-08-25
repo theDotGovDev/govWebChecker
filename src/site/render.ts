@@ -1,4 +1,5 @@
 import type { SiteModel, SiteView, TierView } from './model.js';
+import { formatFigure } from './figure.js';
 
 function escape(text: string): string {
   return text
@@ -43,11 +44,11 @@ function latencyCell(site: SiteView): string {
     const pending = site.latest ? 'not enough readings yet' : 'no measurement';
     return `<td class="num"><span class="nodata">${pending}</span></td>`;
   }
-  return (
-    `<td class="num"><strong>${number(typical.median_ms)} ms</strong>` +
-    `<span class="spread">${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms ` +
-    `over ${number(typical.readings)}</span></td>`
-  );
+  // The spread rides inside the figure's method so no latency token exists
+  // outside a Figure — the output-level guarantee the tests hold.
+  return `<td class="num">${formatFigure(typical.median, {
+    note: `spread ${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms`,
+  })}</td>`;
 }
 
 function row(site: SiteView): string {
@@ -88,25 +89,27 @@ ${latencyCell(site)}
  * (SC-107).
  */
 function tierPanel(tier: TierView): string {
-  const measured = tier.presence.website + tier.presence.no_website + tier.presence.undetermined;
-  const presence =
-    measured > 0
-      ? `<p>
-        Of ${number(measured)} domains where we established what is published:
-        <strong>${number(tier.presence.website)}</strong> have a website,
-        <strong>${number(tier.presence.no_website)}</strong> publish no web address at all, and
-        <strong>${number(tier.presence.undetermined)}</strong> we could not determine.
+  const pf = tier.presenceFigures;
+  const presence = pf
+    ? `<p>
+        Of what is published at each domain we judged:
+        have a website ${formatFigure(pf.website)},
+        publish no web address at all ${formatFigure(pf.no_website)},
+        and we could not determine ${formatFigure(pf.undetermined)}.
         A domain that publishes no website is not a broken website, and this page
-        never counts it as one.
+        never counts it as one. Where the determination is ours to make, the rule
+        that made it is named beside the number.
       </p>`
-      : '';
+    : '';
 
   return `<div class="panel">
   <h3>${escape(tier.tier === 'hot' ? 'Hourly tier' : tier.tier === 'broad' ? 'Census tier' : 'Earlier observations')}</h3>
   <p><strong>Population:</strong> ${escape(tier.population)}.</p>
+  ${tier.answered ? `<p><strong>Answered:</strong> ${formatFigure(tier.answered)}</p>` : ''}
   <p>
     ${number(tier.domains)} domains, ${number(tier.observations)} observations,
     ${number(tier.responded)} of which got a successful response.
+    ${tier.latestReading ? `Latest reading ${escape(tier.latestReading.slice(0, 16).replace('T', ' '))} UTC.` : ''}
   </p>
   ${presence}
 </div>`;
@@ -281,6 +284,8 @@ ${model.sites.map(row).join('\n')}
     Checks run from a shared cloud server in a data centre${
       summary.vantages.length > 0 ? ` (${escape(summary.vantages.join(', '))})` : ''
     }.
+    Every figure on this page therefore measures the <strong>network path</strong>
+    from that vantage to the site — never a property of the site alone.
     Many of these sites sit behind content delivery networks, so what we time is
     largely the nearest cache rather than the site itself. These numbers are
     useful for spotting large changes and clear outliers. They are
@@ -341,7 +346,11 @@ ${model.sites.map(row).join('\n')}
     — ${number(summary.withData)} with measurements, ${number(summary.withoutData)} awaiting a first check.
   </p>
   <p>
-    <a href="https://github.com/theDotGovDev/govWebChecker">Source, raw data, and methodology on GitHub</a>.
+    <a href="https://github.com/theDotGovDev/govWebChecker">Source and methodology on GitHub</a>.
+    The record behind every figure is published at
+    <a href="https://github.com/theDotGovDev/govWebChecker/tree/main/data/availability">data/availability</a>,
+    and <code>npm run verify</code> proves its guarantees from the record alone —
+    the same check anyone can run without trusting this page.
     Not affiliated with any agency measured.
   </p>
 </footer>

@@ -36,7 +36,10 @@ describe('site rendering', () => {
       'now',
     );
     assert.match(html, /55 ms/);
-    assert.match(html, /40–55 ms over 2/);
+    // The spread and count now travel inside the figure's method rather than as
+    // a bare token — same information, guaranteed adjacent to the number.
+    assert.match(html, /spread 40–55 ms/);
+    assert.match(html, /2 readings/);
   });
 
   test('refuses to present a single reading as a response time (FR-011a)', () => {
