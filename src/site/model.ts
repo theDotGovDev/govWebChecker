@@ -1,5 +1,7 @@
 import type { Observation } from '../record/types.js';
 import type { Target } from '../targets/load.js';
+import { figure, type Figure } from './figure.js';
+import { censusSeries, type CensusSeries } from './series.js';
 
 export interface RunRow {
   run_id: string;
@@ -9,6 +11,13 @@ export interface RunRow {
   targets_succeeded: number;
   all_targets_failed: boolean;
   vantage: string;
+  /** Census summaries carry their coverage accounting; hot-tier runs do not. */
+  tier?: string;
+  cycle?: string;
+  slice?: number;
+  frame_digest?: string;
+  frame_size?: number;
+  slice_size?: number;
 }
 
 /** What the site shows for one site's most recent measurement. */
@@ -30,9 +39,8 @@ export interface LatestView {
  * is what supplies the statistics (FR-011a).
  */
 export interface TypicalView {
-  median_ms: number;
-  /** How many readings the median came from. Travels with the figure, always. */
-  readings: number;
+  /** The median across readings, carrying its full method (FR-201). */
+  median: Figure;
   fastest_ms: number;
   slowest_ms: number;
 }
@@ -67,6 +75,14 @@ export interface SiteView {
  */
 export interface TierView {
   tier: string;
+  /**
+   * Share of observations that got a successful response, as a Figure — the
+   * page's one headline rate per tier, carrying its method (FR-201). Absent
+   * when the tier has no observations, never zero (FR-204).
+   */
+  answered?: Figure;
+  /** When this tier last read anything — how current the page is (FR-252). */
+  latestReading?: string;
   /** Stated in words, so a figure never travels without the population it covers. */
   population: string;
   observations: number;
@@ -76,6 +92,12 @@ export interface TierView {
   outcomes: Record<string, number>;
   /** Only meaningful for the census; absent readings stay absent, not zero. */
   presence: { website: number; no_website: number; undetermined: number };
+  /**
+   * The same three counts as Figures — each carrying the shared denominator as
+   * its population, the versioned rule that derived the reading (FR-205), and
+   * the rest of its method. Three figures, never a merged one (FR-210).
+   */
+  presenceFigures?: { website: Figure; no_website: Figure; undetermined: Figure };
 }
 
 export interface CensusCycleView {
@@ -91,6 +113,8 @@ export interface CensusView {
 
 export interface SiteModel {
   sites: SiteView[];
+  /** Present when the record holds census rows: the discrete, cadence-aware series. */
+  censusSeries?: CensusSeries;
   /** One entry per tier present in the record. Never summed into one figure. */
   tiers: TierView[];
   /** Present only when the record holds census rows. */
@@ -151,8 +175,49 @@ function tierViews(rows: Observation[]): TierView[] {
       for (const o of list) {
         if (o.presence) presence[o.presence.state] += 1;
       }
+      const stamps = list.map((o) => o.checked_at).sort();
+      const succeeded = list.filter((o) => o.outcome === 'success').length;
+      const vantage = [...new Set(list.map((o) => o.method.vantage))].sort().join(', ');
+      const answered =
+        list.length > 0
+          ? figure({
+              value: (100 * succeeded) / list.length,
+              unit: 'percent',
+              tier: (tier === 'broad' ? 'broad' : 'hot') as 'hot' | 'broad',
+              population: new Set(list.map((o) => o.target_id)).size,
+              window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
+              samples: list.length,
+              vantage,
+            })
+          : undefined;
+
+      // The reading is a judgement, so its figures carry the rule that made it.
+      // One denominator for all three: rows that carry a presence at all.
+      const judged = list.filter((o) => o.presence !== undefined);
+      const rules = [...new Set(judged.map((o) => o.presence!.rule))].sort();
+      const presenceFigures =
+        judged.length > 0
+          ? (Object.fromEntries(
+              (['website', 'no_website', 'undetermined'] as const).map((state) => [
+                state,
+                figure({
+                  value: judged.filter((o) => o.presence!.state === state).length,
+                  unit: 'count',
+                  tier: (tier === 'broad' ? 'broad' : 'hot') as 'hot' | 'broad',
+                  population: judged.length,
+                  window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
+                  samples: judged.length,
+                  vantage,
+                  rule: rules.join(', '),
+                }),
+              ]),
+            ) as { website: Figure; no_website: Figure; undetermined: Figure })
+          : undefined;
       return {
         tier,
+        ...(answered ? { answered } : {}),
+        ...(presenceFigures ? { presenceFigures } : {}),
+        ...(stamps.length > 0 ? { latestReading: stamps[stamps.length - 1]! } : {}),
         population: POPULATIONS[tier] ?? 'population not stated in the record',
         observations: list.length,
         domains: new Set(list.map((o) => o.target_id)).size,
@@ -208,6 +273,17 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
   const discarded = new Set(runs.filter((r) => r.all_targets_failed).map((r) => r.run_id));
   const usable = observations.filter((o) => !discarded.has(o.run_id));
 
+  // A row whose vantage is `local` measures a developer machine's network, not
+  // the target (FR-253). Refusing beats filtering: silently dropping it would
+  // hide that development data reached the record at all.
+  const local = usable.find((o) => o.method.vantage === 'local');
+  if (local) {
+    throw new Error(
+      `refusing to build: observation ${local.run_id}/${local.target_id} has vantage "local" — ` +
+        'a local reading is a development artefact, not a measurement of a target',
+    );
+  }
+
   const byTarget = new Map<string, Observation[]>();
   for (const o of usable) {
     const list = byTarget.get(o.target_id);
@@ -228,11 +304,19 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
       .filter((ms): ms is number => typeof ms === 'number')
       .sort((a, b) => a - b);
 
+    const stamps = rows.map((o) => o.checked_at).sort();
     const typical =
       timings.length >= 2
         ? {
-            median_ms: timings[Math.floor(timings.length / 2)]!,
-            readings: timings.length,
+            median: figure({
+              value: timings[Math.floor(timings.length / 2)]!,
+              unit: 'milliseconds' as const,
+              tier: 'hot' as const,
+              population: 1,
+              window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
+              samples: timings.length,
+              vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
+            }),
             fastest_ms: timings[0]!,
             slowest_ms: timings[timings.length - 1]!,
           }
@@ -271,9 +355,31 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
 
   const timestamps = usable.map((o) => o.checked_at).sort();
 
+  const broadRows = usable.filter((o) => o.tier === 'broad');
+  const censusRuns = runs.filter(
+    (r): r is RunRow & { cycle: string; slice: number; frame_digest: string } =>
+      r.tier === 'broad' && r.cycle !== undefined && r.slice !== undefined && r.frame_digest !== undefined,
+  );
+
   return {
     sites,
     tiers: tierViews(usable),
+    ...(broadRows.length > 0
+      ? {
+          censusSeries: censusSeries(
+            broadRows,
+            censusRuns.map((r) => ({
+              tier: 'broad',
+              cycle: r.cycle,
+              slice: r.slice,
+              frame_digest: r.frame_digest,
+              frame_size: r.frame_size ?? 0,
+              slice_size: r.slice_size ?? 0,
+            })),
+            7,
+          ),
+        }
+      : {}),
     ...(usable.some((o) => o.tier === 'broad') ? { census: censusView(usable) } : {}),
     summary: {
       targets: targets.length,

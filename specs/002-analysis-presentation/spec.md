@@ -307,7 +307,10 @@ that naming and a stated route to correction, in one step.
 - **FR-241**: A removal request MUST be honored without argument; the domain
   leaves current views while its existing observations remain readable.
 - **FR-242**: A correction MUST appear as a superseding observation with the
-  original still visible. History is never rewritten.
+  original still visible. History is never rewritten. *(Binds when a correction
+  exists to present: the record has no superseding-observation mechanism yet, so
+  this constrains how corrections will be shown, and nothing implements it in
+  this feature — recorded here rather than left looking covered.)*
 - **FR-243**: The site MUST NOT present a single observation as a characterisation
   of an institution.
 - **FR-244**: The site MUST NOT publish any content identifying an individual —

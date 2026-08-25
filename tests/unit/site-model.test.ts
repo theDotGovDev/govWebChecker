@@ -162,8 +162,8 @@ describe('site model', () => {
       runs: [],
     });
     const typical = model.sites[0]!.typical!;
-    assert.equal(typical.median_ms, 200, 'the outlier must not drag the figure');
-    assert.equal(typical.readings, 3, 'the count it was computed from travels with it');
+    assert.equal(typical.median.value, 200, 'the outlier must not drag the figure');
+    assert.equal(typical.median.samples, 3, 'the count it was computed from travels with it');
   });
 
   test('a lone reading yields no typical figure', () => {
@@ -200,7 +200,7 @@ describe('site model', () => {
       ],
       runs: [],
     });
-    assert.equal(model.sites[0]!.typical!.readings, 2, 'a timeout is not a slow reading');
+    assert.equal(model.sites[0]!.typical!.median.samples, 2, 'a timeout is not a slow reading');
   });
 
   test('an empty record produces an empty model rather than throwing', () => {
@@ -318,5 +318,31 @@ describe('per-tier figures (FR-139, SC-107)', () => {
     const cycle = model.census?.cycles.find((c) => c.cycle === '2026-W34');
     assert.ok(cycle, 'a census cycle must be visible');
     assert.equal(cycle.domains, 3);
+  });
+});
+
+describe('no model function computes across tiers (FR-220)', () => {
+  test('tier views partition rows; no view mixes observations of two tiers', () => {
+    const rows = [
+      observation({ checked_at: '2026-08-03T10:00:00Z' }),
+      observation({
+        checked_at: '2026-08-03T11:00:00Z',
+        target_id: 'town.gov',
+        host: 'town.gov',
+        tier: 'broad',
+        cycle: '2026-W32',
+        slice: 0,
+        presence: { state: 'website', rule: 'presence/1' },
+      } as Partial<Observation>),
+    ];
+    const model = buildSiteModel({ targets: [target('a', 'a.gov')], observations: rows, runs: [] });
+    const tiers = model.tiers.map((t) => t.tier).sort();
+    assert.deepEqual(tiers, ['broad', 'untiered'], 'each row lands in exactly one tier view');
+    for (const t of model.tiers) {
+      assert.equal(t.observations, 1, 'no view absorbed the other tier\u2019s row');
+      if (t.answered) {
+        assert.equal(t.answered.samples, 1, 'a tier figure rests only on its own tier\u2019s readings');
+      }
+    }
   });
 });

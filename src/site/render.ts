@@ -1,4 +1,6 @@
 import type { SiteModel, SiteView, TierView } from './model.js';
+import type { CensusSeries } from './series.js';
+import { formatFigure } from './figure.js';
 
 function escape(text: string): string {
   return text
@@ -43,11 +45,11 @@ function latencyCell(site: SiteView): string {
     const pending = site.latest ? 'not enough readings yet' : 'no measurement';
     return `<td class="num"><span class="nodata">${pending}</span></td>`;
   }
-  return (
-    `<td class="num"><strong>${number(typical.median_ms)} ms</strong>` +
-    `<span class="spread">${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms ` +
-    `over ${number(typical.readings)}</span></td>`
-  );
+  // The spread rides inside the figure's method so no latency token exists
+  // outside a Figure — the output-level guarantee the tests hold.
+  return `<td class="num">${formatFigure(typical.median, {
+    note: `spread ${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms`,
+  })}</td>`;
 }
 
 function row(site: SiteView): string {
@@ -88,28 +90,83 @@ ${latencyCell(site)}
  * (SC-107).
  */
 function tierPanel(tier: TierView): string {
-  const measured = tier.presence.website + tier.presence.no_website + tier.presence.undetermined;
-  const presence =
-    measured > 0
-      ? `<p>
-        Of ${number(measured)} domains where we established what is published:
-        <strong>${number(tier.presence.website)}</strong> have a website,
-        <strong>${number(tier.presence.no_website)}</strong> publish no web address at all, and
-        <strong>${number(tier.presence.undetermined)}</strong> we could not determine.
+  const pf = tier.presenceFigures;
+  const presence = pf
+    ? `<p>
+        Of what is published at each domain we judged:
+        have a website ${formatFigure(pf.website)},
+        publish no web address at all ${formatFigure(pf.no_website)},
+        and we could not determine ${formatFigure(pf.undetermined)}.
         A domain that publishes no website is not a broken website, and this page
-        never counts it as one.
+        never counts it as one. Where the determination is ours to make, the rule
+        that made it is named beside the number.
       </p>`
-      : '';
+    : '';
 
+  // FR-223: what a tier CANNOT answer travels with its figures. The limits are
+  // structural — cadence and population — so they are stated per tier, not once
+  // in a footnote a reader has to connect back.
+  const limits: Record<string, string> = {
+    hot: 'An hourly reading of these hosts says nothing about the other sixteen thousand registered .gov domains.',
+    broad:
+      'A weekly reading cannot see a short interruption — a site down for thirty minutes between visits looks identical to one that never blinked. That question belongs to the hourly tier.',
+    untiered: 'These rows predate the record distinguishing tiers, and are shown for completeness.',
+  };
   return `<div class="panel">
   <h3>${escape(tier.tier === 'hot' ? 'Hourly tier' : tier.tier === 'broad' ? 'Census tier' : 'Earlier observations')}</h3>
   <p><strong>Population:</strong> ${escape(tier.population)}.</p>
+  <p><strong>What this tier cannot answer:</strong> ${escape(limits[tier.tier] ?? 'Not stated in the record.')}</p>
+  ${tier.answered ? `<p><strong>Answered:</strong> ${formatFigure(tier.answered)}</p>` : ''}
   <p>
     ${number(tier.domains)} domains, ${number(tier.observations)} observations,
     ${number(tier.responded)} of which got a successful response.
+    ${tier.latestReading ? `Latest reading ${escape(tier.latestReading.slice(0, 16).replace('T', ' '))} UTC.` : ''}
   </p>
   ${presence}
 </div>`;
+}
+
+
+/**
+ * The census over time: one mark per cycle, and deliberately nothing drawn
+ * between them. A weekly reading is a sample; a line between two samples
+ * asserts knowledge of the six days between, which is absence rendered as data
+ * (FR-230). So this is a list of marks, not a chart with a path — a restyle
+ * cannot bring the line back, because no path exists to restyle.
+ */
+function censusSeriesSection(series: CensusSeries): string {
+  const marks = series.marks
+    .map((m) => {
+      const status = m.complete
+        ? 'complete cycle'
+        : `in progress — ${m.slicesRan} of ${m.slicesInFrame} slices have run`;
+      const frameNote = m.frameChanged
+        ? `<p class="notable">The frame changed mid-cycle (the registry changed underneath it), so these
+           slices did not all sweep one frame and this cycle's coverage is not one claim.</p>`
+        : '';
+      return `<div class="mark panel">
+  <h3>${escape(m.cycle)} <span class="spread">${escape(status)}</span></h3>
+  <p>
+    Judged ${number(m.domains)} ${m.domains === 1 ? 'domain' : 'domains'}:
+    have a website ${formatFigure(m.presence.website)},
+    no web address ${formatFigure(m.presence.no_website)},
+    could not determine ${formatFigure(m.presence.undetermined)}.
+  </p>
+  ${frameNote}
+</div>`;
+    })
+    .join('\n');
+
+  return `<section class="census-series">
+<h2>The census over time</h2>
+<p class="tagline">
+  One reading per cycle. Nothing is drawn between cycles, because nothing was
+  measured between them — a weekly census cannot say what happened on the days
+  it did not look. An in-progress cycle covers fewer domains, so its counts are
+  not comparable to a complete one and are never presented as a movement.
+</p>
+${marks}
+</section>`;
 }
 
 export function renderSite(model: SiteModel, generatedAt: string): string {
@@ -198,6 +255,7 @@ export function renderSite(model: SiteModel, generatedAt: string): string {
 </p>
 
 ${model.tiers.map(tierPanel).join('\n')}
+${model.censusSeries ? censusSeriesSection(model.censusSeries) : ''}
 ${
   model.census
     ? `<div class="panel">
@@ -281,6 +339,8 @@ ${model.sites.map(row).join('\n')}
     Checks run from a shared cloud server in a data centre${
       summary.vantages.length > 0 ? ` (${escape(summary.vantages.join(', '))})` : ''
     }.
+    Every figure on this page therefore measures the <strong>network path</strong>
+    from that vantage to the site — never a property of the site alone.
     Many of these sites sit behind content delivery networks, so what we time is
     largely the nearest cache rather than the site itself. These numbers are
     useful for spotting large changes and clear outliers. They are
@@ -341,7 +401,11 @@ ${model.sites.map(row).join('\n')}
     — ${number(summary.withData)} with measurements, ${number(summary.withoutData)} awaiting a first check.
   </p>
   <p>
-    <a href="https://github.com/theDotGovDev/govWebChecker">Source, raw data, and methodology on GitHub</a>.
+    <a href="https://github.com/theDotGovDev/govWebChecker">Source and methodology on GitHub</a>.
+    The record behind every figure is published at
+    <a href="https://github.com/theDotGovDev/govWebChecker/tree/main/data/availability">data/availability</a>,
+    and <code>npm run verify</code> proves its guarantees from the record alone —
+    the same check anyone can run without trusting this page.
     Not affiliated with any agency measured.
   </p>
 </footer>

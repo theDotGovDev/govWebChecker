@@ -44,3 +44,19 @@ listing in seven will have nothing to report but our own failure.
 
 The census schedule is disabled, so the census views specified here will show one
 cycle until collection resumes. That constrains demonstration, not design.
+
+## Plan review (2026-08-24)
+
+Plan, research, data model, contract and quickstart are written. Two things from
+planning are worth carrying into review:
+
+- **R7 was found in the live record, not anticipated by the spec.** Three hosts
+  carry two `target_id`s each, so keying a listing on `target_id` would split
+  `www.irs.gov` across two pages, each stating half its sample count. The listing
+  is keyed on host. This is the kind of thing that would have been discovered
+  after rendering 16,535 pages.
+
+- **FR-243 cannot be enforced by a type.** "Do not present a single observation
+  as a characterisation of an institution" is a judgement about wording, covered
+  by a template and by review. The plan says so rather than implying the test
+  suite covers it.
