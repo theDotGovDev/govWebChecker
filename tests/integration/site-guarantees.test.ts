@@ -1,7 +1,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { buildSiteModel } from '../../src/site/model.js';
 import { renderSite } from '../../src/site/render.js';
+import { writePages } from '../../src/site/pages.js';
+import { sliceOf } from '../../src/census/slice.js';
+import type { Frame } from '../../src/census/frame.js';
 import type { Observation } from '../../src/record/types.js';
 import type { Target } from '../../src/targets/load.js';
 
@@ -330,5 +336,67 @@ describe('change over time is drawn at its cadence (FR-230 to FR-233, SC-207)', 
     const prose = body(html).replace(/\s+/g, ' ');
     assert.match(prose, /frame changed|registry changed/i,
       'slices against two digests are not one coverage claim');
+  });
+});
+
+describe('every site the record knows has a listing (FR-245, FR-247, FR-248, SC-209)', () => {
+  function frameOf(domains: string[]): Frame {
+    return {
+      source: 'test',
+      retrieved_at: '2026-08-22T00:00:00Z',
+      digest: 'sha256:test',
+      domains: domains.map((domain) => ({
+        domain, type: 'City', organization: 'Test', suborganization: '', city: '', state: '',
+        slice: sliceOf(domain),
+      })),
+    };
+  }
+
+  test('the built tree carries one listing per site, none for the excluded, and each carries its obligations', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gwc-pages-'));
+    try {
+      const rows = [...fixtureRows(), ...censusFixture()];
+      const frame = frameOf(['works.gov', 'broken.gov', 'mailonly.gov', 'unknown.gov', 'notyet.gov']);
+      const written = await writePages({
+        model: buildSiteModel({
+          targets: [target('www.example.gov', 'www-example-gov')],
+          observations: rows,
+          runs: [],
+        }),
+        observations: rows,
+        frame,
+        outDir: dir,
+        generatedAt: '2026-08-24 17:00 UTC',
+        excluded: ['unknown.gov'],
+      });
+
+      // One listing per site the record knows, minus the excluded one.
+      for (const host of ['www.example.gov', 'works.gov', 'broken.gov', 'mailonly.gov']) {
+        const page = await fs.readFile(path.join(dir, 'sites', `${host}.html`), 'utf8');
+        assert.match(page, /correct|remove/i, `${host}: correction route (FR-240)`);
+        assert.match(page, /hourly|weekly/i, `${host}: cadence stated (FR-247)`);
+        assert.match(page, /\d{4}-\d{2}-\d{2}/, `${host}: last-checked stated (FR-247)`);
+      }
+      await assert.rejects(
+        () => fs.readFile(path.join(dir, 'sites', 'unknown.gov.html'), 'utf8'),
+        'an excluded domain leaves current views; its rows stay in the record (FR-248)',
+      );
+
+      // Domain groups exist for the registered names.
+      const group = await fs.readFile(path.join(dir, 'domains', 'works.gov.html'), 'utf8');
+      assert.match(group, /1 site checked/);
+
+      assert.ok(written.listings >= 4);
+      assert.equal(written.excluded, 1);
+
+      // D2: a frame domain the census has not reached yet is still reachable —
+      // as "not yet checked", asserting nothing the record does not contain
+      // (FR-249). Absence of a page would itself be a statement.
+      const pending = await fs.readFile(path.join(dir, 'sites', 'notyet.gov.html'), 'utf8');
+      assert.match(pending, /not (yet )?been checked|not yet checked/i);
+      assert.doesNotMatch(pending.replace(/<style>[\s\S]*?<\/style>/, ''), /down|broken|failing/i);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });

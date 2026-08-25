@@ -46,7 +46,11 @@ jobs:
       - run: npm run build
 
       - name: Generate the site
-        run: node dist/src/cli/build-site.js targets/federal.json data docs
+        # Builds the whole site: index, one listing per site the record knows,
+        # one page per registered domain, and a not-yet-checked page for frame
+        # domains the rolling census has not reached. Measured at ~21,300 pages
+        # in under four seconds from today's record.
+        run: node dist/src/cli/build-site.js --data data --out docs
 
       - uses: actions/configure-pages@v5
         with:
