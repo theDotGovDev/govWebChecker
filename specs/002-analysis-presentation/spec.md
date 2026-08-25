@@ -357,6 +357,21 @@ Settles Q2 as option A.
 - **FR-249**: A listing MUST NOT assert anything the record does not contain. A
   domain checked once carries one reading, presented as one reading.
 
+### Assets and tooling (D4)
+
+- **FR-270**: The published site MUST make no request to any third-party origin.
+  Every asset — styles, scripts, fonts, images, icons — is served from the
+  site's own origin or inlined. Links *to* other sites (the measured site, the
+  repository) are of course permitted; it is assets, which a visitor's browser
+  fetches automatically, that never leave the origin.
+- **FR-271**: Every page MUST be fully readable and usable without script:
+  content, figures and their methods, and disclosure controls all work from the
+  HTML alone. Script, where used, is enhancement — never the only path to a
+  reading.
+- **FR-272**: Any tooling may be used to build the site, chosen for the
+  reader's experience — so long as the output satisfies FR-270 and FR-271 and
+  the build sends no request to any measurement target (FR-250).
+
 ### Building and publishing
 
 - **FR-250**: The site MUST be generated from the stored record and MUST send no
@@ -426,9 +441,9 @@ Settles Q2 as option A.
 - Availability is the only dimension with data. Performance, accessibility and
   technology findings (`001` FR-018, FR-018a) are anticipated by the structure
   but not presented, because nothing collects them yet.
-- The site remains statically generated into `docs/` and published by
-  `pages.yml`, per the existing project rule; no site generator or framework is
-  introduced.
+- The site is statically generated into `docs/` and published by `pages.yml`.
+  Build tooling is a free choice under D4 (FR-272); the current generator is
+  plain TypeScript because nothing yet needs more.
 - Readers arrive without context. Nothing assumes familiarity with the tiers, the
   census, or what a `.gov` domain is.
 - The audience is public: residents, journalists, researchers, and operators at
@@ -542,6 +557,28 @@ establishes which are real by measurement. This feature presents whatever that
 frame yields, and FR-245b is what keeps it honest in the meantime — while local
 government is covered one host deep and federal many, a domain page says which of
 its sites were checked rather than implying the rest were.
+
+### D4 — Self-hosted assets; tooling free; no third-party requests
+
+Surfaced when the owner asked why the site could not use a CDN — and the trace
+found the constraint lived only in a test, never in any spec. A rule enforced in
+CI but stated nowhere is the mirror image of a rule stated but untested, and
+this project has been burned by both.
+
+**Decided by the owner**: use whatever tooling best serves the reader, with
+self-hosted assets preferred for privacy, performance, and reliability. So:
+
+- No third-party requests, ever (FR-270). A visitor checking on government
+  websites should not have their visit shipped to a CDN operator as a side
+  effect; a page about performance should not be slowed by someone else's
+  outage; and no third party gets a supply-chain position over what the numbers
+  say.
+- Assets are welcome — fonts, images, script — served from the site's own
+  origin or inlined. "No CDN" never meant "no assets".
+- Script is progressive enhancement only (FR-271), so the page stays readable
+  in archives, with script blocked, and by the strictest assistive tooling.
+- The old blanket no-script test is replaced by tests of the actual rule: no
+  asset from a third-party origin, and every reading present in the HTML.
 
 ## Constitution Check
 

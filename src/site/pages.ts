@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Observation } from '../record/types.js';
 import type { Frame } from '../census/frame.js';
 import type { SiteModel } from './model.js';
-import { renderSite } from './render.js';
+import { renderSite, sharedCss } from './render.js';
 import {
   listings,
   domainGroups,
@@ -32,7 +32,7 @@ export interface WrittenPages {
   excluded: number;
 }
 
-/** A minimal page shell for a listing or group — same self-contained rules as the index. */
+/** The shell every listing and domain page shares — same tokens as the index. */
 function shell(title: string, body: string, generatedAt: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -40,24 +40,22 @@ function shell(title: string, body: string, generatedAt: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} — govWebChecker</title>
-<style>
-  body { margin: 0 auto; max-width: 46rem; padding: 2rem 1.25rem 4rem;
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-  h1 { font-size: 1.5rem; }
+<style>${sharedCss()}
+  .wrap { max-width: 46rem; }
+  article h1 { overflow-wrap: anywhere; }
   .lead { font-size: 1.05rem; }
-  .method, .spread, .correction { color: #5b6770; font-size: .85rem; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #14171a; color: #e8ebed; }
-    .method, .spread, .correction { color: #a3adb5; }
-    a { color: #8ab4f8; }
-  }
+  .correction { color: var(--muted); font-size: .85rem; border-top: 1px dashed var(--line);
+    margin-top: 1.5rem; padding-top: .75rem; }
+  .back { display: inline-block; margin: 1.25rem 0 .5rem; }
 </style>
 </head>
 <body>
-<p><a href="../index.html">← All measurements</a></p>
+<div class="wrap">
+<p><a class="back" href="../index.html">← All measurements</a></p>
 ${body}
-<footer><p class="method">Generated ${generatedAt}. Every reading here is in the
+<footer><p class="spread">Generated ${generatedAt}. Every reading here is in the
 published record, and the record is the authority — not this page.</p></footer>
+</div>
 </body>
 </html>
 `;
@@ -101,6 +99,7 @@ export async function writePages(input: WritePagesInput): Promise<WrittenPages> 
   // that the rolling cycle has not arrived, because a missing page would itself
   // read as a statement about the jurisdiction.
   const known = new Set(current.map((l) => l.host));
+  const pendingHosts: string[] = [];
   let pending = 0;
   for (const entry of input.frame?.domains ?? []) {
     if (known.has(entry.domain) || excluded.has(entry.domain)) continue;
@@ -118,9 +117,15 @@ about ${entry.domain} — there are no readings to state.</p>`,
       ),
       'utf8',
     );
+    pendingHosts.push(entry.domain);
     pending += 1;
     written += 1;
   }
+
+  // The lookup index: every host that has a page, as one self-hosted JSON
+  // asset the search script fetches on first use (FR-270 — same origin only).
+  const lookup: string[] = [...current.map((l) => l.host), ...pendingHosts].sort();
+  await fs.writeFile(path.join(outDir, 'sites', 'index.json'), JSON.stringify(lookup), 'utf8');
 
   const groups = domainGroups(current);
   for (const g of groups) {

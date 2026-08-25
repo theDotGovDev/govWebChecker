@@ -389,6 +389,14 @@ describe('every site the record knows has a listing (FR-245, FR-247, FR-248, SC-
       assert.ok(written.listings >= 4);
       assert.equal(written.excluded, 1);
 
+      // The lookup's index is a self-hosted asset naming every page that exists
+      // — checked and pending alike — and nothing else.
+      const lookup = JSON.parse(await fs.readFile(path.join(dir, 'sites', 'index.json'), 'utf8'));
+      for (const host of ['www.example.gov', 'works.gov', 'notyet.gov']) {
+        assert.ok(lookup.includes(host), `lookup must find ${host}`);
+      }
+      assert.ok(!lookup.includes('unknown.gov'), 'an excluded domain is not offered by search');
+
       // D2: a frame domain the census has not reached yet is still reachable —
       // as "not yet checked", asserting nothing the record does not contain
       // (FR-249). Absence of a page would itself be a statement.
@@ -398,5 +406,64 @@ describe('every site the record knows has a listing (FR-245, FR-247, FR-248, SC-
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('the page works on a phone and layers its depth (mobile + progressive disclosure)', () => {
+  test('wide content scrolls in its own container; the page never scrolls sideways', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    // Every <table> sits inside a .scroll container.
+    const tables = (body(html).match(/<table>/g) ?? []).length;
+    const scrolls = (body(html).match(/class="scroll"/g) ?? []).length;
+    assert.ok(tables > 0);
+    assert.ok(scrolls >= tables, `${tables} tables need ${tables} scroll containers, found ${scrolls}`);
+    assert.match(html, /name="viewport" content="width=device-width/);
+  });
+
+  test('the presence bar renders as labeled segments, and color is never the only channel', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    const viz = html.match(/<figure class="presence-viz"[\s\S]*?<\/figure>/g) ?? [];
+    assert.ok(viz.length > 0, 'the part-to-whole visualization must exist when presence does');
+    for (const v of viz) {
+      const segs = (v.match(/<rect/g) ?? []).length;
+      const keys = (v.match(/class="key"/g) ?? []).length;
+      assert.equal(keys, segs, 'every drawn segment carries a text label with its count');
+      assert.match(v, /aria-labelledby/, 'the figure is named for assistive tech');
+      assert.doesNotMatch(v, /%/, 'segment labels are counts; a rate belongs to a Figure');
+    }
+  });
+
+  test('technical depth is one disclosure away, and the plain reading needs no disclosure', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    assert.match(html, /<details class="depth">/, 'per-tier detail sits behind a disclosure');
+    // The plain-language essentials are NOT inside <details>: a non-technical
+    // reader gets them without interacting.
+    const outside = body(html).replace(/<details[\s\S]*?<\/details>/g, '');
+    assert.match(outside, /Absence is not failure/);
+    assert.match(outside, /have a website/i);
+  });
+
+  test('icons are decorative and every asset stays on-origin (FR-270, FR-271)', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    const svgs = html.match(/<svg[^>]*class="(icon|logo)"[^>]*>/g) ?? [];
+    assert.ok(svgs.length > 0, 'the page carries its icons inline');
+    for (const tag of svgs) {
+      assert.match(tag, /aria-hidden="true"/, 'icons never carry meaning the words do not');
+    }
+    // Script is welcome as enhancement (D4) — but only inline or same-origin,
+    // and never load-bearing: the lookup panel is hidden until script runs, so
+    // a reader without it sees the noscript route rather than a dead control.
+    for (const tag of html.match(/<script[^>]*>/gi) ?? []) {
+      assert.doesNotMatch(tag, /src\s*=\s*"(https?:)?\/\//i, `off-origin script: ${tag}`);
+    }
+    assert.doesNotMatch(html, /fetch\(\s*["'](https?:)?\/\//i, 'script must fetch same-origin only');
+    assert.match(html, /data-lookup hidden/, 'enhanced UI is hidden until the enhancement exists');
+    assert.match(html, /<noscript>/, 'the no-script reader gets a stated route, not silence');
+  });
+
+  test('every host named in the table links to its own listing (FR-240)', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    assert.match(html, /href="sites\/www\.example\.gov\.html"/,
+      'the naming surface links the page where readings and the correction route live');
   });
 });
