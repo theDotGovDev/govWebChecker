@@ -55,12 +55,26 @@ tell a courteous monitor from an attack unless the traffic says who it is.
   not an incident, and not a bug in this code until this code has been ruled out.
 - Recorded observations are immutable. A correction is a new observation that
   supersedes the old one; history is never rewritten to look tidier.
-- Store measurements — timings, status codes, metadata — not fetched page bodies.
-  Page content is transient, potentially large, and not ours to archive.
+- Store measurements — timings, status codes, metadata, and the findings derived
+  from a page — not the page itself. A wholesale copy of someone's site is not
+  ours to archive; a dated measurement of it, including how it rendered, is.
 - A check MAY analyze a page in memory while it runs — that is how accessibility,
-  layout, and technology findings are produced. What it MUST NOT do is persist the
-  body, its subresources, or a screenshot. Findings derived from content are
-  stored; the content itself is discarded when the check ends.
+  layout, and technology findings are produced. Findings derived from content are
+  stored; the page body and its subresources are discarded when the check ends.
+- A check MAY retain a **rendered view** of a public page — a screenshot at a
+  stated viewport — because what a visitor actually sees is itself a measurement,
+  and is often the only intelligible evidence for a finding about layout or
+  mobile usability. Retention is bounded, and the bounds are the principle:
+  - **Latest only.** One view per page per device profile. A view is evidence of
+    a current state, never an archive of a site's history.
+  - **Bounded population.** Only pages under deep quality checking, never the
+    full census — the storage cost of tens of thousands of pages would swamp the
+    record that is this project's actual product.
+  - **Public surface only**, per Principle II. Honoring a removal request means
+    deleting the views, not merely unlinking them.
+  - **Stated, not implied.** A view carries its device profile, viewport and
+    capture time, and is presented as one moment rather than as the site's
+    settled condition.
 
 **Rationale:** The value of this project is a truthful record over time. A record
 that gets edited when it looks wrong, or that discards failures as noise, answers
@@ -121,4 +135,22 @@ principle, MINOR for adding one, PATCH for clarifications that do not change wha
 is allowed. Compliance is reviewed at pull request time; a violating change is
 either revised or accompanied by an explicit, recorded justification.
 
-**Version**: 1.0.1 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-07-31
+**Version**: 2.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-25
+
+**2.0.0** — Principle IV previously prohibited persisting a screenshot outright.
+That clause was written at project setup, in the same breath as the sentence
+anticipating "accessibility, layout, and technology findings", and its stated
+reasons were that page content is *transient, potentially large, and not ours to
+archive*.
+
+Two of the three do not survive scrutiny for a rendered view. Transience is the
+argument *for* capturing a dated one, not against it. And a single current view
+is evidence, not an archive. The third — size — is real, and survives as a bound
+rather than a ban: latest-only, deep-checked pages only. The privacy instinct
+behind "not ours" survives too, as the public-surface limit and a
+deletion-on-request duty.
+
+The prohibition also cost this project the most legible evidence it can offer. "This
+site is unusable on a phone" is a claim a reader must take on trust; a picture at a
+stated viewport is a claim they can check for themselves — which is what Principle V
+asks of every figure the project publishes.

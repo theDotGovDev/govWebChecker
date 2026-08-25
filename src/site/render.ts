@@ -1,6 +1,7 @@
 import type { SiteModel, SiteView, TierView, TrendChart, EcosystemView, AgencyView } from './model.js';
 import type { CensusSeries, CensusMark } from './series.js';
 import { formatFigure, type Figure } from './figure.js';
+import { interpret } from './interpret.js';
 
 function escape(text: string): string {
   return text
@@ -372,9 +373,14 @@ function latencyCell(site: SiteView): string {
     const pending = site.latest ? 'not enough readings yet' : 'no measurement';
     return `<td class="num"><span class="nodata">${pending}</span></td>`;
   }
-  // The spread rides inside the figure's method so no latency token exists
-  // outside a Figure — the output-level guarantee the tests hold.
-  return `<td class="num">${formatFigure(typical.median, {
+  // The band leads, the number follows. "482 ms" is not information for most
+  // readers; "Slow — 482 ms" is, and the threshold that decided it rides in the
+  // title so the reading is checkable rather than asserted (FR-301 to FR-303).
+  const reading = interpret(typical.median, 'server_response');
+  const badge = reading
+    ? `<span class="band band--${reading.band}" title="${escape(reading.what)}: ${escape(reading.threshold)}. ${escape(reading.source)}">${escape(reading.label)}</span> `
+    : '';
+  return `<td class="num">${badge}${formatFigure(typical.median, {
     note: `spread ${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms`,
   })}</td>`;
 }
@@ -404,7 +410,7 @@ export function sharedCss(): string {
     color-scheme: light;
     --ink: #16191c; --muted: #5b6770; --line: #d6dbdf; --bg: #fcfcfb;
     --panel: #f4f6f7; --ok: #1a7f4b; --notable: #a8500a; --link: #1a4480;
-    --accent: #1a4480;
+    --accent: #1a4480; --poor: #b3261e;
     --viz-website: #2a78d6; --viz-none: #eb6834; --viz-unknown: #8a8886;
   }
   @media (prefers-color-scheme: dark) {
@@ -412,7 +418,7 @@ export function sharedCss(): string {
       color-scheme: dark;
       --ink: #e8ebed; --muted: #a3adb5; --line: #333a40; --bg: #14171a;
       --panel: #1c2126; --ok: #5ec98d; --notable: #e5a35c; --link: #8ab4f8;
-      --accent: #3987e5;
+      --accent: #3987e5; --poor: #f2a099;
       --viz-website: #3987e5; --viz-none: #d95926; --viz-unknown: #9a988f;
     }
   }
@@ -501,6 +507,11 @@ export function sharedCss(): string {
   .day-full, .day-part { fill: var(--viz-website); }
   .day-none { fill: var(--viz-none); }
   .day-gap { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .band { display: inline-block; font-size: .74rem; font-weight: 650; letter-spacing: .01em;
+    padding: .1rem .42rem; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
+  .band--good { color: var(--ok); }
+  .band--fair { color: var(--notable); }
+  .band--poor { color: var(--poor); }
   details.standalone { margin: 1rem 0; border-top: 0; padding-top: 0; }
   @media (max-width: 560px) {
     .eco-row { grid-template-columns: 1fr auto; }

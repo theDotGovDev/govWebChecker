@@ -92,6 +92,10 @@ function body(html: string): string {
 function outsideFigures(html: string): string {
   return body(html)
     .replace(/<figure class="chart"[\s\S]*?<\/figure>/g, '')
+    // A band's tooltip states the published THRESHOLD that decided it — a cited
+    // constant, not a measurement of ours. Exempt only because the assertion
+    // below proves every band carries its threshold and its source.
+    .replace(/<span class="band band--[a-z]+"[^>]*>[\s\S]*?<\/span>/g, '')
     .replace(/<span class="(?:figure|absence)">[\s\S]*?<\/span><\/span>/g, '');
 }
 
@@ -575,6 +579,31 @@ describe('the ecosystem view (D5, FR-280 to FR-286)', () => {
         /\btiers?\b|\bslices?\b|\bcycles?\b/i,
         `a reader should never need our machinery's vocabulary to navigate: ${text.trim().slice(0, 80)}`,
       );
+    }
+  });
+});
+
+describe('a measurement is published with what it means (FR-301 to FR-303)', () => {
+  test('every band states its threshold and cites a source — the exemption the stripper relies on', () => {
+    const html = render(fixtureRows());
+    const bands = body(html).match(/<span class="band band--[a-z]+"[^>]*>[\s\S]*?<\/span>/g) ?? [];
+    assert.ok(bands.length > 0, 'response times must be interpreted, not left as raw units');
+    for (const b of bands) {
+      const title = b.match(/title="([^"]*)"/)?.[1] ?? '';
+      assert.match(title, /\d/, `a band must state the threshold that decided it: ${b}`);
+      assert.match(title, /web\.dev|Google/i, `a band must cite where its threshold came from: ${b}`);
+    }
+  });
+
+  test('the band never replaces the measurement it interprets (FR-303)', () => {
+    const html = body(render(fixtureRows()));
+    // Wherever a band appears, the exact figure appears in the same cell.
+    const cells = html.match(/<td class="num">[\s\S]*?<\/td>/g) ?? [];
+    const banded = cells.filter((c) => /class="band/.test(c));
+    assert.ok(banded.length > 0);
+    for (const c of banded) {
+      assert.match(c, /class="figure"/, `a band must sit beside its figure, never instead of it: ${c}`);
+      assert.match(c, /class="method"/, 'and the full method stays with it');
     }
   });
 });
