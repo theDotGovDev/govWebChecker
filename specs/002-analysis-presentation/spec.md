@@ -11,6 +11,36 @@ them.
 
 ---
 
+## Design intention
+
+**The site exists to give a visitor an understanding of how government websites
+are behaving — qualitative first, quantitative behind it, raw data last.**
+
+The page is organized around the reader's questions, never around this
+project's collection machinery:
+
+1. **Is government online right now?** — the current picture, at a glance.
+2. **What does the .gov world look like?** — the ecosystem: how much of
+   American government has a web presence, and how that differs across kinds of
+   government (federal agencies, cities, counties, school districts).
+3. **How is it changing?** — time, drawn at each dataset's honest cadence.
+4. **How do sites and agencies compare, and how does *mine* look?** — drill-down
+   from aggregate visualization to per-agency and per-site views, and only then
+   to raw data.
+
+The hourly/weekly split, the tier names, slices, cycles — these are
+implementation details of *how the data was gathered*. They are never the page's
+structure and never vocabulary a reader must learn to proceed. They live where
+method belongs: in the caption every figure carries, and in the methodology
+disclosures. The substance of tier separation is untouched — no figure is ever
+computed across the two populations (FR-220) — but the reader meets populations
+("the busiest federal sites", "every registered .gov domain"), not tiers.
+
+Comprehensive visualization is the default presentation. A number appears as a
+chart, composition, or tile wherever a visual form carries it better than prose;
+prose explains what the visual means; the full method rides with every figure;
+and tables of raw readings sit at the end of the drill-down, not the front.
+
 ## Scope Boundary
 
 `001` and `003` collect and store. This feature reads what they stored and
@@ -357,6 +387,36 @@ Settles Q2 as option A.
 - **FR-249**: A listing MUST NOT assert anything the record does not contain. A
   domain checked once carries one reading, presented as one reading.
 
+### The ecosystem, visualized (D5)
+
+- **FR-280**: The page MUST lead with visual, plain-language answers to the
+  reader's questions — current state, ecosystem composition, change over time —
+  before any table of readings. Raw data is the end of a drill-down, never the
+  landing.
+- **FR-281**: A chart is a Figure at a different size: it MUST carry the same
+  method a figure does — population, window, readings, vantage — as its caption,
+  and a chart that cannot state its method fails the build exactly as a bare
+  number does (FR-251). Within a captioned chart, data points and axis marks are
+  parts of that one figure.
+- **FR-282**: The ecosystem view MUST show presence composition across kinds of
+  government (the registry's own types: federal branches, cities, counties,
+  school districts, …), so a reader sees the shape of the whole, not only its
+  total. The three presence states remain three (FR-210) in every breakdown.
+- **FR-283**: Change over time MUST be drawn at each dataset's honest cadence:
+  hourly monitoring may draw a connected daily line, because the sampling is
+  near-continuous at that grain; census readings remain discrete marks
+  (FR-230). No visual form may imply knowledge between readings that does not
+  exist.
+- **FR-284**: Agencies MUST be comparable on the one stated measure, with the
+  no-rate carve-out intact (FR-261): an agency whose sites all decline
+  automation has no rate, stated as such, and appears in no ordering.
+- **FR-285**: Per-site pages MUST show the site's own history visually — its
+  recent readings over time — before its raw numbers, with the same honest
+  cadence rules.
+- **FR-286**: Collection vocabulary (tier, slice, cycle) MUST NOT appear in
+  page structure — headings, navigation, section framing. It MAY appear where
+  method belongs: figure captions and methodology disclosures.
+
 ### Assets and tooling (D4)
 
 - **FR-270**: The published site MUST make no request to any third-party origin.
@@ -579,6 +639,24 @@ self-hosted assets preferred for privacy, performance, and reliability. So:
   in archives, with script blocked, and by the strictest assistive tooling.
 - The old blanket no-script test is replaced by tests of the actual rule: no
   asset from a third-party origin, and every reading present in the HTML.
+
+### D5 — Organize by reader questions; visualize the ecosystem; demote the tiers
+
+**Decided by the owner**: the hourly/weekly distinction is an implementation
+detail, not relevant to the sites themselves. The site's goal is a qualitative
+and quantitative understanding of the whole ecosystem, conveyed through
+comprehensive visualization, with drill-down to specifics and raw data behind.
+
+What this changes: the page's structure, vocabulary, and the default form of
+every number (visual first). What this deliberately does not change: no figure
+is computed across the two populations (FR-220 stands — blending an hourly
+reading of 58 curated federal hosts into a weekly census of 16,535 mostly
+municipal domains would produce a number describing neither); every figure's
+method still names how it was measured; and the honest-cadence rule survives in
+visual form — a census is marks, never a line (FR-230, FR-283).
+
+The reconciliation is altitude, not compromise: populations are real and stay
+separate; *tiers* are our name for the machinery and the reader never needs it.
 
 ## Constitution Check
 

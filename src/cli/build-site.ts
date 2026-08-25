@@ -58,6 +58,7 @@ export async function buildSite(options: BuildOptions): Promise<WrittenPages> {
     targets: parseTargets(await fs.readFile(options.targets, 'utf8')),
     observations,
     runs,
+    ...(frame ? { frame } : {}),
   });
 
   return writePages({

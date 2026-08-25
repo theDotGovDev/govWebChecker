@@ -17,12 +17,12 @@ import type { Target } from '../../src/targets/load.js';
  * bypassed by a template literal; one checked at the output cannot.
  */
 
-function target(host: string, id: string): Target {
+function target(host: string, id: string, agency = 'Test Agency'): Target {
   return {
     id,
     host,
     url: `https://${host}/`,
-    agency: 'Test Agency',
+    agency,
     added: '2026-08-01',
     reason: 'test',
     traffic_evidence: { source: 'test', measured_at: '2026-08-01', visits: 1000 },
@@ -83,9 +83,16 @@ function body(html: string): string {
   return html.replace(/<style>[\s\S]*?<\/style>/, '');
 }
 
-/** The body with every Figure-produced fragment removed. What remains must publish no quantity. */
+/**
+ * The body with every Figure-produced fragment removed — spans and captioned
+ * charts alike (FR-281: a chart is a figure at a different size). A chart block
+ * is only exempt because a separate assertion below proves every chart carries
+ * its method caption; strip without that check and the guarantee is a hole.
+ */
 function outsideFigures(html: string): string {
-  return body(html).replace(/<span class="(?:figure|absence)">[\s\S]*?<\/span><\/span>/g, '');
+  return body(html)
+    .replace(/<figure class="chart"[\s\S]*?<\/figure>/g, '')
+    .replace(/<span class="(?:figure|absence)">[\s\S]*?<\/span><\/span>/g, '');
 }
 
 describe('every published quantity carries its method (FR-201, FR-251, SC-201)', () => {
@@ -325,7 +332,7 @@ describe('change over time is drawn at its cadence (FR-230 to FR-233, SC-207)', 
     const html = render([...fixtureRows(), ...twoCycles()], undefined, censusRuns());
     const prose = body(html).replace(/\s+/g, ' ');
     assert.match(prose, /2026-W35[\s\S]{0,200}?in progress/i);
-    assert.match(prose, /1 of 7 slices/i, 'how much of the cycle has run must be stated');
+    assert.match(prose, /1 of 7 daily passes/i, 'how much of the week has run must be stated');
   });
 
   test('a mid-cycle frame change is disclosed where the trend is shown (FR-232)', () => {
@@ -465,5 +472,109 @@ describe('the page works on a phone and layers its depth (mobile + progressive d
     const html = render([...fixtureRows(), ...censusFixture()]);
     assert.match(html, /href="sites\/www\.example\.gov\.html"/,
       'the naming surface links the page where readings and the correction route live');
+  });
+});
+
+describe('the ecosystem view (D5, FR-280 to FR-286)', () => {
+  function frameWithTypes(): import('../../src/census/frame.js').Frame {
+    return {
+      source: 'test',
+      retrieved_at: '2026-08-22T00:00:00Z',
+      digest: 'sha256:test',
+      domains: [
+        { domain: 'works.gov', type: 'City', organization: 'T', suborganization: '', city: '', state: '', slice: 0 },
+        { domain: 'broken.gov', type: 'County', organization: 'T', suborganization: '', city: '', state: '', slice: 0 },
+        { domain: 'mailonly.gov', type: 'City - Election', organization: 'T', suborganization: '', city: '', state: '', slice: 0 },
+        { domain: 'unknown.gov', type: 'School district', organization: 'T', suborganization: '', city: '', state: '', slice: 0 },
+      ],
+    };
+  }
+
+  function fullModel(): ReturnType<typeof buildSiteModel> {
+    return buildSiteModel({
+      targets: [target('www.example.gov', 'www-example-gov')],
+      observations: [...fixtureRows(), ...censusFixture()],
+      runs: [],
+      frame: frameWithTypes(),
+    });
+  }
+
+  test('every chart carries its method as a caption (FR-281) — the exemption the stripper relies on', () => {
+    const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
+    const charts = body(html).match(/<figure class="chart"[\s\S]*?<\/figure>/g) ?? [];
+    assert.ok(charts.length >= 2, 'the page leads with visualization (FR-280)');
+    for (const c of charts) {
+      assert.match(c, /class="chart-method"/, `a chart without its method is a bare number at scale: ${c.slice(0, 100)}`);
+      assert.match(c, /readings?\b/, 'sample count in the caption');
+      assert.match(c, /from /, 'vantage in the caption');
+      assert.match(c, /\d{4}-\d{2}-\d{2}/, 'window in the caption');
+    }
+  });
+
+  test('presence composition is shown across kinds of government, three states intact (FR-282)', () => {
+    const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
+    const eco = body(html).match(/<figure class="chart" role="img" aria-labelledby="eco-t"[\s\S]*?<\/figure>/)?.[0];
+    assert.ok(eco, 'the by-kind composition must exist when the frame is supplied');
+    assert.match(eco, /City/);
+    assert.match(eco, /County/);
+    assert.doesNotMatch(eco, /City - Election/, 'election variants fold into their parent kind');
+    for (const cls of ['seg-website', 'seg-none', 'seg-unknown']) {
+      assert.match(eco, new RegExp(cls), 'all three states, never merged');
+    }
+  });
+
+  test('the daily trend is a line, and the census never is (FR-283)', () => {
+    const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
+    const trend = body(html).match(/aria-labelledby="trend-a-t"[\s\S]*?<\/figure>/)?.[0];
+    assert.ok(trend, 'the answered-by-day trend renders when monitoring rows exist');
+    assert.match(trend, /<polyline/, 'hourly sampling may draw a connected daily line');
+    const census = body(html).match(/<section class="census-series">[\s\S]*?<\/section>/)?.[0] ?? '';
+    assert.doesNotMatch(census, /<polyline|<path|<line/i, 'the census stays marks');
+  });
+
+  test('agencies compare on one measure, and declining automation is a stance, not a zero (FR-284)', () => {
+    const rows = [
+      ...fixtureRows(),
+      ...['a', 'b', 'c'].map((i) =>
+        row({
+          run_id: `blocked-${i}`,
+          target_id: 'www-ssa-gov',
+          host: 'www.ssa.gov',
+          checked_at: `2026-08-2${i === 'a' ? 0 : i === 'b' ? 1 : 2}T06:00:00Z`,
+          outcome: 'blocked',
+          status_code: 403,
+          latency: { samples: 0 },
+        }),
+      ),
+    ];
+    const html = renderSite(
+      buildSiteModel({
+        targets: [
+          target('www.example.gov', 'www-example-gov'),
+          target('www.ssa.gov', 'www-ssa-gov', 'Social Security Administration'),
+        ],
+        observations: rows,
+        runs: [],
+      }),
+      '2026-08-24 17:00 UTC',
+    );
+    const prose = body(html).replace(/\s+/g, ' ');
+    assert.match(prose, /How do agencies compare/);
+    assert.match(prose, /refusal of automated traffic|declines? automation|Declining robots/i);
+    const agencyBlock = body(html).match(/aria-labelledby="agency-t"[\s\S]*?<\/figure>/)?.[0] ?? '';
+    assert.doesNotMatch(agencyBlock, /www\.ssa\.gov|0\.0%/, 'no zero bar for a refusing agency');
+  });
+
+  test('collection vocabulary never structures the page (FR-286)', () => {
+    const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
+    const headings = body(html).match(/<(h1|h2|h3|summary|caption|th)\b[^>]*>[\s\S]*?<\/\1>/g) ?? [];
+    for (const h of headings) {
+      const text = h.replace(/<[^>]+>/g, ' ');
+      assert.doesNotMatch(
+        text,
+        /\btiers?\b|\bslices?\b|\bcycles?\b/i,
+        `a reader should never need our machinery's vocabulary to navigate: ${text.trim().slice(0, 80)}`,
+      );
+    }
   });
 });

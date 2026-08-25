@@ -149,3 +149,38 @@ describe('refusal and restraint are not failure (FR-261 at the listing level)', 
     assert.doesNotMatch(html, /did not answer/i, 'nothing was asked');
   });
 });
+
+describe('a listing shows its history visually before its numbers (FR-285)', () => {
+  test('one mark per calendar day, gaps shown as gaps, caption carrying the method', () => {
+    const rows = [
+      row('www.usa.gov', { run_id: 'h1', checked_at: '2026-08-20T06:00:00Z' }),
+      row('www.usa.gov', { run_id: 'h2', checked_at: '2026-08-20T07:00:00Z', outcome: 'timeout', latency: { samples: 0 } }),
+      // 2026-08-21 has no readings: the day must appear as a gap, not vanish.
+      row('www.usa.gov', { run_id: 'h3', checked_at: '2026-08-22T06:00:00Z' }),
+    ];
+    const html = renderListing(listings(rows)[0]!);
+    const strip = html.match(/<figure class="chart[\s\S]*?<\/figure>/)?.[0];
+    assert.ok(strip, 'the history strip renders when there is history to show');
+    assert.match(strip, /class="chart-method"/, 'a chart without its method is a bare number at scale');
+    const days = strip.match(/<rect/g) ?? [];
+    assert.equal(days.length, 3, 'three calendar days: two with readings, one gap between them');
+    assert.match(strip, /day-gap/, 'a day nothing was measured shows as absence, never as good or bad (FR-233)');
+    assert.match(strip, /2026-08-20: 1 of 2/, 'each day states its readings');
+  });
+
+  test('a refusing site\u2019s history reads as refusals, and a lone reading draws no strip', () => {
+    const blocked = listings([
+      row('www.ssa.gov', { run_id: 'b1', checked_at: '2026-08-20T06:00:00Z', outcome: 'blocked', status_code: 403, latency: { samples: 0 } }),
+      row('www.ssa.gov', { run_id: 'b2', checked_at: '2026-08-21T06:00:00Z', outcome: 'blocked', status_code: 403, latency: { samples: 0 } }),
+    ])[0]!;
+    const html = renderListing(blocked);
+    const strip = html.match(/<figure class="chart[\s\S]*?<\/figure>/)?.[0];
+    assert.ok(strip);
+    assert.doesNotMatch(strip, /day-full/, 'no day reads as answered');
+
+    const lone = listings([row('once.gov', { tier: 'broad', cycle: '2026-W34', slice: 1,
+      presence: { state: 'website', rule: 'presence/1' } } as Partial<Observation>)])[0]!;
+    assert.doesNotMatch(renderListing(lone), /<figure class="chart"/,
+      'one reading is one reading — a strip of one mark would dress it as a history');
+  });
+});

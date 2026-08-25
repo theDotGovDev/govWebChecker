@@ -2,6 +2,7 @@ import type { Observation } from '../record/types.js';
 import type { Target } from '../targets/load.js';
 import { figure, type Figure } from './figure.js';
 import { censusSeries, type CensusSeries } from './series.js';
+import type { Frame } from '../census/frame.js';
 
 export interface RunRow {
   run_id: string;
@@ -113,6 +114,13 @@ export interface CensusView {
 
 export interface SiteModel {
   sites: SiteView[];
+  /** Daily answered-rate and latency for the hourly monitoring (FR-283). */
+  answeredTrend?: TrendChart;
+  latencyTrend?: TrendChart;
+  /** Presence composition across kinds of government (FR-282). */
+  ecosystem?: EcosystemView;
+  /** Agencies on the one stated measure, no-rate carve-out intact (FR-284). */
+  agencies: AgencyView[];
   /** Present when the record holds census rows: the discrete, cadence-aware series. */
   censusSeries?: CensusSeries;
   /** One entry per tier present in the record. Never summed into one figure. */
@@ -136,6 +144,43 @@ export interface ModelInput {
   targets: Target[];
   observations: Observation[];
   runs: RunRow[];
+  /** The census frame, for joining domains to their kind of government (D5). */
+  frame?: Frame;
+}
+
+/**
+ * A chart is a Figure at a different size (FR-281): the points are data within
+ * one captioned figure, and the caption carries the full method. `caption` is a
+ * real Figure — constructed through the same choke point, refusing the same
+ * omissions — whose value is the window-wide aggregate the chart details.
+ */
+export interface TrendChart {
+  caption: Figure;
+  points: { date: string; value: number; samples: number }[];
+}
+
+/** One kind of government's presence composition (FR-282). */
+export interface TypeComposition {
+  type: string;
+  judged: number;
+  website: number;
+  no_website: number;
+  undetermined: number;
+}
+
+export interface EcosystemView {
+  /** Registry types by judged count, election variants folded into their parent. */
+  types: TypeComposition[];
+  caption: Figure;
+}
+
+/** One agency's standing on the single stated measure (FR-284). */
+export interface AgencyView {
+  agency: string;
+  sites: number;
+  figure?: Figure;
+  /** Every one of the agency's sites declines automation or is robots-excluded. */
+  declinesAutomation?: boolean;
 }
 
 const POPULATIONS: Record<string, string> = {
@@ -266,7 +311,7 @@ function censusView(rows: Observation[]): CensusView {
  * entitled to have with the data rather than one we settle on their behalf. And
  * absence stays absence: a site with no measurement has no figure, never a zero.
  */
-export function buildSiteModel({ targets, observations, runs }: ModelInput): SiteModel {
+export function buildSiteModel({ targets, observations, runs, frame }: ModelInput): SiteModel {
   // A run where nothing succeeded is more likely our own network than every site
   // at once. Presenting its rows as site behavior would repeat exactly the
   // misattribution the FR-024 marker exists to prevent.
@@ -356,13 +401,171 @@ export function buildSiteModel({ targets, observations, runs }: ModelInput): Sit
   const timestamps = usable.map((o) => o.checked_at).sort();
 
   const broadRows = usable.filter((o) => o.tier === 'broad');
+
+  // The hourly monitoring process, whatever the rows are labeled: rows written
+  // before the record distinguished tiers came from the same 58-host hourly
+  // machinery, so the trend over time may include them — one population, one
+  // process, some rows predating the label. This is not cross-population
+  // blending (FR-220): the census never enters.
+  const monitoring = usable
+    .filter((o) => (o.tier ?? 'hot') !== 'broad')
+    .sort((a, b) => a.checked_at.localeCompare(b.checked_at));
+
+  function monitoringMeta(rows: Observation[]): {
+    window: { from: string; to: string };
+    vantage: string;
+    population: number;
+  } {
+    return {
+      window: { from: rows[0]!.checked_at, to: rows[rows.length - 1]!.checked_at },
+      vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
+      population: new Set(rows.map((o) => o.host)).size,
+    };
+  }
+
+  function answeredTrend(): TrendChart | undefined {
+    if (monitoring.length === 0) return undefined;
+    const byDay = new Map<string, { n: number; ok: number }>();
+    for (const o of monitoring) {
+      const d = o.checked_at.slice(0, 10);
+      const cell = byDay.get(d) ?? { n: 0, ok: 0 };
+      cell.n += 1;
+      if (o.outcome === 'success') cell.ok += 1;
+      byDay.set(d, cell);
+    }
+    const points = [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, c]) => ({ date, value: (100 * c.ok) / c.n, samples: c.n }));
+    const ok = monitoring.filter((o) => o.outcome === 'success').length;
+    return {
+      caption: figure({
+        value: (100 * ok) / monitoring.length,
+        unit: 'percent',
+        tier: 'hot',
+        samples: monitoring.length,
+        ...monitoringMeta(monitoring),
+      }),
+      points,
+    };
+  }
+
+  function latencyTrend(): TrendChart | undefined {
+    const timed = monitoring.filter((o) => typeof o.latency.median_ms === 'number');
+    if (timed.length < 2) return undefined;
+    const byDay = new Map<string, number[]>();
+    for (const o of timed) {
+      const d = o.checked_at.slice(0, 10);
+      const list = byDay.get(d) ?? [];
+      list.push(o.latency.median_ms!);
+      byDay.set(d, list);
+    }
+    const med = (v: number[]): number => v.sort((a, b) => a - b)[Math.floor(v.length / 2)]!;
+    const points = [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({ date, value: med(v), samples: v.length }));
+    return {
+      caption: figure({
+        value: med(timed.map((o) => o.latency.median_ms!)),
+        unit: 'milliseconds',
+        tier: 'hot',
+        samples: timed.length,
+        ...monitoringMeta(timed),
+      }),
+      points,
+    };
+  }
+
+  function ecosystemView(frameIn?: Frame): EcosystemView | undefined {
+    if (!frameIn || broadRows.length === 0) return undefined;
+    // Election variants fold into their parent kind: "City - Election" is a
+    // city's election site, and sixteen rows would bury the shape the reader
+    // came for. The registry's own names are preserved in the fold's parent.
+    const typeOf = new Map<string, string>();
+    for (const d of frameIn.domains) typeOf.set(d.domain, d.type.replace(/ - Election$/, ''));
+    const latest = new Map<string, Observation>();
+    for (const o of broadRows) {
+      const prev = latest.get(o.target_id);
+      if (!prev || prev.checked_at < o.checked_at) latest.set(o.target_id, o);
+    }
+    const byType = new Map<string, TypeComposition>();
+    for (const [domain, o] of latest) {
+      if (!o.presence) continue;
+      const type = typeOf.get(domain) ?? 'Unlisted in frame';
+      const cell = byType.get(type) ?? { type, judged: 0, website: 0, no_website: 0, undetermined: 0 };
+      cell.judged += 1;
+      cell[o.presence.state] += 1;
+      byType.set(type, cell);
+    }
+    const types = [...byType.values()].sort((a, b) => b.judged - a.judged);
+    const stamps = broadRows.map((o) => o.checked_at).sort();
+    return {
+      types,
+      caption: figure({
+        value: latest.size,
+        unit: 'count',
+        tier: 'broad',
+        population: latest.size,
+        window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
+        samples: broadRows.length,
+        vantage: [...new Set(broadRows.map((o) => o.method.vantage))].sort().join(', '),
+        rule: [...new Set(broadRows.map((o) => o.presence?.rule).filter(Boolean))].sort().join(', '),
+      }),
+    };
+  }
+
+  function agencyViews(): AgencyView[] {
+    const byAgency = new Map<string, { hosts: Set<string>; rows: Observation[] }>();
+    const agencyOf = new Map<string, string>(targets.map((t) => [t.host, t.agency]));
+    for (const o of monitoring) {
+      const agency = agencyOf.get(o.host);
+      if (agency === undefined) continue;
+      const cell = byAgency.get(agency) ?? { hosts: new Set<string>(), rows: [] };
+      cell.hosts.add(o.host);
+      cell.rows.push(o);
+      byAgency.set(agency, cell);
+    }
+    const views: AgencyView[] = [];
+    for (const [agency, { hosts, rows }] of byAgency) {
+      const ok = rows.filter((o) => o.outcome === 'success').length;
+      if (ok === 0) {
+        // The carve-out at agency altitude (FR-284, FR-261): every reading
+        // refused or skipped is a posture toward automation, not a rate.
+        views.push({ agency, sites: hosts.size, declinesAutomation: true });
+        continue;
+      }
+      const stamps = rows.map((o) => o.checked_at).sort();
+      views.push({
+        agency,
+        sites: hosts.size,
+        figure: figure({
+          value: (100 * ok) / rows.length,
+          unit: 'percent',
+          tier: 'hot',
+          population: hosts.size,
+          window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
+          samples: rows.length,
+          vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
+        }),
+      });
+    }
+    const rated = views.filter((v) => v.figure).sort((a, b) => b.figure!.value - a.figure!.value);
+    const unrated = views.filter((v) => !v.figure).sort((a, b) => a.agency.localeCompare(b.agency));
+    return [...rated, ...unrated];
+  }
   const censusRuns = runs.filter(
     (r): r is RunRow & { cycle: string; slice: number; frame_digest: string } =>
       r.tier === 'broad' && r.cycle !== undefined && r.slice !== undefined && r.frame_digest !== undefined,
   );
 
+  const aTrend = answeredTrend();
+  const lTrend = latencyTrend();
+  const eco = ecosystemView(frame);
   return {
     sites,
+    ...(aTrend ? { answeredTrend: aTrend } : {}),
+    ...(lTrend ? { latencyTrend: lTrend } : {}),
+    ...(eco ? { ecosystem: eco } : {}),
+    agencies: agencyViews(),
     tiers: tierViews(usable),
     ...(broadRows.length > 0
       ? {
