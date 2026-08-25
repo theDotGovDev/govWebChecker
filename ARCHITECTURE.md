@@ -29,12 +29,13 @@ flowchart LR
     checker --> record[record<br/>validate then append]
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
     data --> verify[verify<br/>checks our conduct from the record]
-    data --> site[static site<br/>not yet built]
-
-    style site stroke-dasharray: 4 4
+    data --> site
+    subgraph site[site]
+        direction TB
+        S1[model + figure<br/>every quantity is a Figure] --> S2[render + pages<br/>index, tiers, ~21k listings]
+    end
+    site --> docs[(docs/, deployed by Pages)]
 ```
-
-Dashed components are not implemented yet.
 
 ## Components
 
@@ -127,10 +128,45 @@ assumed.
   never runs concurrently with itself. Politeness is a property of what we do to
   a single server, not of total throughput.
 
+### `src/site/` — the published reading of the record
+
+Reads the record and writes the static site. Sends nothing to any target: the
+build has no network path at all, which is stronger than a rule.
+
+- `figure.ts` — the choke point. There is no numeric type in the view model
+  other than `Figure`, which cannot be constructed without its tier, population,
+  window, sample count and vantage — so a published number without its method is
+  unrepresentable rather than discouraged (Principle V). Absence is its own
+  type, never a zero. The renderer accepts `Figure`, never `number`.
+- `model.ts` — the record shaped for display, one view per tier and deliberately
+  no total across them. Refuses to build from a row whose vantage is `local`.
+- `standings.ts` — per-dimension orderings. A host that never once answered has
+  no rate — it is refusing automation or telling us not to check — and appears
+  in no ordering, never as a zero. No composite exists and no field could hold
+  one.
+- `series.ts` — change over time at each tier's own cadence. The census series
+  is discrete *by type*: marks, no points, no path — a line between two weekly
+  readings would assert knowledge of the six days between them. Completeness
+  comes from run summaries against one frame digest, not from row counts.
+- `listing.ts` — one page per site, keyed on host rather than `target_id`
+  (the record carries 61 ids over 58 hot hosts from an id-scheme change; keying
+  on the id would split three hosts' histories). The undetermined page leads
+  with what is unknown and never puts a jurisdiction's name beside a failure
+  state.
+- `pages.ts` — the streaming writer: index, tier panels, one listing per site
+  the record knows, a not-yet-checked page per unreached frame domain, one page
+  per registered domain. ~21,300 pages in under four seconds from today's
+  record.
+
+The output is tested the way `verify` tests the record: assertions read the
+rendered HTML, so a guarantee cannot be bypassed by a template literal the
+model-level checks never see.
+
 ### `src/cli/` — the command surface
 
 `check` runs a hot-tier pass. `census` runs one broad-tier slice. `build-frame`
-rebuilds the census frame. `verify` reads a record and reports whether the
+rebuilds the census frame. `build-site` reads the record and writes the whole
+site — and fails rather than publish a figure it cannot attach a method to. `verify` reads a record and reports whether the
 guarantees hold, printing expected versus actual — including backend spacing,
 which it can only check because each observation records the address contacted,
 and census coverage, which it computes from the record and the committed frame

@@ -69,13 +69,22 @@ tier's availability over a window:
 ```bash
 node -e "
 const fs=require('fs');
-const rows=fs.readFileSync('data/availability/2026-08.jsonl','utf8')
-  .trim().split('\n').map(JSON.parse)
-  .filter(r => (r.tier ?? 'hot') === 'hot');
-const answered = rows.filter(r => r.outcome === 'success').length;
-console.log(answered, '/', rows.length, '=', (100*answered/rows.length).toFixed(1) + '%');
+const rows=fs.readFileSync('data/availability/2026-08.jsonl','utf8').trim().split('\n').map(JSON.parse);
+const runs=fs.readFileSync('data/runs/2026-08.jsonl','utf8').trim().split('\n').map(JSON.parse);
+// The figure's own stated method: this tier's rows only, and runs where nothing
+// at all succeeded are discarded as our-network-not-theirs (FR-024).
+const discarded = new Set(runs.filter(r => r.all_targets_failed).map(r => r.run_id));
+const hot = rows.filter(r => r.tier === 'hot' && !discarded.has(r.run_id));
+const answered = hot.filter(r => r.outcome === 'success').length;
+console.log(answered, '/', hot.length, '=', (100*answered/hot.length).toFixed(1) + '%');
 "
 ```
+
+Reproducing a figure means reproducing its **method**, and the method is on the
+page next to the number. The first draft of this recipe merged pre-tier rows into
+the hot tier and skipped the discarded-runs rule, and came out 0.1 points off —
+which is the system working: the difference was traceable precisely because the
+figure states what it counts.
 
 If that disagrees with the site, the site is wrong — the record is the product,
 and the site is a reading of it.
