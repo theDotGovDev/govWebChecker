@@ -99,6 +99,7 @@ export async function writePages(input: WritePagesInput): Promise<WrittenPages> 
   // that the rolling cycle has not arrived, because a missing page would itself
   // read as a statement about the jurisdiction.
   const known = new Set(current.map((l) => l.host));
+  const pendingHosts: string[] = [];
   let pending = 0;
   for (const entry of input.frame?.domains ?? []) {
     if (known.has(entry.domain) || excluded.has(entry.domain)) continue;
@@ -116,9 +117,15 @@ about ${entry.domain} — there are no readings to state.</p>`,
       ),
       'utf8',
     );
+    pendingHosts.push(entry.domain);
     pending += 1;
     written += 1;
   }
+
+  // The lookup index: every host that has a page, as one self-hosted JSON
+  // asset the search script fetches on first use (FR-270 — same origin only).
+  const lookup: string[] = [...current.map((l) => l.host), ...pendingHosts].sort();
+  await fs.writeFile(path.join(outDir, 'sites', 'index.json'), JSON.stringify(lookup), 'utf8');
 
   const groups = domainGroups(current);
   for (const g of groups) {

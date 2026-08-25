@@ -327,6 +327,13 @@ export function sharedCss(): string {
   .panel p:last-child { margin-bottom: 0; }
   .notable { color: var(--notable); }
   .plain { max-width: 44rem; }
+  .lookup label { display: block; color: var(--muted); font-size: .9rem; margin-bottom: .5rem; }
+  .lookup input { width: 100%; font: inherit; padding: .65rem .8rem; border: 1.5px solid var(--line);
+    border-radius: 8px; background: var(--bg); color: var(--ink); }
+  .lookup input:focus-visible { outline: 3px solid var(--link); outline-offset: 1px; border-color: var(--link); }
+  .lookup-results { list-style: none; margin: .5rem 0 0; padding: 0; }
+  .lookup-results li { padding: .3rem 0; border-bottom: 1px solid var(--line); }
+  .lookup-results li:last-child { border-bottom: 0; }
   footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
   a:focus-visible, :focus-visible, summary:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
   @media (max-width: 640px) {
@@ -423,6 +430,63 @@ ${
 </div>`
     : ''
 }
+
+<section class="lookup-section">
+<h2>${ICON['search']} Look up any .gov domain</h2>
+<div class="panel lookup" data-lookup hidden>
+  <label for="lookup-input">Type a domain — your city, county, school district, or agency:</label>
+  <input id="lookup-input" type="search" autocomplete="off" spellcheck="false"
+    placeholder="e.g. alamosa.gov" inputmode="url">
+  <ul id="lookup-results" class="lookup-results"></ul>
+</div>
+<noscript><p class="tagline">Every domain has its own page at
+<code>sites/&lt;domain&gt;.html</code> — for example <code>sites/alamosa.gov.html</code>.
+The hourly-tier table below also links each of its sites.</p></noscript>
+</section>
+<script>
+// Progressive enhancement only (FR-271): the panel is hidden until this runs,
+// so a reader without script sees the noscript route, never a dead control.
+// The index it searches is a same-origin asset (FR-270); nothing leaves the
+// site's origin.
+(function () {
+  'use strict';
+  var panel = document.querySelector('[data-lookup]');
+  if (!panel || typeof fetch !== 'function') return;
+  panel.hidden = false;
+  var input = document.getElementById('lookup-input');
+  var out = document.getElementById('lookup-results');
+  var hosts = null;
+  var loading = null;
+  function load() {
+    if (!loading) {
+      loading = fetch('sites/index.json')
+        .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(function (list) { hosts = list; })
+        .catch(function () {
+          out.innerHTML = '<li class="nodata">Search is unavailable right now — every domain still has a page at sites/&lt;domain&gt;.html.</li>';
+        });
+    }
+    return loading;
+  }
+  function esc(t) {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function show() {
+    var q = input.value.trim().toLowerCase();
+    if (!hosts || q.length < 2) { out.innerHTML = ''; return; }
+    var hits = [];
+    for (var i = 0; i < hosts.length && hits.length < 12; i++) {
+      if (hosts[i].indexOf(q) !== -1) hits.push(hosts[i]);
+    }
+    out.innerHTML = hits.length
+      ? hits.map(function (h) {
+          return '<li><a href="sites/' + esc(h) + '.html">' + esc(h) + '</a></li>';
+        }).join('')
+      : '<li class="nodata">No .gov domain matches — the registry may not include it, or it may be spelled differently.</li>';
+  }
+  input.addEventListener('input', function () { load().then(show); });
+})();
+</script>
 
 <h2>${ICON['clock']} Latest measurement for each hourly-tier site</h2>
 
