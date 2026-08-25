@@ -400,3 +400,56 @@ describe('every site the record knows has a listing (FR-245, FR-247, FR-248, SC-
     }
   });
 });
+
+describe('the page works on a phone and layers its depth (mobile + progressive disclosure)', () => {
+  test('wide content scrolls in its own container; the page never scrolls sideways', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    // Every <table> sits inside a .scroll container.
+    const tables = (body(html).match(/<table>/g) ?? []).length;
+    const scrolls = (body(html).match(/class="scroll"/g) ?? []).length;
+    assert.ok(tables > 0);
+    assert.ok(scrolls >= tables, `${tables} tables need ${tables} scroll containers, found ${scrolls}`);
+    assert.match(html, /name="viewport" content="width=device-width/);
+  });
+
+  test('the presence bar renders as labeled segments, and color is never the only channel', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    const viz = html.match(/<figure class="presence-viz"[\s\S]*?<\/figure>/g) ?? [];
+    assert.ok(viz.length > 0, 'the part-to-whole visualization must exist when presence does');
+    for (const v of viz) {
+      const segs = (v.match(/<rect/g) ?? []).length;
+      const keys = (v.match(/class="key"/g) ?? []).length;
+      assert.equal(keys, segs, 'every drawn segment carries a text label with its count');
+      assert.match(v, /aria-labelledby/, 'the figure is named for assistive tech');
+      assert.doesNotMatch(v, /%/, 'segment labels are counts; a rate belongs to a Figure');
+    }
+  });
+
+  test('technical depth is one disclosure away, and the plain reading needs no disclosure', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    assert.match(html, /<details class="depth">/, 'per-tier detail sits behind a disclosure');
+    // The plain-language essentials are NOT inside <details>: a non-technical
+    // reader gets them without interacting.
+    const outside = body(html).replace(/<details[\s\S]*?<\/details>/g, '');
+    assert.match(outside, /Absence is not failure/);
+    assert.match(outside, /have a website/i);
+  });
+
+  test('icons are decorative and the page stays script-free and self-contained', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    const svgs = html.match(/<svg[^>]*class="(icon|logo)"[^>]*>/g) ?? [];
+    assert.ok(svgs.length > 0, 'the page carries its icons inline');
+    for (const tag of svgs) {
+      assert.match(tag, /aria-hidden="true"/, 'icons never carry meaning the words do not');
+    }
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /https?:\/\/(?!github\.com|www\.example\.gov)/,
+      'no external asset — the page must render with the network unplugged');
+  });
+
+  test('every host named in the table links to its own listing (FR-240)', () => {
+    const html = render([...fixtureRows(), ...censusFixture()]);
+    assert.match(html, /href="sites\/www\.example\.gov\.html"/,
+      'the naming surface links the page where readings and the correction route live');
+  });
+});
