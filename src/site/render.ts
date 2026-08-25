@@ -1,4 +1,4 @@
-import type { SiteModel, SiteView, TierView } from './model.js';
+import type { SiteModel, SiteView, TierView, TrendChart, EcosystemView, AgencyView } from './model.js';
 import type { CensusSeries, CensusMark } from './series.js';
 import { formatFigure, type Figure } from './figure.js';
 
@@ -99,6 +99,158 @@ function presenceBar(
   </figure>`;
 }
 
+
+/**
+ * A chart is a Figure at a different size (FR-281): the whole block carries one
+ * method caption built through the same choke point as any figure, and the
+ * points, marks and axis labels are parts of that one captioned figure.
+ */
+function chartFigure(idPrefix: string, title: string, inner: string, caption: string): string {
+  return `<figure class="chart" role="img" aria-labelledby="${idPrefix}-t">
+  <p class="chart-title" id="${idPrefix}-t">${title}</p>
+  ${inner}
+  <figcaption class="chart-method">${caption}</figcaption>
+</figure>`;
+}
+
+/**
+ * A connected daily line for the hourly monitoring — legitimate at this grain,
+ * because hourly sampling is near-continuous at daily resolution (FR-283). The
+ * census never comes through here; its readings stay discrete marks.
+ */
+function trendChart(chart: TrendChart, idPrefix: string, title: string, axis: string): string {
+  const W = 1000;
+  const H = 240;
+  const M = { top: 14, right: 18, bottom: 34, left: 52 };
+  const pts = chart.points;
+  const values = pts.map((p) => p.value);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const pad = Math.max((hi - lo) * 0.15, hi * 0.02, 1);
+  const y0 = Math.max(0, lo - pad);
+  const y1 = hi + pad;
+  const x = (i: number): number =>
+    pts.length === 1 ? W / 2 : M.left + (i * (W - M.left - M.right)) / (pts.length - 1);
+  const y = (v: number): number => M.top + (1 - (v - y0) / (y1 - y0)) * (H - M.top - M.bottom);
+
+  const ticks = [y0, (y0 + y1) / 2, y1].map((v) => ({
+    v: Math.round(v * 10) / 10,
+    py: y(v),
+  }));
+  const grid = ticks
+    .map((t) => `<g><text class="tick" x="${M.left - 8}" y="${t.py + 4}" text-anchor="end">${t.v}</text><rect class="grid" x="${M.left}" y="${t.py}" width="${W - M.left - M.right}" height="1"/></g>`)
+    .join('');
+  const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const dots = pts
+    .map(
+      (p, i) =>
+        `<circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="3.5"/>` +
+        `<circle class="hit" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="11"><title>${p.date}: ${Math.round(p.value * 10) / 10} (${number(p.samples)} readings)</title></circle>`,
+    )
+    .join('');
+  const first = pts[0]!.date.slice(5);
+  const last = pts[pts.length - 1]!.date.slice(5);
+  const xlabels =
+    `<text class="tick" x="${M.left}" y="${H - 8}">${first}</text>` +
+    (pts.length > 1 ? `<text class="tick" x="${W - M.right}" y="${H - 8}" text-anchor="end">${last}</text>` : '');
+  const inner = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="trend">
+  ${grid}
+  <text class="tick axis-name" x="${M.left - 8}" y="${M.top - 2}" text-anchor="end">${escape(axis)}</text>
+  <polyline class="line" points="${line}"/>
+  ${dots}
+  ${xlabels}
+</svg>`;
+  return chartFigure(idPrefix, title, inner, formatFigure(chart.caption, { note: 'the line shows this, day by day' }));
+}
+
+/** Presence composition across kinds of government (FR-282). */
+function ecosystemChart(eco: EcosystemView): string {
+  const MAX_ROWS = 8;
+  const shown = eco.types.slice(0, MAX_ROWS);
+  const rest = eco.types.slice(MAX_ROWS);
+  if (rest.length > 0) {
+    const other = rest.reduce(
+      (a, t) => ({
+        type: `${rest.length} other kinds`,
+        judged: a.judged + t.judged,
+        website: a.website + t.website,
+        no_website: a.no_website + t.no_website,
+        undetermined: a.undetermined + t.undetermined,
+      }),
+      { type: '', judged: 0, website: 0, no_website: 0, undetermined: 0 },
+    );
+    shown.push(other);
+  }
+  const maxJudged = Math.max(...shown.map((t) => t.judged));
+  const rows = shown
+    .map((t) => {
+      const W = 1000;
+      const barW = Math.max(30, Math.round((t.judged / maxJudged) * W));
+      const segs = [
+        { n: t.website, cls: 'seg-website', label: 'have a website' },
+        { n: t.no_website, cls: 'seg-none', label: 'no website to have' },
+        { n: t.undetermined, cls: 'seg-unknown', label: 'could not determine' },
+      ].filter((seg) => seg.n > 0);
+      let xPos = 0;
+      const rects = segs
+        .map((seg) => {
+          const w = Math.max(6, Math.round((seg.n / t.judged) * (barW - 2 * (segs.length - 1))));
+          const r = `<rect class="${seg.cls}" x="${xPos}" y="0" width="${w}" height="20" rx="3"><title>${escape(t.type)}: ${number(seg.n)} ${seg.label}</title></rect>`;
+          xPos += w + 2;
+          return r;
+        })
+        .join('');
+      return `<div class="eco-row">
+    <span class="eco-label">${escape(t.type)}</span>
+    <svg viewBox="0 0 ${W} 20" preserveAspectRatio="none" style="width:${(barW / W) * 100}%"> ${rects}</svg>
+    <span class="eco-count">${number(t.judged)}</span>
+  </div>`;
+    })
+    .join('\n');
+  const legend = `<p class="keys">
+    <span class="key"><span class="swatch seg-website"></span>Have a website</span>
+    <span class="key"><span class="swatch seg-none"></span>No website to have</span>
+    <span class="key"><span class="swatch seg-unknown"></span>Could not determine</span>
+  </p>`;
+  return chartFigure(
+    'eco',
+    'Web presence by kind of government — bar length is how many domains of that kind have been judged so far',
+    rows + legend,
+    formatFigure(eco.caption, { note: 'one latest reading per domain' }),
+  );
+}
+
+/** Agencies on the one stated measure, carve-out intact (FR-284, FR-261). */
+function agencySection(agencies: AgencyView[], caption: TrendChart | undefined): string {
+  if (agencies.length === 0) return '';
+  const rated = agencies.filter((a) => a.figure);
+  const declining = agencies.filter((a) => a.declinesAutomation);
+  const bars = rated
+    .map((a) => {
+      const v = a.figure!.value;
+      return `<div class="eco-row">
+    <span class="eco-label">${escape(a.agency)}</span>
+    <svg viewBox="0 0 1000 20" preserveAspectRatio="none" style="width:${Math.max(3, v).toFixed(1)}%"><rect class="seg-website" x="0" y="0" width="1000" height="20" rx="3"><title>${escape(a.agency)}: ${Math.round(v * 10) / 10}% of ${number(a.figure!.samples)} readings answered, across ${a.sites === 1 ? '1 site' : `${a.sites} sites`}</title></rect></svg>
+    <span class="eco-count">${(Math.round(v * 10) / 10).toFixed(1)}%</span>
+  </div>`;
+    })
+    .join('\n');
+  const declined = declining.length
+    ? `<p>Not shown above, and deliberately not shown as zero: ${declining
+        .map((a) => `<strong>${escape(a.agency)}</strong>`)
+        .join(', ')} — every reading of ${declining.length === 1 ? 'its' : 'their'} sites was a
+      refusal of automated traffic or a robots.txt exclusion we honor. Declining
+      robots is a policy, not an outage, so these agencies have no rate rather
+      than a bad one.</p>`
+    : '';
+  const inner = bars;
+  const cap = caption
+    ? formatFigure(caption.caption, { note: 'per-agency shares of these same readings' })
+    : '';
+  return `${chartFigure('agency', 'Share of our checks each agency\u2019s sites answered', inner, cap)}
+${declined}`;
+}
+
 /**
  * What one tier says, with the population it covers attached — now led by the
  * plain-language reading, with the full figures one disclosure away for anyone
@@ -151,7 +303,7 @@ function tierPanel(tier: TierView): string {
   ${tier.answered ? `<p class="tier-headline"><strong>Answered:</strong> ${formatFigure(tier.answered)}</p>` : ''}
   ${presenceViz}
   <details class="depth">
-    <summary>Details for this tier</summary>
+    <summary>Method and limits</summary>
     ${presenceFigures}
     <p><strong>Population:</strong> ${escape(tier.population)}.</p>
     <p>
@@ -173,8 +325,8 @@ function tierPanel(tier: TierView): string {
  */
 function censusMarkCard(m: CensusMark): string {
   const status = m.complete
-    ? 'complete cycle'
-    : `in progress — ${m.slicesRan} of ${m.slicesInFrame} slices have run`;
+    ? 'complete week'
+    : `in progress — ${m.slicesRan} of ${m.slicesInFrame} daily passes have run`;
   const frameNote = m.frameChanged
     ? `<p class="notable">The frame changed mid-cycle (the registry changed underneath it), so these
        slices did not all sweep one frame and this cycle's coverage is not one claim.</p>`
@@ -198,12 +350,12 @@ function censusMarkCard(m: CensusMark): string {
 function censusSeriesSection(series: CensusSeries): string {
   const marks = series.marks.map(censusMarkCard).join('\n');
   return `<section class="census-series">
-<h2>${ICON['map']} The census over time</h2>
+<h2>${ICON['map']} The whole of .gov, week by week</h2>
 <p class="tagline">
-  One reading per cycle. Nothing is drawn between cycles, because nothing was
-  measured between them — a weekly census cannot say what happened on the days
-  it did not look. An in-progress cycle covers fewer domains, so its counts are
-  not comparable to a complete one and are never presented as a movement.
+  Each domain is read about once a week, so each week gets one mark and nothing
+  is drawn between the marks — nothing was measured between them. A week still
+  in progress covers fewer domains, so its counts are not comparable to a
+  finished one and are never presented as a movement.
 </p>
 <div class="cycle-grid">
 ${marks}
@@ -327,6 +479,33 @@ export function sharedCss(): string {
   .panel p:last-child { margin-bottom: 0; }
   .notable { color: var(--notable); }
   .plain { max-width: 44rem; }
+  .chart { margin: 1.25rem 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1rem 1.1rem; }
+  .chart-title { margin: 0 0 .75rem; font-weight: 600; font-size: .95rem; }
+  .chart-method { color: var(--muted); font-size: .78rem; margin-top: .6rem; }
+  .chart-method .method { display: inline; }
+  .trend { width: 100%; height: clamp(150px, 30vw, 240px); display: block; }
+  .trend .line { fill: none; stroke: var(--accent); stroke-width: 2.5;
+    vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+  .trend .dot { fill: var(--accent); }
+  .trend .hit { fill: transparent; }
+  .trend .grid { fill: var(--line); }
+  .trend .tick { fill: var(--muted); font-size: 13px; }
+  .trend .axis-name { font-size: 12px; }
+  .eco-row { display: grid; grid-template-columns: minmax(7rem, 12rem) 1fr auto;
+    gap: .6rem; align-items: center; margin: .35rem 0; }
+  .eco-row svg { height: 20px; display: block; min-width: 6px; }
+  .eco-label { font-size: .85rem; overflow-wrap: anywhere; }
+  .eco-count { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .history svg { width: 100%; height: 26px; display: block; }
+  .day-full, .day-part { fill: var(--viz-website); }
+  .day-none { fill: var(--viz-none); }
+  .day-gap { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  details.standalone { margin: 1rem 0; border-top: 0; padding-top: 0; }
+  @media (max-width: 560px) {
+    .eco-row { grid-template-columns: 1fr auto; }
+    .eco-label { grid-column: 1 / -1; margin-bottom: -0.2rem; }
+  }
   .lookup label { display: block; color: var(--muted); font-size: .9rem; margin-bottom: .5rem; }
   .lookup input { width: 100%; font: inherit; padding: .65rem .8rem; border: 1.5px solid var(--line);
     border-radius: 8px; background: var(--bg); color: var(--ink); }
@@ -388,23 +567,63 @@ export function renderSite(model: SiteModel, generatedAt: string): string {
   </ul>
 </header>
 
-<h2>${ICON['scale']} Two tiers, two populations</h2>
+${(() => {
+  const hot = model.tiers.find((t) => t.tier === 'hot');
+  const broad = model.tiers.find((t) => t.tier === 'broad');
+  const untiered = model.tiers.find((t) => t.tier === 'untiered');
+  return `
+<h2>${ICON['clock']} Is government online right now?</h2>
 
 <p class="tagline">
-  This project measures government websites in two different ways, over two
-  different populations. Figures from one do not describe the other, and adding
-  them together describes neither — so they are never combined here.
+  The busiest federal websites, checked every hour from the same vantage. This
+  answers whether the sites people use most are responding — it says nothing
+  about the rest of government, which the next section covers.
 </p>
 
-${[...model.tiers]
-  .sort((a, b) => ['hot', 'broad', 'untiered'].indexOf(a.tier) - ['hot', 'broad', 'untiered'].indexOf(b.tier))
-  .map(tierPanel)
-  .join('\n')}
+${hot ? tierPanel(hot) : ''}
+${model.answeredTrend ? trendChart(model.answeredTrend, 'trend-a', 'Share of hourly checks answered, by day', 'answered, %') : ''}
+${model.latencyTrend ? trendChart(model.latencyTrend, 'trend-l', 'Typical response time, by day', 'median ms') : ''}
+${untiered ? `<details class="depth standalone">
+  <summary>About the earliest readings</summary>
+  ${tierPanel(untiered)}
+</details>` : ''}
+
+<h2>${ICON['map']} What does the .gov world look like?</h2>
+
+<p class="tagline">
+  Beyond the famous sites: every registered <code>.gov</code> domain — cities,
+  counties, school districts, tribes, agencies — visited about once a week.
+  Most of American government is small, and much of it never built a website at
+  all. That is a fact about how government works, not a failure.
+</p>
+
+${broad ? tierPanel(broad) : ''}
+${model.ecosystem ? ecosystemChart(model.ecosystem) : ''}
+
+<p class="tagline">
+  The two views above are different populations measured differently, and this
+  page never combines them into one number — figures from one do not describe
+  the other, and adding them together describes neither.
+</p>
+
 ${model.censusSeries ? censusSeriesSection(model.censusSeries) : ''}
+
+${model.agencies.length > 0 ? `<h2>${ICON['scale']} How do agencies compare?</h2>
+
+<p class="tagline">
+  The hourly-checked sites, grouped by the agency that runs them. One measure,
+  stated: the share of our checks that got an answer. This reflects each
+  agency's posture toward automated traffic as much as its reliability — which
+  is why refusing automation is listed as a stance, never scored as zero.
+</p>
+
+${agencySection(model.agencies, model.answeredTrend)}` : ''}
+`;
+})()}
 ${
   model.census
     ? `<div class="panel">
-  <h3>${ICON['search']} Census coverage</h3>
+  <h3>${ICON['search']} Weekly coverage so far</h3>
   <p>
     The census covers every registered US <code>.gov</code> domain over a cycle
     of about a week, one seventh each day. Coverage is checkable from the
@@ -412,7 +631,7 @@ ${
   </p>
   <div class="scroll">
   <table>
-    <thead><tr><th scope="col">Cycle</th><th scope="col" class="num">Domains covered</th><th scope="col" class="num">Slices seen</th></tr></thead>
+    <thead><tr><th scope="col">Week</th><th scope="col" class="num">Domains covered</th><th scope="col" class="num">Daily passes seen</th></tr></thead>
     <tbody>
     ${model.census.cycles
       .map(
@@ -424,8 +643,8 @@ ${
   </table>
   </div>
   <p>
-    A cycle showing fewer than seven slices is an incomplete cycle, and is shown
-    as incomplete rather than presented as a full sweep.
+    A week showing fewer than seven daily passes is incomplete coverage, and is
+    shown as incomplete rather than presented as a full sweep.
   </p>
 </div>`
     : ''
@@ -488,7 +707,7 @@ The hourly-tier table below also links each of its sites.</p></noscript>
 })();
 </script>
 
-<h2>${ICON['clock']} Latest measurement for each hourly-tier site</h2>
+<h2>${ICON['clock']} Every hourly-checked site, in detail</h2>
 
 <p class="tagline">
   Every site links to its own page with its full history and how to reach us

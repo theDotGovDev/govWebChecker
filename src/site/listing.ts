@@ -11,8 +11,17 @@ import { figure, formatFigure, type Figure } from './figure.js';
  * keep theirs: the record is append-only and history is not rewritten to look
  * tidier.
  */
+export interface DayCell {
+  date: string;
+  /** Readings that day; 0 means the day is a gap, not a judgement. */
+  n: number;
+  ok: number;
+}
+
 export interface Listing {
   host: string;
+  /** Daily history for the strip; present with two or more days of readings (FR-285). */
+  history?: { days: DayCell[]; caption: Figure };
   /** The registered name, as a grouping — never as the unit (D3). */
   domain: string;
   targetIds: string[];
@@ -59,8 +68,46 @@ export function listings(rows: Observation[]): Listing[] {
           })
         : undefined;
 
+    // The history strip's cells: one per calendar day from first to last
+    // reading, days with nothing measured included as gaps — a missing day
+    // that silently vanished would read as continuity that never happened
+    // (FR-233). Two or more days of readings earn a strip; a lone reading is
+    // presented as a lone reading.
+    const byDay = new Map<string, { n: number; ok: number }>();
+    for (const o of list) {
+      const d = o.checked_at.slice(0, 10);
+      const cell = byDay.get(d) ?? { n: 0, ok: 0 };
+      cell.n += 1;
+      if (o.outcome === 'success') cell.ok += 1;
+      byDay.set(d, cell);
+    }
+    let history: Listing['history'];
+    if (byDay.size >= 2) {
+      const days: DayCell[] = [];
+      const first = new Date(list[0]!.checked_at.slice(0, 10) + 'T00:00:00Z');
+      const last = new Date(latest.checked_at.slice(0, 10) + 'T00:00:00Z');
+      for (let t = first.getTime(); t <= last.getTime(); t += 86_400_000) {
+        const date = new Date(t).toISOString().slice(0, 10);
+        const cell = byDay.get(date);
+        days.push({ date, n: cell?.n ?? 0, ok: cell?.ok ?? 0 });
+      }
+      history = {
+        days,
+        caption: figure({
+          value: (100 * succeeded) / list.length,
+          unit: 'percent',
+          tier: tier === 'broad' ? 'broad' : 'hot',
+          population: 1,
+          window: { from: list[0]!.checked_at, to: latest.checked_at },
+          samples: list.length,
+          vantage: [...new Set(list.map((o) => o.method.vantage))].sort().join(', '),
+        }),
+      };
+    }
+
     result.push({
       host,
+      ...(history ? { history } : {}),
       domain: registrableDomain(host),
       targetIds: [...new Set(list.map((o) => o.target_id))].sort(),
       tier: tier === 'broad' ? 'broad' : tier === 'hot' ? 'hot' : 'untiered',
@@ -151,6 +198,37 @@ ${l.answered ? `<p>Answered ${formatFigure(l.answered)}.</p>` : ''}
 <p>Checked ${l.cadence}; ${l.readings === 1 ? 'one reading so far — presented as one reading, not a history' : `${l.readings} readings since ${when(l.firstChecked)}`}.</p>`;
 }
 
+/**
+ * The site's own history, drawn before its numbers (FR-285). One cell per
+ * calendar day: blue when every reading answered, orange when none did, blue at
+ * partial opacity in between, and a neutral gap cell for a day nothing was
+ * measured — absence is absence, never good or bad (FR-233). The same identity
+ * palette as everywhere else, for the same reason: a refusal is not a failure
+ * and a gap is not a verdict.
+ */
+function historyStrip(h: NonNullable<Listing['history']>): string {
+  const W = 1000;
+  const gap = 3;
+  const cw = (W - gap * (h.days.length - 1)) / h.days.length;
+  const cells = h.days
+    .map((d, i) => {
+      const x = (i * (cw + gap)).toFixed(1);
+      const cls = d.n === 0 ? 'day-gap' : d.ok === 0 ? 'day-none' : d.ok === d.n ? 'day-full' : 'day-part';
+      const opacity = cls === 'day-part' ? ` opacity="${(0.35 + 0.65 * (d.ok / d.n)).toFixed(2)}"` : '';
+      const title =
+        d.n === 0
+          ? `${d.date}: nothing measured`
+          : `${d.date}: ${d.ok} of ${d.n} readings answered`;
+      return `<rect class="${cls}" x="${x}" y="0" width="${cw.toFixed(1)}" height="26" rx="3"${opacity}><title>${title}</title></rect>`;
+    })
+    .join('');
+  return `<figure class="chart history" role="img" aria-labelledby="hist-t">
+  <p class="chart-title" id="hist-t">Each day of our readings — filled when answered, hollow days are days nothing was measured</p>
+  <svg viewBox="0 0 ${W} 26" preserveAspectRatio="none">${cells}</svg>
+  <figcaption class="chart-method">${formatFigure(h.caption, { note: 'the strip shows this, day by day' })}</figcaption>
+</figure>`;
+}
+
 export function renderListing(l: Listing): string {
   const body =
     l.state === 'undetermined'
@@ -166,6 +244,7 @@ export function renderListing(l: Listing): string {
       : '';
   return `<article class="listing" data-host="${escape(l.host)}">
 <h1>${escape(l.host)}</h1>
+${l.history ? historyStrip(l.history) : ''}
 ${body}
 ${provenance}
 ${CORRECTION}
