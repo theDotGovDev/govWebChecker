@@ -26,7 +26,14 @@ flowchart LR
     checker --> dns
     frame[targets/dotgov-frame.json<br/>the census frame, generated] --> census
     census[census<br/>frame, slices, URL rule, presence] --> checker
+    census --> quality
+    subgraph quality[quality]
+        direction TB
+        Q1[one emulated visitor<br/>Lighthouse, standard preset] --> Q2[keep the measured audits<br/>drop the tool's rollups]
+    end
+    quality -->|one navigation,<br/>through the limiter| politeness
     checker --> record[record<br/>validate then append]
+    quality --> record
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
     data --> verify[verify<br/>checks our conduct from the record]
     data --> site
@@ -127,6 +134,30 @@ assumed.
 - `run.ts` — one pass. Different hosts run concurrently up to a bound; one host
   never runs concurrently with itself. Politeness is a property of what we do to
   a single server, not of total throughput.
+
+### `src/quality/` — how the page behaved once it answered
+
+- `deep-check.ts` — one emulated visitor loading one page, once. The availability
+  check asks whether the server answered; this asks what happened afterwards, and
+  that is where the questions people actually have live: how long until something
+  was readable, whether the layout moved under them, how much the page weighed on
+  a phone. Lighthouse at its own default preset does the measuring, so a stored
+  number means the same thing as one a reader runs themselves — comparability is
+  the reason for the tool choice, and custom tuning would trade it away.
+
+  Two constraints shape the module. The emulation *is* the method: a duration is
+  a property of a page loaded on a stated screen over a stated connection, never
+  of a site, so the device and network travel with the number and a run that
+  cannot state them yields no reading at all. And the tool's category scores stop
+  at the boundary — they are a weighted composite of the very values stored here,
+  so they belong to the analysis layer, where the weighting can be published and
+  recomputed, rather than to the record, which holds only what was observed.
+
+  There is no retry. A page that failed to render is a page under strain or a page
+  that is broken; either way the answer is to write down what happened and leave.
+  A tool failure is recorded as a failure of the *check*, never merged into the
+  availability outcome — a browser crash says nothing about whether a government
+  website was up.
 
 ### `src/site/` — the published reading of the record
 

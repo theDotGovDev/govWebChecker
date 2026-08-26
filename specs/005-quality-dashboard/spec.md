@@ -268,14 +268,19 @@ labeled with the device and the moment captured.
 - **FR-322**: A deep check MUST generate no more traffic than one visitor's page
   load: one navigation, no repeat runs to build a sample, no concurrency against
   one host (Principle I).
-- **FR-323**: Deep checks MUST be scoped to what is affordable and polite: the
-  hourly tier plus a rotating sample of the census. The census tier MUST NOT be
-  deep-checked in full.
+- **FR-323**: Deep checks MUST be scoped to what is affordable and polite. Scope
+  follows the same frequency dial as availability (D4) — most often for the
+  domains with the most measured public traffic, less often further down — and
+  MUST NOT be run over the whole frame in one cycle.
 - **FR-324**: A deep-check failure MUST be recorded as a failure of the check,
   distinct from the availability outcome and never merged into it.
-- **FR-325**: The sample MUST be drawn so every census domain is reached in
-  bounded time, and the coverage claim MUST state the sampling rate rather than
-  implying a census.
+- **FR-325**: The rotation MUST be drawn so every domain in the frame is reached
+  in bounded time, and every published deep-check aggregate MUST state how much
+  of the frame it covers rather than implying a census.
+- **FR-326**: A deep reading MUST record only measured audit values. The tool's
+  own category scores are a weighted composite and belong to the analysis layer
+  under D3, where the weighting is published and recomputable from what is
+  stored.
 
 ### Plain checks (US4)
 
