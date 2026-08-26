@@ -92,3 +92,34 @@ describe('rendering a figure keeps the method adjacent (FR-201)', () => {
     assert.notEqual(html.trim(), '');
   });
 });
+
+/**
+ * The deep-check metrics brought two units the site had never published: a ratio
+ * with no unit at all (layout shift) and a size in bytes. Both are measurements
+ * and both must go through the same choke point — a quantity that could not be a
+ * Figure would be a quantity published without its method.
+ */
+describe('the units the deep readings measure in', () => {
+  const base = {
+    tier: 'hot' as const,
+    population: 1,
+    window: { from: '2026-08-25T00:00:00Z', to: '2026-08-25T00:00:00Z' },
+    samples: 1,
+    vantage: 'github-actions/test',
+  };
+
+  test('a unitless ratio keeps the precision that makes it meaningful', () => {
+    const html = formatFigure(figure({ ...base, value: 0.021, unit: 'unitless' }));
+    assert.match(html, /0\.021/, 'rounding a layout-shift score to a whole number erases it entirely');
+    assert.match(html, /class="method"/, 'and it still carries its method');
+  });
+
+  test('a size in bytes is published in units a reader thinks in', () => {
+    const html = formatFigure(figure({ ...base, value: 2_400_000, unit: 'bytes' }));
+    assert.match(html, /2\.3 MB|2\.4 MB/, `bytes should read as megabytes: ${html}`);
+  });
+
+  test('a small size still reads sensibly', () => {
+    assert.match(formatFigure(figure({ ...base, value: 1426, unit: 'bytes' })), /1\.4 KB/);
+  });
+});

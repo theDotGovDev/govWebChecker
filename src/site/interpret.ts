@@ -69,7 +69,107 @@ export const RULES: Record<string, BandRule> = {
       },
     ],
   },
+
+  /**
+   * The deep-check measures, keyed by the metric names the record stores.
+   *
+   * Every threshold below is Google's, published for these exact metrics, and
+   * that is the point: a band this project invented would be an opinion wearing
+   * the costume of a measurement. Where nobody has published a defensible line —
+   * total page weight is the case in hand — there is no rule here and therefore
+   * no band, rather than a number we made up (FR-302).
+   */
+  largest_contentful_paint: {
+    version: 'lcp-band/1',
+    what: 'how long until the main thing on the page appears',
+    source: "Google's Core Web Vitals (web.dev/lcp): good at or under 2.5 s, poor over 4 s",
+    bands: [
+      { band: 'good', upTo: 2500, label: 'Appears quickly',
+        plain: 'The main content shows up fast enough that the page feels ready almost immediately.' },
+      { band: 'fair', upTo: 4000, label: 'Slow to appear',
+        plain: 'A visitor stares at a mostly empty page for a noticeable moment before the content arrives.' },
+      { band: 'poor', label: 'Very slow to appear',
+        plain: 'The page stays blank or half-drawn long enough that many visitors give up first.' },
+    ],
+  },
+
+  cumulative_layout_shift: {
+    version: 'cls-band/1',
+    what: 'how much the page jumps around while it loads',
+    source: "Google's Core Web Vitals (web.dev/cls): good at or under 0.1, poor over 0.25",
+    bands: [
+      { band: 'good', upTo: 0.1, label: 'Stays put',
+        plain: 'The page holds still as it loads, so nothing moves out from under a reader mid-tap.' },
+      { band: 'fair', upTo: 0.25, label: 'Shifts a little',
+        plain: 'Parts of the page move as it finishes loading, which can make a reader lose their place.' },
+      { band: 'poor', label: 'Jumps around',
+        plain: 'The page moves enough while loading that a visitor can tap the wrong thing entirely.' },
+    ],
+  },
+
+  total_blocking_time: {
+    version: 'tbt-band/1',
+    what: 'how long the page ignores taps and clicks while it loads',
+    source: "Google's Lighthouse metric scoring (developer.chrome.com/docs/lighthouse/performance/lighthouse-total-blocking-time): good at or under 200 ms, poor over 600 ms",
+    bands: [
+      { band: 'good', upTo: 200, label: 'Responds right away',
+        plain: 'The page answers taps and typing as soon as it appears.' },
+      { band: 'fair', upTo: 600, label: 'Slow to respond',
+        plain: 'Taps and typing are ignored for a moment while the page finishes working.' },
+      { band: 'poor', label: 'Frozen while loading',
+        plain: 'The page looks ready but does not respond, which reads as broken rather than slow.' },
+    ],
+  },
+
+  first_contentful_paint: {
+    version: 'fcp-band/1',
+    what: 'how long until anything at all appears',
+    source: "Google's Lighthouse metric scoring (web.dev/fcp): good at or under 1.8 s, poor over 3 s",
+    bands: [
+      { band: 'good', upTo: 1800, label: 'Something appears fast',
+        plain: 'A visitor sees the page starting to draw almost as soon as they ask for it.' },
+      { band: 'fair', upTo: 3000, label: 'Blank for a moment',
+        plain: 'The screen stays empty for long enough to notice before anything appears.' },
+      { band: 'poor', label: 'Blank for a long time',
+        plain: 'A visitor waits at a blank screen with no sign that anything is happening.' },
+    ],
+  },
+
+  speed_index: {
+    version: 'speed-index-band/1',
+    what: 'how quickly the page fills in overall',
+    source: "Google's Lighthouse metric scoring (developer.chrome.com/docs/lighthouse/performance/speed-index): good at or under 3.4 s, poor over 5.8 s",
+    bands: [
+      { band: 'good', upTo: 3400, label: 'Fills in quickly',
+        plain: 'The page becomes readable in one smooth go rather than in slow pieces.' },
+      { band: 'fair', upTo: 5800, label: 'Fills in slowly',
+        plain: 'The page arrives in visible stages, so a reader waits for the part they came for.' },
+      { band: 'poor', label: 'Fills in very slowly',
+        plain: 'The page takes long enough to become readable that a visitor may leave first.' },
+    ],
+  },
+
+  time_to_interactive: {
+    version: 'tti-band/1',
+    what: 'how long until the page is fully usable',
+    source: "Google's Lighthouse metric scoring (web.dev/tti): good at or under 3.8 s, poor over 7.3 s",
+    bands: [
+      { band: 'good', upTo: 3800, label: 'Usable quickly',
+        plain: 'Search boxes, menus and links work almost as soon as the page appears.' },
+      { band: 'fair', upTo: 7300, label: 'Slow to become usable',
+        plain: 'The page looks finished before it actually works, so early taps do nothing.' },
+      { band: 'poor', label: 'Very slow to become usable',
+        plain: 'A visitor can see what they need for several seconds before they can act on it.' },
+    ],
+  },
 };
+
+/**
+ * The metric the availability record already publishes, under the name the deep
+ * record uses for the same thing. Both are the time until the server started
+ * answering, so they share one rule rather than drifting into two.
+ */
+RULES['server_response_time'] = RULES['server_response']!;
 
 export function interpret(figure: Figure, measure: keyof typeof RULES): Interpretation | undefined {
   const rule = RULES[measure];

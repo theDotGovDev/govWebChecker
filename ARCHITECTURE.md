@@ -194,6 +194,19 @@ assumed.
 Reads the record and writes the static site. Sends nothing to any target: the
 build has no network path at all, which is stronger than a rule.
 
+- `interpret.ts` / `checks.ts` — the translation layer. "482 ms" is not
+  information for most people: they do not know whether it is good, and the page
+  did not say. The fix is not to hide the number but to say what it means, name
+  the threshold that decided it, and cite where that threshold came from — so the
+  reading is checkable rather than an opinion asserted. Every rule is versioned
+  and recomputable over stored readings, exactly as `presence/1` is, and travels
+  with the exact figure it interprets rather than replacing it. Where nobody has
+  published a defensible line (total page weight is the case in hand) there is no
+  rule and therefore no band: an invented threshold would be indistinguishable
+  from a measurement. `checks.ts` renders those bands as three-state checks —
+  passes, does not pass, not evaluated — and the third never collapses into the
+  second, which is Principle V's absence rule applied where it is easiest to lose.
+
 - `figure.ts` — the choke point. There is no numeric type in the view model
   other than `Figure`, which cannot be constructed without its tier, population,
   window, sample count and vantage — so a published number without its method is
