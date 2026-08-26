@@ -1,23 +1,12 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { existsSync, readdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { findBrowser } from '../../src/quality/browser.js';
 import { CAPTURE_PROFILES, CHANGE_RULE, distance, hasMeaningfullyChanged } from '../../src/quality/capture.js';
 import { captureAndHash } from '../../src/quality/capture-runner.js';
 import { standaloneCapturer } from '../../src/quality/runner.js';
 
-function findBrowser(): string | undefined {
-  if (process.env['CHROME_PATH']) return process.env['CHROME_PATH'];
-  const candidates = ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
-  const pw = process.env['PLAYWRIGHT_BROWSERS_PATH'] ?? '/opt/pw-browsers';
-  if (existsSync(pw)) {
-    for (const dir of readdirSync(pw)) {
-      if (dir.startsWith('chromium')) candidates.push(`${pw}/${dir}/chrome-linux/chrome`);
-    }
-  }
-  return candidates.find((c) => existsSync(c));
-}
 
 const CSS =
   'body{margin:0;font-family:system-ui;color:#16191c}' +
@@ -126,8 +115,7 @@ describe('a view changes when a reader would say it changed (D6, FR-344)', () =>
   }
 
   before(async () => {
-    const path = findBrowser();
-    assert.ok(path, 'no browser found — set CHROME_PATH so this guarantee can be checked');
+    assert.ok(findBrowser(), 'no browser found — set CHROME_PATH so this guarantee can be checked');
     server = http.createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(current);
@@ -137,7 +125,7 @@ describe('a view changes when a reader would say it changed (D6, FR-344)', () =>
 
     const puppeteer = (await import('puppeteer-core')).default;
     browser = (await puppeteer.launch({
-      executablePath: path,
+      executablePath: findBrowser()!,
       args: ['--no-sandbox', '--headless=new'],
     })) as unknown as typeof browser;
     scratch = (await browser.newPage()) as import('../../src/quality/capture-runner.js').HashPage;
@@ -253,9 +241,9 @@ describe('a view of an unchanged page is the same view (D6)', () => {
   let current: string | undefined;
 
   before(async () => {
-    const path = findBrowser();
-    assert.ok(path, 'no browser found — set CHROME_PATH so this guarantee can be checked');
-    process.env['CHROME_PATH'] = path;
+    // Deliberately NOT setting CHROME_PATH: production has to find the browser
+    // on its own, and a test that arranges the environment is testing itself.
+    assert.ok(findBrowser(), 'no browser found — set CHROME_PATH so this guarantee can be checked');
     // Deliberately slow to settle: an image that arrives after the document
     // does, which is what every real page looks like.
     const body =

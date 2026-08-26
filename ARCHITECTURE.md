@@ -169,6 +169,14 @@ assumed.
   A tool failure is recorded as a failure of the *check*, never merged into the
   availability outcome — a browser crash says nothing about whether a government
   website was up.
+- `browser.ts` — finds the browser to drive. `puppeteer-core` ships none and
+  refuses to launch without an explicit path, so this resolves one: an explicit
+  `CHROME_PATH` first and never second-guessed, then the usual system locations,
+  then a Playwright-managed Chromium. It exists because production read only
+  `CHROME_PATH` while every integration test *set* that variable itself — so the
+  tests proved the code worked in an environment they had arranged and the
+  workflow had not. Production resolves the browser now, and the tests use the
+  same resolution; a test that arranges its own environment is testing itself.
 - `runner.ts` — driving the real browsers. Identification is applied on both
   engines: appended to Chrome's emulated device string and to Playwright's
   iPhone descriptor, never replacing either, since sites serve different pages to

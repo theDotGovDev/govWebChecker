@@ -14,7 +14,20 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm run build
+
+      - name: Install the browsers the suite measures with
+        # The capture and traffic tests drive real browsers, because the defects
+        # they exist to catch — anonymous requests, a view taken before the page
+        # painted, a Chromium picture filed under Safari — are invisible to a
+        # test over flags and fixtures. Chrome is already on the runner image;
+        # WebKit is not, and `--with-deps` adds the system libraries it needs.
+        run: npx playwright install --with-deps webkit
       # The suite must pass with no network access to any external host (SC-006).
       # Fixtures are loopback servers; a test reaching the internet is a bug in
       # the test, not a reason to relax this.
+      #
+      # CHROME_PATH is deliberately NOT set: production resolves the browser
+      # itself, and a workflow that arranged it would hide the case where
+      # production cannot — which is exactly the defect this shape was written
+      # after.
       - run: npm test

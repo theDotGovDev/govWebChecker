@@ -2,34 +2,10 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { existsSync, readdirSync } from 'node:fs';
+import { findBrowser } from '../../src/quality/browser.js';
 import { lighthouseRunner, PRESETS } from '../../src/quality/runner.js';
 import { USER_AGENT } from '../../src/politeness/user-agent.js';
 
-/**
- * Point the runner at whatever browser this machine has.
- *
- * Production reads `CHROME_PATH` or lets chrome-launcher search; a CI runner has
- * Chrome installed and needs neither. A development container often has one
- * somewhere else entirely, and a politeness guarantee that quietly stops running
- * there is worse than one that never existed — so this searches, and fails
- * loudly rather than skipping when it finds nothing.
- */
-function findBrowser(): string | undefined {
-  if (process.env['CHROME_PATH']) return process.env['CHROME_PATH'];
-  const candidates = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-  ];
-  const pw = process.env['PLAYWRIGHT_BROWSERS_PATH'] ?? '/opt/pw-browsers';
-  if (existsSync(pw)) {
-    for (const dir of readdirSync(pw)) {
-      if (dir.startsWith('chromium')) candidates.push(`${pw}/${dir}/chrome-linux/chrome`);
-    }
-  }
-  return candidates.find((c) => existsSync(c));
-}
 
 /**
  * What a deep check actually sends, observed at a local server.
@@ -50,12 +26,12 @@ describe('every request a deep check makes says who it is (Principle III, FR-002
   const seen: { path: string; userAgent: string }[] = [];
 
   before(async () => {
-    const browser = findBrowser();
     // Not skipped: the constitution requires the Principle III limits to have
     // tests that fail if a limit is loosened, and a test that vanishes when the
-    // environment is inconvenient is a limit nobody is checking.
-    assert.ok(browser, 'no browser found — set CHROME_PATH so this guarantee can be checked');
-    process.env['CHROME_PATH'] = browser;
+    // environment is inconvenient is a limit nobody is checking. And not
+    // arranged either — production resolves the browser, or this proves nothing
+    // about the workflow.
+    assert.ok(findBrowser(), 'no browser found — set CHROME_PATH so this guarantee can be checked');
 
     const body =
       '<!doctype html><html lang="en"><head><meta charset="utf-8">' +

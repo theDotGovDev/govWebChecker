@@ -1,5 +1,6 @@
 import { USER_AGENT } from '../politeness/user-agent.js';
 import type { CaptureProfile } from './capture.js';
+import { requireBrowser } from './browser.js';
 import type { TakenView } from './run.js';
 import type { OnPage, ToolResult, ToolRun } from './deep-check.js';
 
@@ -157,7 +158,7 @@ export function lighthouseRunner(
     const { default: puppeteer } = await import('puppeteer-core');
     const browser = await puppeteer.launch({
       args: chromeFlags({ host, ...(address ? { address } : {}) }),
-      ...(process.env['CHROME_PATH'] ? { executablePath: process.env['CHROME_PATH'] } : {}),
+      executablePath: requireBrowser(),
     });
     try {
       const page = await browser.newPage();
@@ -205,7 +206,7 @@ export function standaloneCapturer(
     const address = resolveAddress ? await resolveAddress(host) : undefined;
     const browser = await puppeteer.launch({
       args: chromeFlags({ host, ...(address ? { address } : {}) }),
-      ...(process.env['CHROME_PATH'] ? { executablePath: process.env['CHROME_PATH'] } : {}),
+      executablePath: requireBrowser(),
     });
     try {
       const page = await browser.newPage();
