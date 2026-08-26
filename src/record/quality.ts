@@ -16,7 +16,7 @@ import type { DeepReading } from '../quality/deep-check.js';
  * because the record is the measured layer (005 D3); and no page content may
  * appear, because we store measurements of a site, not the site.
  */
-const OUTCOMES = new Set(['measured', 'check_failed']);
+const OUTCOMES = new Set(['measured', 'check_failed', 'skipped']);
 
 const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
@@ -75,8 +75,8 @@ function validateMetrics(metrics: unknown, outcome: unknown): string[] {
   if (typeof metrics !== 'object' || metrics === null) return ['metrics is required'];
   const entries = Object.entries(metrics as Record<string, unknown>);
 
-  if (outcome === 'check_failed' && entries.length > 0) {
-    return ['a check_failed reading must carry no metrics — it did not measure anything'];
+  if (outcome !== 'measured' && entries.length > 0) {
+    return [`a ${String(outcome)} reading must carry no metrics — it did not measure anything`];
   }
 
   const problems: string[] = [];
@@ -128,6 +128,10 @@ export function validateQualityReading(record: unknown): string[] {
 
   if (r['outcome'] === 'measured' && 'check_failure' in r) {
     problems.push('check_failure must be absent when the check produced a reading');
+  }
+
+  if (r['outcome'] === 'skipped' && (typeof r['skip_reason'] !== 'string' || r['skip_reason'] === '')) {
+    problems.push('a skipped reading must record why no check was attempted');
   }
 
   for (const field of DERIVED_FIELDS) {

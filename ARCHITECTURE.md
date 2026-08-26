@@ -130,6 +130,12 @@ assumed.
   rather than by error text, which drifts between Node versions. It never returns
   a body. `fetchTextForEvaluation` is the deliberate, size-capped exception, used
   only for `robots.txt` — a file whose purpose is to be read before we act.
+- `permission.ts` — asks a site's `robots.txt` whether we may fetch a path,
+  before we fetch it. Shared by the availability pass and the deep quality pass:
+  a rule about who may read a page does not weaken because a second kind of check
+  wants it, and the deep check needs it more, since it loads the subresources
+  too. The robots fetch is itself a request, so it spends the same budget and
+  goes to the same pinned address as the check that follows.
 - `robots.ts` — a small parser for the directives that decide whether we may
   fetch: User-agent grouping, Disallow, Allow. A group naming us beats the
   wildcard, and the longest matching rule wins, so a site can carve an exception
@@ -163,6 +169,15 @@ assumed.
   A tool failure is recorded as a failure of the *check*, never merged into the
   availability outcome — a browser crash says nothing about whether a government
   website was up.
+- `run.ts` — one deep pass, **serial by construction**. The availability pass
+  runs different hosts concurrently because politeness is a property of what we
+  do to one server; a deep pass cannot borrow that argument, and the reason is
+  validity rather than politeness. Two browsers competing for one runner CPU
+  inflate blocking time and time-to-interactive on both, so the numbers would
+  describe our scheduling rather than the page — the same failure as measuring
+  from a sandbox and publishing it as a fact about an agency. The pass trades
+  wall-clock for numbers that mean something, and records its concurrency so a
+  reader does not have to take that on trust.
 
 ### `src/site/` — the published reading of the record
 

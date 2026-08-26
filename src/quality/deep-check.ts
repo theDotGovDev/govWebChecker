@@ -63,8 +63,12 @@ export interface DeepMethod {
  * A tool that could not measure a page has said nothing about the page's
  * availability, and merging the two would let a Chrome crash be published as a
  * government website being down (FR-324).
+ *
+ * `skipped` is the third state and is not a failure of either kind: it is a page
+ * we were asked not to fetch, and the record says so rather than leaving a gap a
+ * reader would have to guess at.
  */
-export type DeepOutcome = 'measured' | 'check_failed';
+export type DeepOutcome = 'measured' | 'check_failed' | 'skipped';
 
 export interface DeepReading {
   schema: string;
@@ -77,6 +81,8 @@ export interface DeepReading {
   outcome: DeepOutcome;
   /** Why the tool could not produce a reading. Present only when it could not. */
   check_failure?: string;
+  /** Why no check was attempted. Present only on a skipped reading. */
+  skip_reason?: string;
   /** The final URL the tool settled on, when it got that far. */
   final_url?: string;
   /**
