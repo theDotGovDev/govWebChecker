@@ -3,6 +3,9 @@ import type { Target } from '../targets/load.js';
 import { figure, type Figure } from './figure.js';
 import { censusSeries, type CensusSeries } from './series.js';
 import type { Frame } from '../census/frame.js';
+import type { DeepReading } from '../quality/deep-check.js';
+import { interpret, type Band } from './interpret.js';
+import { checksFor } from './checks.js';
 
 export interface RunRow {
   run_id: string;
@@ -114,6 +117,10 @@ export interface CensusView {
 
 export interface SiteModel {
   sites: SiteView[];
+  /** The first screen: interpreted tiles, before any table (FR-310). */
+  dashboard: DashboardTile[];
+  /** Present when deep readings exist; the checks behind the experience tile. */
+  experience?: ExperienceView;
   /** Daily answered-rate and latency for the hourly monitoring (FR-283). */
   answeredTrend?: TrendChart;
   latencyTrend?: TrendChart;
@@ -146,6 +153,57 @@ export interface ModelInput {
   runs: RunRow[];
   /** The census frame, for joining domains to their kind of government (D5). */
   frame?: Frame;
+  /** Deep quality readings, when any have been collected (US3). */
+  quality?: DeepReading[];
+}
+
+/**
+ * One tile on the first screen.
+ *
+ * The owner's framing, which the whole shape follows from: most people do not
+ * know what "ms" means, or whether 500 of them is good. So a tile leads with
+ * what was found in words, keeps the figure and its method attached underneath
+ * for anyone who wants it, and links to the section that shows the working.
+ *
+ * `measured: false` is a state, not an absence. A dimension nothing has been
+ * collected for still gets its tile, saying so — dropping the tile would read as
+ * "nothing to say here", and rendering a zero would be worse (FR-312).
+ */
+export interface DashboardTile {
+  id: string;
+  /** What this tile answers, in words a reader recognises. */
+  question: string;
+  /** The finding, in words. Never the number restated. */
+  state: string;
+  /** One sentence of what that means, or why nothing was measured. */
+  detail: string;
+  /** Where the working is shown. */
+  href: string;
+  measured: boolean;
+  reading?: Figure;
+  band?: Band;
+  /** A sparkline of the same measure over time, when there is a series. */
+  trend?: TrendChart;
+}
+
+/** The deep readings, summarised as the checks they pass (US4, D3). */
+export interface ExperienceView {
+  /** One entry per check, aggregated across the pages measured. */
+  checks: {
+    id: string;
+    question: string;
+    passed: number;
+    failed: number;
+    notEvaluated: number;
+    threshold: string;
+    source: string;
+    rule: string;
+    /** The typical measurement across the pages, when any were measured. */
+    typical?: Figure;
+    band?: Band;
+  }[];
+  pages: number;
+  caption: Figure;
 }
 
 /**
@@ -311,7 +369,7 @@ function censusView(rows: Observation[]): CensusView {
  * entitled to have with the data rather than one we settle on their behalf. And
  * absence stays absence: a site with no measurement has no figure, never a zero.
  */
-export function buildSiteModel({ targets, observations, runs, frame }: ModelInput): SiteModel {
+export function buildSiteModel({ targets, observations, runs, frame, quality = [] }: ModelInput): SiteModel {
   // A run where nothing succeeded is more likely our own network than every site
   // at once. Presenting its rows as site behavior would repeat exactly the
   // misattribution the FR-024 marker exists to prevent.
@@ -449,6 +507,48 @@ export function buildSiteModel({ targets, observations, runs, frame }: ModelInpu
     };
   }
 
+  /**
+   * The share of checks the site responded to at all — a refusal included.
+   *
+   * Distinct from `answeredTrend`, and the distinction is the point. A 403 is an
+   * answer: the server was reachable and declined a robot. Publishing the success
+   * rate as "are government websites responding" would count a site's bot policy
+   * as an outage, which is the unfair implication Principle V forbids and which
+   * the rest of this page already avoids at agency altitude (FR-261).
+   *
+   * `skipped` is excluded from the numerator and the denominator both: we never
+   * asked, because robots.txt said not to, so the site neither responded nor
+   * failed to.
+   */
+  function respondedTrend(): TrendChart | undefined {
+    const asked = monitoring.filter((o) => o.outcome !== 'skipped');
+    if (asked.length === 0) return undefined;
+    const reached = (o: Observation): boolean =>
+      o.outcome === 'success' || o.outcome === 'blocked' || o.outcome === 'http_error';
+    const byDay = new Map<string, { n: number; ok: number }>();
+    for (const o of asked) {
+      const d = o.checked_at.slice(0, 10);
+      const cell = byDay.get(d) ?? { n: 0, ok: 0 };
+      cell.n += 1;
+      if (reached(o)) cell.ok += 1;
+      byDay.set(d, cell);
+    }
+    const points = [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, c]) => ({ date, value: (100 * c.ok) / c.n, samples: c.n }));
+    return {
+      caption: figure({
+        value: (100 * asked.filter(reached).length) / asked.length,
+        unit: 'percent',
+        tier: 'hot',
+        samples: asked.length,
+        ...monitoringMeta(asked),
+        rule: 'responded/1',
+      }),
+      points,
+    };
+  }
+
   function latencyTrend(): TrendChart | undefined {
     const timed = monitoring.filter((o) => typeof o.latency.median_ms === 'number');
     if (timed.length < 2) return undefined;
@@ -552,21 +652,287 @@ export function buildSiteModel({ targets, observations, runs, frame }: ModelInpu
     const unrated = views.filter((v) => !v.figure).sort((a, b) => a.agency.localeCompare(b.agency));
     return [...rated, ...unrated];
   }
+  /**
+   * The deep readings, aggregated into the checks they pass.
+   *
+   * A composite is permitted here as analysis (D3) only because the parts stay
+   * visible: every check is listed with its own count, its published threshold
+   * and its citation, so a reader who disagrees with the weighting can see
+   * exactly what went into it rather than being asked to accept a grade.
+   */
+  function experienceView(): ExperienceView | undefined {
+    if (quality.length === 0) return undefined;
+
+    // The most recent reading per page. A page measured twice is one page, and
+    // averaging a redesign together with what preceded it describes neither.
+    const latest = new Map<string, DeepReading>();
+    for (const r of quality) {
+      const prev = latest.get(r.host);
+      if (!prev || prev.checked_at < r.checked_at) latest.set(r.host, r);
+    }
+    const readings = [...latest.values()];
+    const stamps = readings.map((r) => r.checked_at).sort();
+    const vantage = [...new Set(readings.map((r) => r.method.vantage))].sort().join(', ');
+    const window = { from: stamps[0]!, to: stamps[stamps.length - 1]! };
+
+    const byCheck = new Map<string, ReturnType<typeof checksFor>>();
+    for (const reading of readings) {
+      for (const check of checksFor(reading)) {
+        const list = byCheck.get(check.id) ?? [];
+        list.push(check);
+        byCheck.set(check.id, list);
+      }
+    }
+
+    const checks = [...byCheck.entries()].map(([id, list]) => {
+      const first = list[0]!;
+      const values = list
+        .map((c) => c.measured?.value)
+        .filter((v): v is number => typeof v === 'number')
+        .sort((a, b) => a - b);
+      const unit = list.find((c) => c.measured)?.measured!.unit;
+      const typical =
+        values.length > 0 && unit
+          ? figure({
+              value: values[Math.floor(values.length / 2)]!,
+              unit,
+              tier: 'hot' as const,
+              population: readings.length,
+              window,
+              samples: values.length,
+              vantage,
+              rule: first.rule,
+            })
+          : undefined;
+      return {
+        id,
+        question: first.question,
+        passed: list.filter((c) => c.state === 'passes').length,
+        failed: list.filter((c) => c.state === 'does_not_pass').length,
+        notEvaluated: list.filter((c) => c.state === 'not_evaluated').length,
+        threshold: first.threshold,
+        source: first.source,
+        rule: first.rule,
+        ...(typical ? { typical } : {}),
+        ...(() => {
+          const band = typical ? interpret(typical, id)?.band : undefined;
+          return band ? { band } : {};
+        })(),
+      };
+    });
+
+    const totalPass = checks.reduce((n, c) => n + c.passed, 0);
+    const totalJudged = checks.reduce((n, c) => n + c.passed + c.failed, 0);
+
+    return {
+      checks,
+      pages: readings.length,
+      caption: figure({
+        // The composite: the share of judged checks that passed. Analysis, and
+        // recomputable from the counts printed beside it.
+        value: totalJudged === 0 ? 0 : (100 * totalPass) / totalJudged,
+        unit: 'percent',
+        tier: 'hot',
+        population: readings.length,
+        window,
+        samples: totalJudged,
+        vantage,
+        rule: 'checks-passed/1',
+      }),
+    };
+  }
+
   const censusRuns = runs.filter(
     (r): r is RunRow & { cycle: string; slice: number; frame_digest: string } =>
       r.tier === 'broad' && r.cycle !== undefined && r.slice !== undefined && r.frame_digest !== undefined,
   );
 
+  /**
+   * The first screen (FR-310 to FR-312).
+   *
+   * Each tile answers one question a reader actually has, in words, with the
+   * figure and its method attached and a link to where the working is shown.
+   * Every tile is always present: a dimension with nothing collected renders as
+   * not-yet-measured, because a missing tile reads as "nothing to say" and a
+   * zero would read as a finding nobody made.
+   */
+  function dashboardTiles(exp: ExperienceView | undefined): DashboardTile[] {
+    const tiles: DashboardTile[] = [];
+
+    /**
+     * The share of checks that got an answer — from the same series the
+     * sparkline draws, so the number and the line beside it are one thing.
+     * Taking it from the tier view instead would put a figure over one
+     * population next to a chart of another.
+     */
+    const responded = rTrend?.caption;
+
+    /**
+     * How the checks that did not succeed actually ended.
+     *
+     * This matters more than the rate. A 403 is an answer: the server responded
+     * and declined a bot, which the rest of this page is careful to call a
+     * posture rather than an outage. In the live record most of the gap is
+     * exactly that. A first screen driven by the success rate alone would tell a
+     * reader that many government websites are down when the record says most of
+     * them answered and refused us — the unfair implication Principle V exists to
+     * forbid, on the single most quotable line of the page.
+     */
+    const declined = monitoring.filter((o) => o.outcome === 'blocked' || o.outcome === 'skipped').length;
+    const failed = monitoring.filter(
+      (o) => o.outcome !== 'success' && o.outcome !== 'blocked' && o.outcome !== 'skipped',
+    ).length;
+    const failedShare = monitoring.length === 0 ? 0 : (100 * failed) / monitoring.length;
+    const decliningShare = monitoring.length === 0 ? 0 : (100 * declined) / monitoring.length;
+
+    tiles.push(
+      responded
+        ? {
+            id: 'tile-answering',
+            question: 'Are government websites responding?',
+            // Worded off the failures, not off the success rate, so a page full
+            // of refusals never reads as a page full of outages.
+            state:
+              failedShare <= 1 ? 'Nearly all respond'
+              : failedShare <= 5 ? 'Almost all respond'
+              : failedShare <= 20 ? 'Most respond'
+              : 'A real share do not respond',
+            detail:
+              decliningShare >= 5
+                ? 'The share of our hourly checks the site answered at all. Some of these sites answer ' +
+                  'by declining automated traffic — a refusal is a posture toward robots, not an ' +
+                  'outage, and this page never counts one as the other. How many answered successfully ' +
+                  'is a different, smaller number, shown below.'
+                : 'The share of our hourly checks the busiest federal sites answered at all. A site ' +
+                  'that declines automated traffic is recorded as declining, never as down.',
+            href: '#online-now',
+            measured: true,
+            reading: responded,
+            trend: rTrend!,
+          }
+        : {
+            id: 'tile-answering',
+            question: 'Are government websites responding?',
+            state: 'Not yet measured',
+            detail: 'No hourly checks have been recorded yet, so nothing is claimed either way.',
+            href: '#online-now',
+            measured: false,
+          },
+    );
+
+    const speed = lTrend?.caption;
+    const speedReading = speed ? interpret(speed, 'server_response') : undefined;
+    tiles.push(
+      speed && speedReading
+        ? {
+            id: 'tile-speed',
+            question: 'Do they answer quickly?',
+            state: speedReading.label,
+            detail: speedReading.plain,
+            href: '#online-now',
+            measured: true,
+            reading: speed,
+            band: speedReading.band,
+            trend: lTrend!,
+          }
+        : {
+            id: 'tile-speed',
+            question: 'Do they answer quickly?',
+            state: 'Not yet measured',
+            detail: 'No successful timing has been recorded yet, so nothing is claimed either way.',
+            href: '#online-now',
+            measured: false,
+          },
+    );
+
+    tiles.push(
+      exp
+        ? {
+            id: 'tile-page-experience',
+            question: 'Are the pages good to use?',
+            state:
+              exp.caption.value >= 90 ? 'Nearly every check passes'
+              : exp.caption.value >= 70 ? 'Most checks pass'
+              : exp.caption.value >= 40 ? 'About half the checks pass'
+              : 'Most checks do not pass',
+            detail:
+              'Each page is loaded once in a real browser on an emulated phone over a throttled ' +
+              'connection, and judged against published thresholds. Every check is listed below with ' +
+              'the line it was judged against and who drew it.',
+            href: '#page-experience',
+            measured: true,
+            reading: exp.caption,
+          }
+        : {
+            id: 'tile-page-experience',
+            question: 'Are the pages good to use?',
+            state: 'Not yet measured',
+            detail:
+              'No pages have been loaded in a browser yet. This is a measurement nobody has taken, ' +
+              'not a finding that anything is wrong.',
+            href: '#page-experience',
+            measured: false,
+          },
+    );
+
+    const broadTier = tierViews(usable).find((t) => t.tier === 'broad');
+    tiles.push(
+      broadTier
+        ? {
+            id: 'tile-coverage',
+            question: 'How much of .gov have we looked at?',
+            state: 'Every registered domain, on a weekly cycle',
+            detail:
+              'Beyond the famous sites: cities, counties, school districts, tribes and agencies. ' +
+              'Most of American government is small, and much of it never built a website — a fact ' +
+              'about how government works, not a failure.',
+            href: '#dotgov-world',
+            measured: true,
+            // Deliberately a count of domains reached, not a presence figure.
+            // The three presence states share one denominator and are published
+            // together or not at all (FR-210); one of them alone on a tile would
+            // be exactly the merge that rule exists to prevent.
+            reading: figure({
+              value: broadTier.domains,
+              unit: 'count',
+              tier: 'broad',
+              population: broadTier.domains,
+              window: {
+                from: broadRows[0]!.checked_at,
+                to: broadRows[broadRows.length - 1]!.checked_at,
+              },
+              samples: broadTier.observations,
+              vantage: [...new Set(broadRows.map((o) => o.method.vantage))].sort().join(', '),
+            }),
+          }
+        : {
+            id: 'tile-coverage',
+            question: 'How much of .gov have we looked at?',
+            state: 'Not yet measured',
+            detail: 'The weekly census has not recorded anything yet.',
+            href: '#dotgov-world',
+            measured: false,
+          },
+    );
+
+    return tiles;
+  }
+
   const aTrend = answeredTrend();
+  const rTrend = respondedTrend();
   const lTrend = latencyTrend();
   const eco = ecosystemView(frame);
+  const exp = experienceView();
+  const tiersBuilt = tierViews(usable);
   return {
     sites,
+    dashboard: dashboardTiles(exp),
+    ...(exp ? { experience: exp } : {}),
     ...(aTrend ? { answeredTrend: aTrend } : {}),
     ...(lTrend ? { latencyTrend: lTrend } : {}),
     ...(eco ? { ecosystem: eco } : {}),
     agencies: agencyViews(),
-    tiers: tierViews(usable),
+    tiers: tiersBuilt,
     ...(broadRows.length > 0
       ? {
           censusSeries: censusSeries(

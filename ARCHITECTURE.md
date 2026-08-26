@@ -212,7 +212,16 @@ build has no network path at all, which is stronger than a rule.
   window, sample count and vantage — so a published number without its method is
   unrepresentable rather than discouraged (Principle V). Absence is its own
   type, never a zero. The renderer accepts `Figure`, never `number`.
-- `model.ts` — the record shaped for display, one view per tier and deliberately
+- `model.ts` — builds the dashboard: four tiles that answer before they
+  enumerate. The first tile is the one that matters most and is the easiest place
+  to be unfair — a 403 is an *answer*, the server responded and declined a robot,
+  and in the live record most of the gap between 100% and the success rate is
+  exactly that. So the tile publishes the *responded* rate and words itself off
+  the genuine failures; the success rate keeps its home further down where it is
+  labelled as what it is. Where a tile draws a line, the figure above it is that
+  line's own caption — sourced from one object rather than checked, so a chart of
+  one thing captioned as another cannot be written. The record shaped for
+  display, one view per tier and deliberately
   no total across them. Refuses to build from a row whose vantage is `local`.
 - `standings.ts` — per-dimension orderings. A host that never once answered has
   no rate — it is refusing automation or telling us not to check — and appears

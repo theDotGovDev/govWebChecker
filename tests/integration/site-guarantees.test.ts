@@ -10,6 +10,7 @@ import { sliceOf } from '../../src/census/slice.js';
 import type { Frame } from '../../src/census/frame.js';
 import type { Observation } from '../../src/record/types.js';
 import type { Target } from '../../src/targets/load.js';
+import type { DeepReading } from '../../src/quality/deep-check.js';
 
 /**
  * These tests read the RENDERED OUTPUT, not the model — the same standard
@@ -73,10 +74,44 @@ function render(
   rows: Observation[],
   targets = [target('www.example.gov', 'www-example-gov')],
   runs: import('../../src/site/model.js').RunRow[] = [],
+  quality: DeepReading[] = [],
 ): string {
-  const model = buildSiteModel({ targets, observations: rows, runs });
+  const model = buildSiteModel({ targets, observations: rows, runs, quality });
   return renderSite(model, '2026-08-24 17:00 UTC');
 }
+
+function qualityReading(metrics: Record<string, number>, overrides: Partial<DeepReading> = {}): DeepReading {
+  const units: Record<string, string> = { cumulative_layout_shift: 'unitless', total_byte_weight: 'byte' };
+  return {
+    schema: 'govwebchecker/quality/1',
+    run_id: 'q-1',
+    target_id: 'www-example-gov',
+    host: 'www.example.gov',
+    url: 'https://www.example.gov/',
+    dimension: 'quality',
+    checked_at: '2026-08-24T06:00:00Z',
+    outcome: 'measured',
+    metrics: Object.fromEntries(
+      Object.entries(metrics).map(([k, v]) => [k, { value: v, unit: units[k] ?? 'millisecond' }]),
+    ),
+    method: {
+      tool: 'lighthouse',
+      tool_version: '13.4.1',
+      preset: 'lighthouse:default/mobile',
+      device: { form_factor: 'mobile', width: 412, height: 823, scale: 1.75, mobile: true },
+      network: { rtt_ms: 150, throughput_kbps: 1638.4, cpu_slowdown: 4, method: 'simulate' },
+      vantage: 'github-actions/test-runner-7',
+      source: 'self_run',
+    },
+    ...overrides,
+  };
+}
+
+const GOOD_PAGE = {
+  first_contentful_paint: 1200, largest_contentful_paint: 1900, speed_index: 2400,
+  cumulative_layout_shift: 0.02, total_blocking_time: 90, time_to_interactive: 2600,
+  server_response_time: 300, total_byte_weight: 840_000,
+};
 
 /** The page body, with CSS (which legitimately contains `%`) removed. */
 function body(html: string): string {
@@ -96,6 +131,15 @@ function outsideFigures(html: string): string {
     // constant, not a measurement of ours. Exempt only because the assertion
     // below proves every band carries its threshold and its source.
     .replace(/<span class="band band--[a-z]+"[^>]*>[\s\S]*?<\/span>/g, '')
+    // The counts a figure was computed FROM — its denominators, stated inside
+    // that figure's own method disclosure. Exempt only because the assertion
+    // below proves each one sits with the figure it explains.
+    .replace(/<p class="denominators">[\s\S]*?<\/p>/g, '')
+    .replace(/<span class="denominators">[\s\S]*?<\/span>/g, '')
+    // The page's own provenance: what was built, when, from how much. Not a
+    // measurement of any site. Exempt only because the assertion below proves
+    // the footer states its build time and links the record it was built from.
+    .replace(/<footer>[\s\S]*?<\/footer>/g, '')
     .replace(/<span class="(?:figure|absence)">[\s\S]*?<\/span><\/span>/g, '');
 }
 
@@ -286,8 +330,8 @@ describe('tiers never blend (FR-220 to FR-223, SC-203)', () => {
     const figures = body(html).match(/<span class="figure">[\s\S]*?<\/span><\/span>/g) ?? [];
     assert.ok(figures.length > 0);
     for (const f of figures) {
-      const hot = /hot tier/.test(f);
-      const broad = /broad tier/.test(f);
+      const hot = /checked hourly/.test(f);
+      const broad = /checked weekly/.test(f);
       assert.ok(hot !== broad, `a figure must belong to exactly one tier: ${f}`);
     }
   });
@@ -569,6 +613,100 @@ describe('the ecosystem view (D5, FR-280 to FR-286)', () => {
     assert.doesNotMatch(agencyBlock, /www\.ssa\.gov|0\.0%/, 'no zero bar for a refusing agency');
   });
 
+  test('the masthead does not reintroduce the machinery the page removed (FR-286, D4)', () => {
+    // Headings were cleaned of tier vocabulary; the introduction was not, and it
+    // is the first thing a reader meets. D4 removed tiers as a category, so the
+    // page must not teach one on the way in.
+    const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
+    const intro = body(html).slice(0, body(html).indexOf('class="dashboard"'));
+    assert.doesNotMatch(intro, /\btiers?\b|\bslices?\b|\bcycles?\b/i,
+      `the way in should not require our vocabulary: ${intro.replace(/<[^>]+>/g, ' ').trim().slice(0, 200)}`);
+  });
+
+  test('the tiles are the first thing a reader meets (FR-310)', () => {
+    const html = body(renderSite(fullModel(), '2026-08-24 17:00 UTC'));
+    const dashboard = html.indexOf('class="dashboard"');
+    // Nothing numeric may sit above them competing for the first screen.
+    const above = html.slice(0, dashboard);
+    assert.doesNotMatch(above, /<ul class="stats"/,
+      'a row of context-free counts above the tiles pushes the answer off the first screen');
+  });
+
+  test('no bare count is published outside a Figure either (FR-201)', () => {
+    // The stripper caught rates and latencies; a count is just as much a
+    // measurement, and "58 sites" with no window or vantage is exactly the
+    // unmethodded number Principle V forbids.
+    const naked = outsideFigures(renderSite(fullModel(), '2026-08-24 17:00 UTC'));
+    const pattern = /\b\d[\d,]*\s+(?:sites?|domains?|observations?|readings?)\b/gi;
+    const hits: string[] = [];
+    for (const m of naked.matchAll(pattern)) {
+      hits.push(naked.slice(Math.max(0, m.index - 70), m.index + m[0].length + 25).replace(/\s+/g, ' '));
+    }
+    assert.deepEqual(hits, [], 'a count outside a Figure is a number without a method');
+  });
+
+  test('the footer earns its exemption by stating what the page was built from', () => {
+    const footer = body(renderSite(fullModel(), '2026-08-24 17:00 UTC'))
+      .match(/<footer>[\s\S]*?<\/footer>/)?.[0] ?? '';
+    assert.ok(footer, 'the page must carry a provenance footer');
+    assert.match(footer, /2026-08-24 17:00 UTC/, 'when the page was built');
+    assert.match(footer, /\d{4}-\d{2}-\d{2}/, 'the window the record covers');
+    assert.match(footer, /href="[^"]*(github|data)/i, 'and a link to the record itself');
+  });
+
+  test('a denominator block only ever appears with the figure it explains', () => {
+    // This is the exemption the count check above relies on. A denominators
+    // block is method: the counts a figure was computed from. Loose on the page
+    // it would be a set of bare numbers; inside the method disclosure of a panel
+    // that publishes a Figure, it is that Figure's working.
+    const html = body(renderSite(fullModel(), '2026-08-24 17:00 UTC'));
+    const panels = html.match(/<div class="panel tier-panel">[\s\S]*?<\/div>\s*<\/div>/g) ?? [];
+    const blocks = html.match(/<p class="denominators">/g) ?? [];
+    assert.ok((html.match(/<span class="denominators">/g) ?? []).length > 0,
+      'the inline denominator exemption must be exercised too');
+    assert.ok(blocks.length > 0, 'the exemption must be exercised, or it is untested');
+    let accounted = 0;
+    for (const panel of panels) {
+      const inside = panel.match(/<p class="denominators">/g) ?? [];
+      if (inside.length === 0) continue;
+      accounted += inside.length;
+      assert.match(panel, /class="figure"/,
+        `denominators without the figure they explain: ${panel.slice(0, 160)}`);
+      // Every one of them, not merely one of them: a block above the disclosure
+      // is a set of bare numbers standing on its own, which is exactly what the
+      // exemption must not cover.
+      const above = panel.slice(0, panel.indexOf('<details class="depth">'));
+      assert.deepEqual(above.match(/<p class="denominators">/g) ?? [], [],
+        'denominators must sit inside the method disclosure, not beside the headline');
+    }
+    assert.equal(accounted, blocks.length,
+      'every denominators block must belong to a panel that publishes a figure');
+  });
+
+  test('a figure states its cadence, never a tier name (FR-286, D4)', () => {
+    // The heading scan below never looked inside a method line, so the machinery
+    // survived in the one place every figure carries it.
+    const html = body(renderSite(fullModel(), '2026-08-24 17:00 UTC'));
+    const methods = html.match(/<span class="method">[\s\S]*?<\/span>/g) ?? [];
+    assert.ok(methods.length > 0);
+    for (const m of methods) {
+      assert.doesNotMatch(m, /\btiers?\b|\bslices?\b/i,
+        `a reader should not meet our machinery in a method line: ${m}`);
+    }
+    assert.ok(methods.some((m) => /checked (hourly|weekly)/.test(m)),
+      'a figure must still say how often the reading was taken');
+
+    // The cadence phrase is what now keeps the two populations apart, so the
+    // phrases must actually differ. Collapsing them to one word would let a
+    // weekly census figure read as an hourly one, which is the blend the tier
+    // labels existed to prevent (FR-220) — and no other check would notice.
+    const cadences = new Set(
+      methods.map((m) => m.match(/checked (hourly|weekly)/)?.[1]).filter(Boolean),
+    );
+    assert.ok(cadences.size >= 2,
+      `a page carrying both populations must distinguish them: saw ${[...cadences].join(', ')}`);
+  });
+
   test('collection vocabulary never structures the page (FR-286)', () => {
     const html = renderSite(fullModel(), '2026-08-24 17:00 UTC');
     const headings = body(html).match(/<(h1|h2|h3|summary|caption|th)\b[^>]*>[\s\S]*?<\/\1>/g) ?? [];
@@ -605,5 +743,194 @@ describe('a measurement is published with what it means (FR-301 to FR-303)', () 
       assert.match(c, /class="figure"/, `a band must sit beside its figure, never instead of it: ${c}`);
       assert.match(c, /class="method"/, 'and the full method stays with it');
     }
+  });
+});
+
+/**
+ * The dashboard (US2, FR-310 to FR-312).
+ *
+ * A first screen that answers before it enumerates. The owner's framing: most
+ * people do not know what "ms" means, or whether 500 of them is good — so the
+ * tiles say what was found in words, keep the figure and its method attached,
+ * and lead to the detail for anyone who wants it.
+ */
+describe('the first screen answers rather than enumerates (FR-310 to FR-312)', () => {
+  const dashboardHtml = () => {
+    const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
+    return html.slice(0, html.indexOf('</section>') + 10);
+  };
+
+  test('the first screen is tiles, and no table appears before them', () => {
+    const html = render(fixtureRows());
+    const dashboard = html.indexOf('class="dashboard"');
+    assert.ok(dashboard > 0, 'the page must open with a dashboard');
+    const table = html.indexOf('<table');
+    assert.ok(table === -1 || table > dashboard, 'a raw table must not be the first thing a reader meets');
+    assert.ok(html.indexOf('class="tile') > dashboard);
+  });
+
+  test('every tile states what was found in words, not only in numbers', () => {
+    const tiles = dashboardHtml().match(/<a class="tile[\s\S]*?<\/a>/g) ?? [];
+    assert.ok(tiles.length >= 3, `expected several tiles, got ${tiles.length}`);
+    for (const tile of tiles) {
+      const state = tile.match(/<p class="tile-state">([\s\S]*?)<\/p>/)?.[1] ?? '';
+      assert.ok(state.length > 3, `a tile must say what was found: ${tile}`);
+      // The visible words only. A band's title attribute states the published
+      // threshold that decided it — a cited constant, not the reading restated —
+      // and a separate assertion proves every band carries one.
+      const words = state.replace(/<[^>]*>/g, '').trim();
+      assert.ok(words.length > 3, `a tile's plain reading must be words, not markup: ${tile}`);
+      assert.doesNotMatch(words, /\d+(\.\d+)?\s*(%|ms)\b/,
+        `the plain reading must not be the raw number restated: "${words}"`);
+    }
+  });
+
+  test('every tile leads to the detail behind it (FR-311)', () => {
+    const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
+    const tiles = html.match(/<a class="tile[^>]*href="([^"]+)"/g) ?? [];
+    assert.ok(tiles.length >= 3);
+    for (const tile of tiles) {
+      const href = tile.match(/href="([^"]+)"/)![1]!;
+      assert.match(href, /^#/, `a tile must lead somewhere on this page: ${href}`);
+      assert.ok(html.includes(`id="${href.slice(1)}"`),
+        `the tile points at ${href}, which nothing on the page answers to`);
+    }
+  });
+
+  test('a dimension with no readings is not-yet-measured, never zero and never absent (FR-312)', () => {
+    // No quality readings at all: the tile must still be there, saying so.
+    const html = render(fixtureRows());
+    const experience = html.match(/<a class="tile[^>]*id-page-experience[\s\S]*?<\/a>/)
+      ?? html.match(/<a class="tile[\s\S]*?page-experience[\s\S]*?<\/a>/);
+    assert.ok(experience, 'the tile must appear even with nothing measured — a missing tile reads as nothing to say');
+    assert.match(experience[0], /not yet|no readings|nothing measured/i);
+    assert.doesNotMatch(experience[0], /\b0\s*(%|of)/, 'nothing measured is not a score of zero');
+  });
+
+  test('a tile that carries a number carries its method with it', () => {
+    const tiles = dashboardHtml().match(/<a class="tile[\s\S]*?<\/a>/g) ?? [];
+    for (const tile of tiles) {
+      const stripped = tile
+        .replace(/<span class="band band--[a-z]+"[^>]*>[\s\S]*?<\/span>/g, '')
+    // The counts a figure was computed FROM — its denominators, stated inside
+    // that figure's own method disclosure. Exempt only because the assertion
+    // below proves each one sits with the figure it explains.
+    .replace(/<p class="denominators">[\s\S]*?<\/p>/g, '')
+    .replace(/<span class="denominators">[\s\S]*?<\/span>/g, '')
+    // The page's own provenance: what was built, when, from how much. Not a
+    // measurement of any site. Exempt only because the assertion below proves
+    // the footer states its build time and links the record it was built from.
+    .replace(/<footer>[\s\S]*?<\/footer>/g, '')
+        .replace(/<span class="(?:figure|absence)">[\s\S]*?<\/span><\/span>/g, '');
+      assert.doesNotMatch(stripped, /\d+(\.\d+)?\s*%/, `a rate outside a Figure: ${tile}`);
+      assert.doesNotMatch(stripped, /\b\d[\d,]*\s*ms\b/, `a latency outside a Figure: ${tile}`);
+    }
+  });
+
+  test('the page-experience tile summarises the checks without hiding them', () => {
+    const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
+    // The composite is permitted as analysis (D3) only while the parts stay
+    // visible, so the individual checks must be on the page too (FR-332).
+    assert.match(html, /Does the main content appear quickly\?/);
+    assert.match(html, /Does the page hold still while it loads\?/);
+    // And every check must name the line it was judged against, and who drew it.
+    assert.match(html, /web\.dev|Core Web Vitals|Lighthouse/);
+  });
+
+  test('a page that fails a check is not described as passing', () => {
+    const slow = { ...GOOD_PAGE, largest_contentful_paint: 9000, total_blocking_time: 1400 };
+    const html = render(fixtureRows(), undefined, [], [qualityReading(slow)]);
+    const section = html.slice(html.indexOf('id="page-experience"'));
+    assert.match(section, /Does the main content appear quickly\?/);
+    assert.match(section, /9,?000|9\.0 s|9000/, 'the failing measurement itself is shown, not hidden behind a word');
+  });
+});
+
+/**
+ * The tile that says whether government is online is the single most quotable
+ * thing on this page, and the easiest place to be unfair.
+ *
+ * A 403 is an answer. The server responded and declined a bot, which the rest of
+ * this site is careful to call a posture rather than an outage — the agency
+ * section carves it out explicitly. In the live record 15.5 of the 20.4 points
+ * of non-success are exactly that, so a first screen driven by the success rate
+ * would tell a reader that many government websites are down when the record
+ * says most of them answered and refused us.
+ */
+describe('a refusal is never published as an outage (Principle V, FR-261)', () => {
+  const withRefusals = (): Observation[] => {
+    const rows: Observation[] = [];
+    for (let i = 0; i < 10; i++) {
+      rows.push(row({
+        checked_at: `2026-08-2${i % 5}T0${i}:00:00Z`,
+        run_id: `run-${i}`,
+        // Eight of ten decline automated traffic; one succeeds, one times out.
+        ...(i < 8
+          ? { outcome: 'blocked' as const, status_code: 403, latency: { samples: 0 } }
+          : i === 8
+            ? { outcome: 'success' as const, latency: { samples: 1, median_ms: 120, min_ms: 120, max_ms: 120 } }
+            : { outcome: 'timeout' as const, latency: { samples: 0 } }),
+      }));
+    }
+    return rows;
+  };
+
+  test('a record that is mostly refusals does not read as government being down', () => {
+    const html = render(withRefusals());
+    const tile = html.match(/<a class="tile[^>]*id="tile-answering"[\s\S]*?<\/a>/)![0];
+    const words = (tile.match(/<p class="tile-state">([\s\S]*?)<\/p>/)?.[1] ?? '')
+      .replace(/<[^>]*>/g, '').trim();
+    assert.doesNotMatch(words, /\b(down|offline|outage|not online|unavailable)\b/i,
+      `eight of ten checks were declined, not failed: "${words}"`);
+    assert.doesNotMatch(words, /many are not|most are not/i,
+      `a refusal is a posture, not an absence: "${words}"`);
+  });
+
+  test('the words on the tile and the number under them describe the same thing', () => {
+    // Eight refusals, one success, one timeout. A tile whose words are drawn
+    // from the failures but whose figure is the success rate would say "almost
+    // all" above "10%", which is not a subtle problem.
+    const html = render(withRefusals());
+    const tile = html.match(/<a class="tile[^>]*id="tile-answering"[\s\S]*?<\/a>/)![0];
+    const value = Number(tile.match(/<span class="figure">([\d.]+)%/)?.[1]);
+    assert.ok(Number.isFinite(value), `the tile must publish a rate: ${tile}`);
+    assert.ok(value >= 85, `nine of ten checks reached the site; the tile shows ${value}%`);
+  });
+
+  test('the tile names refusal as its own thing, distinct from failing', () => {
+    const html = render(withRefusals());
+    const tile = html.match(/<a class="tile[^>]*id="tile-answering"[\s\S]*?<\/a>/)![0];
+    assert.match(tile, /declin|refus/i,
+      'a reader must be told that some sites answer by declining automated traffic');
+  });
+
+  test('the figure on the tile is the aggregate of the line beside it', () => {
+    // The fixture carries rows from before the record had a tier field — the
+    // live record's actual situation, and the one where the responded rate and
+    // the success rate diverge. The tile must publish the responded rate,
+    // computed here from the rows rather than read back from the model.
+    const untiered = (o: Partial<Observation>): Observation => {
+      const r = row(o) as Observation & { tier?: unknown };
+      delete r.tier;
+      return r;
+    };
+    const rows = [
+      ...fixtureRows(),
+      untiered({ checked_at: '2026-08-19T06:00:00Z', run_id: 'old-1' }),
+      untiered({ checked_at: '2026-08-19T07:00:00Z', run_id: 'old-2', outcome: 'timeout',
+        latency: { samples: 0 } }),
+    ];
+    const asked = rows.filter((o) => o.outcome !== 'skipped');
+    const reached = asked.filter(
+      (o) => o.outcome === 'success' || o.outcome === 'blocked' || o.outcome === 'http_error',
+    );
+    const expected = ((100 * reached.length) / asked.length).toFixed(1);
+
+    const html = render(rows);
+    const tile = html.match(/<a class="tile[^>]*id="tile-answering"[\s\S]*?<\/a>/)![0];
+    assert.ok(tile.includes('<svg class="spark"'), 'the tile must draw its series');
+    const printed = tile.match(/<span class="figure">([\d.]+)%/)?.[1];
+    assert.equal(printed, expected,
+      `the tile must publish the rate its line draws, not the success rate: ${tile}`);
   });
 });
