@@ -32,6 +32,74 @@ const DERIVED_FIELDS = ['score', 'scores', 'grade', 'rating', 'rank', 'categorie
 /** Fields that would persist the page instead of a measurement of it. */
 const CONTENT_FIELDS = ['body', 'html', 'screenshot', 'content', 'subresources', 'dom'];
 
+/**
+ * Anything on a view finding that would be the view itself.
+ *
+ * A finding describes a rendered page: its hash, its dimensions, when it was
+ * taken. The moment one carries the image, the bound that makes captures
+ * permissible at all is gone — and gone permanently, because the record is
+ * append-only and nothing can ever remove it (constitution 2.1.0).
+ */
+const VIEW_CONTENT_FIELDS = [
+  'data', 'image', 'png', 'webp', 'jpeg', 'jpg', 'thumbnail', 'screenshot', 'body', 'src',
+];
+
+const ENGINES = new Set(['blink', 'webkit']);
+
+function validateViews(views: unknown): string[] {
+  if (!Array.isArray(views)) return ['views must be a list of findings when present'];
+  const problems: string[] = [];
+  const seen = new Set<string>();
+
+  for (const [index, view] of views.entries()) {
+    const where = `views[${index}]`;
+    if (typeof view !== 'object' || view === null) {
+      problems.push(`${where} must be a finding`);
+      continue;
+    }
+    const v = view as Record<string, unknown>;
+
+    // Stated, not implied: a view is one moment on one device, and without its
+    // profile, viewport and time it reads as the site's settled condition.
+    if (typeof v['profile'] !== 'string' || v['profile'] === '') {
+      problems.push(`${where}.profile is required`);
+    }
+    for (const field of ['width', 'height', 'scale', 'bytes'] as const) {
+      if (typeof v[field] !== 'number') problems.push(`${where}.${field} must be a number`);
+    }
+    if (typeof v['engine'] !== 'string' || !ENGINES.has(v['engine'])) {
+      problems.push(`${where}.engine must be one of: ${[...ENGINES].join(', ')}`);
+    }
+    if (typeof v['captured_at'] !== 'string' || !UTC_TIMESTAMP.test(v['captured_at'])) {
+      problems.push(`${where}.captured_at must be a UTC timestamp ending in Z`);
+    }
+    // Without the hash, "we checked whether it changed" is a claim nobody —
+    // including a later run of this code — can act on.
+    if (typeof v['hash'] !== 'string' || v['hash'] === '') {
+      problems.push(`${where}.hash is required, or change detection cannot be redone`);
+    }
+    if (typeof v['rule'] !== 'string' || v['rule'] === '') {
+      problems.push(`${where}.rule must name the versioned rule that judged the change`);
+    }
+    if (typeof v['changed'] !== 'boolean') problems.push(`${where}.changed must be a boolean`);
+
+    for (const field of VIEW_CONTENT_FIELDS) {
+      if (field in v) {
+        problems.push(
+          `${where}.${field} would put the rendered page in the record, where nothing can remove it`,
+        );
+      }
+    }
+
+    const profile = typeof v['profile'] === 'string' ? v['profile'] : '';
+    if (profile && seen.has(profile)) {
+      problems.push(`${where}: a second view for profile "${profile}" — one view per page per device`);
+    }
+    seen.add(profile);
+  }
+  return problems;
+}
+
 function validateDevice(device: unknown): string[] {
   if (typeof device !== 'object' || device === null) return ['method.device is required'];
   const d = device as Record<string, unknown>;
@@ -147,6 +215,7 @@ export function validateQualityReading(record: unknown): string[] {
   }
 
   problems.push(...validateMetrics(r['metrics'], r['outcome']));
+  if ('views' in r) problems.push(...validateViews(r['views']));
   problems.push(...validateMethod(r['method']));
 
   return problems;

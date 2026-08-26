@@ -1,4 +1,5 @@
 import type { RateLimiter } from '../politeness/rate-limiter.js';
+import type { CaptureFinding } from './capture.js';
 
 /**
  * A deep quality check: one emulated visitor loading one page, once.
@@ -94,6 +95,15 @@ export interface DeepReading {
    * storing them would put a derived figure in the layer that holds observations.
    */
   metrics: Record<string, Metric>;
+  /**
+   * What the page looked like, described rather than shown.
+   *
+   * The images live where build artifacts live and are regenerated into each
+   * deploy; these are the findings, which is what the record keeps forever
+   * (constitution 2.1.0). At most one per device profile — with nowhere for a
+   * history to accumulate, latest-only holds by construction.
+   */
+  views?: CaptureFinding[];
   method: DeepMethod;
 }
 

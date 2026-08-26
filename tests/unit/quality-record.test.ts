@@ -126,3 +126,53 @@ describe('a quality reading is appended, never rewritten', () => {
     }
   });
 });
+
+/**
+ * Constitution 2.1.0 permits a rendered view and bounds it by keeping it out of
+ * the record entirely. The gate is where that bound becomes real: a finding may
+ * describe a view, and nothing may carry one.
+ */
+describe('a view never reaches the record, only the finding (constitution 2.1.0)', () => {
+  const view = {
+    profile: 'phone-blink', width: 412, height: 823, scale: 1, engine: 'blink' as const,
+    captured_at: '2026-08-26T10:15:00Z', hash: '1'.repeat(64), rule: 'capture-change/1',
+    bytes: 31_402, changed: true,
+  };
+
+  test('a reading carrying view findings is admitted', () => {
+    assert.deepEqual(validateQualityReading({ ...reading(), views: [view] }), []);
+  });
+
+  test('a finding without its profile, viewport or capture time is refused', () => {
+    for (const field of ['profile', 'width', 'height', 'engine', 'captured_at'] as const) {
+      const broken = { ...view } as Record<string, unknown>;
+      delete broken[field];
+      const problems = validateQualityReading({ ...reading(), views: [broken] });
+      assert.ok(problems.some((p: string) => new RegExp(field).test(p)),
+        `a view is one moment, stated — without ${field} it is presented as the site's condition`);
+    }
+  });
+
+  test('image data in a finding is refused, whatever it is called', () => {
+    for (const field of ['data', 'image', 'png', 'webp', 'thumbnail', 'screenshot']) {
+      const problems = validateQualityReading({
+        ...reading(),
+        views: [{ ...view, [field]: 'data:image/webp;base64,AAAA' }],
+      });
+      assert.ok(problems.length > 0,
+        `${field} would put the page in the record, where nothing can ever remove it`);
+    }
+  });
+
+  test('a finding whose hash is missing is refused — change detection would be a lie', () => {
+    const noHash = { ...view } as Record<string, unknown>;
+    delete noHash['hash'];
+    assert.ok(validateQualityReading({ ...reading(), views: [noHash] }).some((p: string) => /hash/.test(p)));
+  });
+
+  test('two findings for the same profile are refused — latest only', () => {
+    const problems = validateQualityReading({ ...reading(), views: [view, { ...view }] });
+    assert.ok(problems.some((p: string) => /profile|once|duplicate/i.test(p)),
+      'a second view of one page on one device is a history, which is what the bound forbids');
+  });
+});
