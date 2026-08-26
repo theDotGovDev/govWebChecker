@@ -67,9 +67,12 @@ tell a courteous monitor from an attack unless the traffic says who it is.
   mobile usability. Retention is bounded, and the bounds are the principle:
   - **Latest only.** One view per page per device profile. A view is evidence of
     a current state, never an archive of a site's history.
-  - **Bounded population.** Only pages under deep quality checking, never the
-    full census — the storage cost of tens of thousands of pages would swamp the
-    record that is this project's actual product.
+  - **Never in the record.** A view is evidence attached to the current
+    publication, not part of the permanent record. It is regenerated into each
+    deploy and MAY be cached between runs; what the record stores is the
+    *finding* — the view's hash, dimensions, device profile and capture time.
+    Committing views would make "latest only" a policy over an immutable
+    history, which is not a bound at all.
   - **Public surface only**, per Principle II. Honoring a removal request means
     deleting the views, not merely unlinking them.
   - **Stated, not implied.** A view carries its device profile, viewport and
@@ -135,7 +138,7 @@ principle, MINOR for adding one, PATCH for clarifications that do not change wha
 is allowed. Compliance is reviewed at pull request time; a violating change is
 either revised or accompanied by an explicit, recorded justification.
 
-**Version**: 2.0.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-25
+**Version**: 2.1.0 | **Ratified**: 2026-07-31 | **Last Amended**: 2026-08-26
 
 **2.0.0** — Principle IV previously prohibited persisting a screenshot outright.
 That clause was written at project setup, in the same breath as the sentence
@@ -154,3 +157,21 @@ The prohibition also cost this project the most legible evidence it can offer. "
 site is unusable on a phone" is a claim a reader must take on trust; a picture at a
 stated viewport is a claim they can check for themselves — which is what Principle V
 asks of every figure the project publishes.
+
+**2.1.0** — Principle IV's rendered-view bounds traded one limit for a stronger
+one. 2.0.0 bounded views by *population* — deep-checked pages only, never the
+full census — because tens of thousands of images would swamp the record. The
+premise was that views would be committed. They will not be.
+
+Measured: 16,535 domains across three device profiles is 1.42 GB at 30 KB an
+image, 5.68 GB at 120 KB, before any history accumulates. And git history is
+immutable, so "latest only" would bound the working tree while the pack grew
+forever — a site changing weekly leaves 52 blobs a year, permanently. Change
+detection slows that rate; it cannot bound the total.
+
+Removing views from the record entirely bounds it structurally instead: there is
+nowhere for a history to accumulate, so latest-only holds by construction rather
+than by discipline. That is a stronger retention limit than 2.0.0's, and it makes
+the population limit unnecessary — so the census-wide capture the population
+bound forbade becomes permissible, with the record still storing only the
+finding.

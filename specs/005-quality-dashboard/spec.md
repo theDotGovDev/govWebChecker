@@ -31,23 +31,29 @@ answerable with standard tooling and are not being asked.
 
 ## Two things this feature must reconcile
 
-### It must not become a scoreboard (D1 stands)
+### A derived figure must never pass for a measured one (D3)
 
-`002` D1 decided: per-dimension standings, no composite. That decision is not
-reversed here, and the reconciliation matters.
+`002` D1 decided: per-dimension standings, no composite. **D3 below supersedes
+it.** D1 was reaching for the right thing — do not publish a number whose
+weighting nobody can defend — but it drew the line at *derivation* when the line
+belongs at *provenance*.
 
-**What D1 forbids**: one blended number per site — a grade, an index, a rank —
-that merges speed and accessibility and security into a figure whose weighting
-nobody can defend.
+**What is prohibited**: a derived figure presented as if it were measured, or one
+whose derivation is not published. A single letter grade with an undisclosed
+weighting is the canonical example — it looks like an observation and is an
+opinion.
 
-**What this feature adds instead**: several *named dimensions*, each rated on
-its own published scale, in plain language. "Speed: typical. Mobile: passes.
-Accessibility: 12 issues found." That is four honest readings, not one dishonest
-one — the same shape PageSpeed Insights uses, and the same shape a nutrition
-label uses.
+**What is permitted, and is the point of this feature**: an analysis layer that
+bands, rates, composites and ranks — provided each such figure is labelled as
+analysis, carries its versioned rule, and is recomputable by a reader from the
+measured layer alone. That is the same discipline `presence/1` already meets.
 
-A reader may of course form an overall impression. The site's job is to give
-them the parts to do it with, not to do it for them and hide the weighting.
+**What this feature adds first**: several *named dimensions*, each rated on its
+own published scale, in plain language. "Speed: typical. Mobile: passes.
+Accessibility: 12 issues found." Those are honest readings a reader can check,
+and the same shape PageSpeed Insights and a nutrition label use. A composite
+across them is allowed on top of that, not instead of it — the parts stay visible
+so the reader can disagree with the weighting.
 
 ### It must not become load testing (Principle I, NON-NEGOTIABLE)
 
@@ -278,19 +284,26 @@ labeled with the device and the moment captured.
 - **FR-331**: A check MUST have three states — passes, does not pass, not
   evaluated — and MUST NOT collapse the third into the second (the
   absence-is-not-failure rule, applied to checks).
-- **FR-332**: The site MUST NOT publish a single blended score, grade or rank
-  across dimensions (`002` D1 stands). Per-dimension ratings are the permitted
-  form.
+- **FR-332**: Per-dimension ratings MUST always be published and MUST remain
+  visible wherever a composite appears. A composite, grade or rank across
+  dimensions is permitted only as analysis-layer output under D3 — labelled as
+  derived, carrying its versioned rule, and recomputable from the measured layer
+  — and MUST NOT be published as the only reading of a site.
 
-### Captures (US5, gated on Q1)
+### Captures (US5)
 
 - **FR-340**: A capture MUST record the device profile, viewport and capture
   time, and MUST be presented as one moment rather than as the site's condition.
 - **FR-341**: Only the most recent capture per site per device MUST be retained.
   No capture history.
 - **FR-342**: A removal request MUST delete captures, not merely unlink them.
-- **FR-343**: Captures MUST be bounded to the sites deep-checked, never the full
-  census.
+- **FR-343**: A capture MUST NOT be committed to the record. The record stores
+  the finding — hash, dimensions, profile, capture time; the image is
+  regenerated into each deploy and MAY be cached between runs (D6,
+  constitution 2.1.0).
+- **FR-344**: A capture MUST be re-taken only when the view has meaningfully
+  changed, judged by a stored perceptual hash; an unchanged view MUST be reused
+  rather than re-fetched.
 
 ---
 
@@ -332,7 +345,7 @@ labeled with the device and the moment captured.
 
 ---
 
-## Open Questions
+## Decisions
 
 ### D1 — Captures are permitted, bounded (was Q1) — **DECIDED**
 
@@ -343,12 +356,14 @@ technology findings"*. Its stated reasons: page content is *transient,
 potentially large, and not ours to archive*.
 
 **Owner's decision: the prohibition was a mistake.** Constitution amended to
-**2.0.0**, narrowly — the real concerns survive as bounds rather than as a ban:
+**2.0.0**, narrowly — the real concerns survive as bounds rather than as a ban.
+D6 below then measured the storage cost and replaced the population bound with a
+structural one, at **2.1.0**:
 
 | Original concern | How 2.0.0 answers it |
 | --- | --- |
 | Transient | The argument *for* a dated capture, not against it — now stated that way |
-| Potentially large | Survives as **latest-only, deep-checked pages only** (FR-341, FR-343) |
+| Potentially large | Survives as **latest-only**, tightened by 2.1.0 to *never in the record* — the image is a build artifact, the finding is the record (FR-341, FR-343) |
 | Not ours to archive | Survives as public-surface-only, and **deletion** rather than unlinking on request (FR-342) |
 
 The amendment also records what the prohibition cost: *"this site is unusable on
@@ -356,12 +371,22 @@ a phone"* is a claim a reader must take on trust, where a picture at a stated
 viewport is one they can check — which is exactly what Principle V asks of every
 figure this project publishes.
 
-### Q2 — Which tool, and is the dependency acceptable?
+### D2 — Lighthouse approved, and a standing policy for tooling (was Q2) — **DECIDED**
 
-The project has no runtime dependencies today, and `AGENTS.md` requires saying
-why before adding one.
+**Owner's decision**: any library of this kind may be used if it is open source
+and needs no API key. Where a key would be required, ask first.
 
-**Proposal: Lighthouse** (Google, open source, Apache-2.0, v13.4.1, ~19 MB).
+That is now the project's standing rule for tooling, and it is a good one: a key
+is a dependency on somebody's continued goodwill and a secret to protect, both of
+which this project is structured to avoid.
+
+Lighthouse qualifies — Apache-2.0, no key, runs locally. Installed as a **dev**
+dependency at v13.4.1 and verified end-to-end against a local fixture before
+anything was built on it: real category scores, real Core Web Vitals, mobile
+emulation confirmed at *Slow 4G* (rtt 150 ms, 1,638 kbps), which settles the "3G"
+question with the tool's own numbers rather than from memory.
+
+**Original proposal, for the record: Lighthouse** (Google, Apache-2.0, v13.4.1).
 
 | Why this one | |
 | --- | --- |
@@ -380,3 +405,153 @@ version on every reading.
 break the comparability that is the entire reason for choosing the tool. The
 recommendation is to publish the standard preset and name it, rather than a
 custom profile that matches no published benchmark.
+
+### D3 — Two layers: measured is raw, analysis may derive (was Q2 on composites) — **DECIDED**
+
+**Owner's framing, which is better than the one this spec proposed**: the
+distinction is not *composite versus no composite*. It is between a **measured
+layer**, which holds raw values, and an **analysis layer**, where composite,
+derived and interpreted insight is legitimate.
+
+This **supersedes `002` D1**, which said "no composite, index or grade" without
+qualification. D1 was reaching for the right thing — do not publish a number
+whose weighting nobody can defend — but it drew the line in the wrong place, at
+*derivation itself* rather than at *provenance*.
+
+The rule that replaces it:
+
+| Layer | Contains | Obligation |
+| --- | --- | --- |
+| **Measured** | What the check observed: timings, status codes, audit values, presence | Immutable, raw, never adjusted. This is the record |
+| **Analysis** | Bands, composites, ratings, checkboxes, rankings | Versioned, recomputable from the measured layer alone, and each states the rule that produced it |
+
+A composite is therefore permitted, and must be *labelled as analysis*, carry its
+versioned rule, and be reproducible by a reader from stored values. What remains
+prohibited is a derived figure presented as if it were measured, or one whose
+derivation is not published — because that is an opinion wearing the costume of a
+measurement.
+
+FR-304's recomputability requirement is what makes this safe: a better rule
+recomputes over everything already collected, exactly as `presence/1` does.
+
+### D4 — No tiers; check everything as often as logistics allow (was Q3) — **DECIDED**
+
+**Owner's decision**: stop distinguishing tiers; check everything as often as
+possible given logistical constraints.
+
+The tier concept is removed as a *category*. There is one frame — every
+registered `.gov` domain — and one policy: check as often as the budget allows.
+
+**The physical constraint, stated rather than designed around**: at the measured
+throughput of 20.5 requests/minute, one pass over 16,535 domains is **13.4
+hours**. Uniform treatment therefore means everything is checked about weekly and
+nothing more often — which would *remove* the ability to see a short interruption
+at all, since that requires sampling faster than the interruption lasts.
+
+So frequency cannot be uniform; what can be removed is the *caste*. The
+reconciliation:
+
+- **One frame.** No population is privileged by membership in a named tier.
+- **Frequency is a continuous property, not a class.** How often a domain is
+  checked follows from measured public traffic and available budget — a dial,
+  derived from data, not a label assigned once.
+- **Cadence is recorded per reading**, because a figure's meaning depends on it:
+  a weekly reading cannot support a claim about a thirty-minute outage, whatever
+  frame it came from.
+- **The site never names a tier** — already true after `002` D5 (FR-286). It says
+  "checked hourly" or "checked weekly", which is a fact about the reading rather
+  than a category the reader must learn.
+
+`tier` in the record is retained as historical provenance for rows already
+written — the record is append-only and history is not rewritten — but it stops
+being the organizing concept for collection or presentation.
+
+### D5 — Device profiles chosen from published traffic share (was Q4) — **DECIDED**
+
+**Owner's instruction**: pick devices and browsers by current popularity as
+reported by traffic volume.
+
+Measured from StatCounter Global Stats, **July 2026**, fetched rather than
+recalled:
+
+| Platform | Share | | Browser | Share | | Top mobile viewport | Share |
+| --- | ---: | --- | --- | ---: | --- | --- | ---: |
+| Mobile | 52.57% | | Chrome | 68.22% | | 414×896 | 13.24% |
+| Desktop | 45.93% | | Safari | 16.47% | | 360×800 | 9.12% |
+| Tablet | **1.50%** | | Edge | 5.37% | | 390×844 | 6.67% |
+| | | | Firefox | 3.34% | | | |
+| | | | Samsung Internet | 2.06% | | Top desktop | 1920×1080 (22.41%) |
+
+**Profiles selected, and why each earns its place:**
+
+1. **Phone, Chromium, 414×896** — the single most common mobile viewport (13.24%).
+2. **Phone, WebKit, 390×844** — covers Safari's 16.47%, which no Chromium profile
+   can speak for, at the iPhone-typical viewport.
+3. **Desktop, Chromium, 1920×1080** — the single most common desktop viewport
+   (22.41%).
+
+Engine coverage: Blink (Chrome + Edge + Samsung + Opera ≈ **77.5%**) plus WebKit
+(**16.5%**) is about 94% of browsers. Firefox's 3.34% is uncovered and that is
+stated rather than papered over.
+
+**Tablet is deliberately excluded**: 1.50% of traffic does not justify a third of
+the capture cost. The data was consulted precisely so this call is the data's and
+not a preference.
+
+### D6 — Captures for every site, change-detected — and they never enter git (was Q5) — **DECIDED, with a correction**
+
+**Owner's decision**: capture all sites, and check whether the view has
+meaningfully changed before storing.
+
+Change detection is right and is adopted. But it does not solve the storage
+problem, and the reason is worth stating because it is easy to get wrong:
+
+> **Git history is immutable.** "Latest only" bounds the working tree, not the
+> repository. Every capture ever committed stays in the pack forever, so a site
+> that changes weekly leaves 52 blobs a year — permanently. Change detection
+> reduces the *rate* of that growth; it cannot bound the *total*.
+
+The arithmetic for one full pass, before any history accumulates:
+
+| Image size (WebP, above the fold) | 16,535 sites × 3 profiles |
+| --- | ---: |
+| 30 KB | 1.42 GB |
+| 60 KB | 2.84 GB |
+| 120 KB | 5.68 GB |
+
+GitHub advises repositories stay under 1 GB. So committing captures is not
+viable at this frame size at any plausible image quality.
+
+**The correction, which preserves the decision**: captures are never committed.
+They live where build artifacts already live.
+
+- `docs/` is **already** an uncommitted build artifact in this project — the site
+  is generated and deployed by Pages, never checked in. Captures join it.
+- Between runs, captures persist in the **Actions cache**, keyed by site and
+  profile. The check job refreshes only those whose perceptual hash changed;
+  unchanged captures are reused untouched, which is exactly the saving change
+  detection was meant to buy.
+- The **record** — the committed, permanent product — stores the *finding*: the
+  capture's hash, dimensions, device profile, and when it was taken. That is a
+  measurement, it is small, and it is what makes "this page changed on the 14th"
+  answerable from the record alone, forever.
+- The **image** is evidence attached to the current site, regenerated into each
+  deploy. Constitution 2.0.0's latest-only rule is therefore satisfied
+  structurally rather than by policy: there is nowhere for a history to
+  accumulate.
+
+This keeps every part of the owner's decision — all sites, change-detected — and
+loses only the assumption that the images belonged in the repository.
+
+### D7 — Static SVG with progressive enhancement (was Q6) — **DECIDED**
+
+Charts render server-side as SVG and work with script disabled; interactivity is
+layered on where it helps (`002` FR-271). No reader loses access to data because
+a script did not run.
+
+### D8 — Deep-check traffic proceeds (was Q7) — **DECIDED**
+
+One full page load per site per cycle is one visitor's worth of traffic, which is
+the line Principle I draws. It is 20–50× the bytes of the current single request,
+and that increase is recorded here so it is a known cost rather than a discovered
+one.
