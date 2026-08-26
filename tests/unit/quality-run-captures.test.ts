@@ -60,10 +60,10 @@ describe('a capture costs what it says it costs (Principle I, FR-322)', () => {
         config: { ...CONFIG, dryRun: true },
         run: async (_url, onPage) => {
           navigations += 1;
-          if (onPage) { ridden = true; await onPage(); }
+          if (onPage) { ridden = true; await onPage(undefined, undefined); }
           return lhr();
         },
-        captureView: async () => ({ hash: SAME, bytes: 1234, image: new Uint8Array([1]) }),
+        captureView: async (_p: unknown, _pg: unknown, _s: unknown) => ({ hash: SAME, bytes: 1234, image: new Uint8Array([1]) }),
       });
       assert.equal(navigations, 1, 'the deep check must still navigate exactly once');
       assert.ok(ridden, 'the phone view must ride that navigation rather than paying for its own');
@@ -82,8 +82,8 @@ describe('a capture costs what it says it costs (Principle I, FR-322)', () => {
         targets: [target('ok', site)],
         dataDir: await tmp(),
         config: { ...CONFIG, hostIntervalMs: 400, dryRun: true },
-        run: async (_u, onPage) => { at['deep'] = Date.now(); if (onPage) await onPage(); return lhr(); },
-        captureView: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+        run: async (_u, onPage) => { at['deep'] = Date.now(); if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async (_p: unknown, _pg: unknown, _s: unknown) => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
         captureStandalone: async () => {
           at['standalone'] = Date.now();
           return { hash: SAME, bytes: 10, image: new Uint8Array([1]) };
@@ -105,7 +105,7 @@ describe('a capture costs what it says it costs (Principle I, FR-322)', () => {
         dataDir: await tmp(),
         config: { ...CONFIG, dryRun: true },
         run: async () => { throw new Error('chrome did not start'); },
-        captureView: async () => { captures += 1; return { hash: SAME, bytes: 10, image: new Uint8Array([1]) }; },
+        captureView: async (_p: unknown, _pg: unknown, _s: unknown) => { captures += 1; return { hash: SAME, bytes: 10, image: new Uint8Array([1]) }; },
         captureStandalone: async () => { captures += 1; return { hash: SAME, bytes: 10, image: new Uint8Array([1]) }; },
       });
       assert.equal(captures, 0, 'there is nothing to photograph and no reason to ask again');
@@ -122,8 +122,8 @@ describe('an unchanged view is not stored again (D6, FR-344)', () => {
         targets: [target('ok', site)],
         dataDir: await tmp(),
         config: CONFIG,
-        run: async (_u, onPage) => { if (onPage) await onPage(); return lhr(); },
-        captureView: async () => ({ hash: next, bytes: 4242, image: new Uint8Array([7, 7, 7]) }),
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async (_p: unknown, _pg: unknown, _s: unknown) => ({ hash: next, bytes: 4242, image: new Uint8Array([7, 7, 7]) }),
         viewsDir: dir,
         ...(previous ? { previousHash: () => previous } : {}),
       });
@@ -188,8 +188,8 @@ describe('an unchanged view is not stored again (D6, FR-344)', () => {
         targets: [target('ok', site)],
         dataDir: await tmp(),
         config: CONFIG,
-        run: async (_u, onPage) => { if (onPage) await onPage(); return lhr(); },
-        captureView: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async (_p: unknown, _pg: unknown, _s: unknown) => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
         captureStandalone: async () => ({ hash: DIFFERENT, bytes: 20, image: new Uint8Array([2]) }),
         viewsDir: dir,
       });

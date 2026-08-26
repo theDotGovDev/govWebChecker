@@ -1,5 +1,7 @@
 import { USER_AGENT } from '../politeness/user-agent.js';
-import type { ToolResult, ToolRun } from './deep-check.js';
+import type { CaptureProfile } from './capture.js';
+import type { TakenView } from './run.js';
+import type { OnPage, ToolResult, ToolRun } from './deep-check.js';
 
 /**
  * Driving the real tool.
@@ -139,8 +141,11 @@ export function chromeFlags(target: ChromeTarget): string[] {
  * The imports are dynamic because the tool is a development dependency. `check`,
  * `census` and `verify` must keep working in an install that has no browser.
  */
-export function lighthouseRunner(preset: Preset, resolveAddress?: (host: string) => Promise<string | undefined>): ToolRun {
-  return async (url: string): Promise<ToolResult> => {
+export function lighthouseRunner(
+  preset: Preset,
+  resolveAddress?: (host: string) => Promise<string | undefined>,
+): ToolRun {
+  return async (url: string, onPage?: OnPage): Promise<ToolResult> => {
     const [{ default: lighthouse }, chromeLauncher] = await Promise.all([
       import('lighthouse'),
       import('chrome-launcher'),
@@ -149,21 +154,82 @@ export function lighthouseRunner(preset: Preset, resolveAddress?: (host: string)
     const host = new URL(url).hostname;
     const address = resolveAddress ? await resolveAddress(host) : undefined;
 
-    const chrome = await chromeLauncher.launch({
-      chromeFlags: chromeFlags({ host, ...(address ? { address } : {}) }),
-      ...(process.env['CHROME_PATH'] ? { chromePath: process.env['CHROME_PATH'] } : {}),
+    const { default: puppeteer } = await import('puppeteer-core');
+    const browser = await puppeteer.launch({
+      args: chromeFlags({ host, ...(address ? { address } : {}) }),
+      ...(process.env['CHROME_PATH'] ? { executablePath: process.env['CHROME_PATH'] } : {}),
     });
     try {
-      const result = await lighthouse(url, lighthouseFlags(preset, { port: chrome.port }));
+      const page = await browser.newPage();
+      // The tool drives this page, so a view can be taken from it afterwards
+      // without a second navigation — which is the difference between a capture
+      // costing nothing and costing someone else's server another page load.
+      const result = await lighthouse(url, lighthouseFlags(preset, {}), undefined, page);
       if (!result) throw new Error('the tool returned no result');
       const lhr = result.lhr as unknown as ToolResult & { runtimeError?: { code: string; message: string } };
       // A runtime error means the tool could not measure the page. Recording the
       // numbers it produced anyway would publish a reading of a load that did not
       // happen.
       if (lhr.runtimeError) throw new Error(`${lhr.runtimeError.code}: ${lhr.runtimeError.message}`);
+      if (onPage) {
+        // A blank page for reducing the image. It never navigates anywhere, so
+        // nothing here can reach a target.
+        const scratch = await browser.newPage();
+        await onPage(page, scratch);
+      }
       return lhr;
     } finally {
-      await chrome.kill();
+      await browser.close();
     }
   };
+}
+
+/**
+ * A view at a profile the deep check cannot speak for.
+ *
+ * Its own browser, its own navigation, and therefore its own cost — which the
+ * caller pays through the limiter before calling this. The flags are the same
+ * ones the deep check uses, including the identification and the backend pin, so
+ * this traffic is as accountable as any other.
+ */
+export function standaloneCapturer(
+  resolveAddress?: (host: string) => Promise<string | undefined>,
+): (url: string, profile: CaptureProfile) => Promise<TakenView> {
+  return async (url: string, profile: CaptureProfile): Promise<TakenView> => {
+    const [{ default: puppeteer }, { captureAndHash }] = await Promise.all([
+      import('puppeteer-core'),
+      import('./capture-runner.js'),
+    ]);
+    const host = new URL(url).hostname;
+    const address = resolveAddress ? await resolveAddress(host) : undefined;
+    const browser = await puppeteer.launch({
+      args: chromeFlags({ host, ...(address ? { address } : {}) }),
+      ...(process.env['CHROME_PATH'] ? { executablePath: process.env['CHROME_PATH'] } : {}),
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({
+        width: profile.width,
+        height: profile.height,
+        deviceScaleFactor: profile.scale,
+      });
+      // `networkidle2` rather than `load`: the document arriving is not the page
+      // being ready, and a view taken at `load` is routinely of a blank screen.
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30_000 });
+      const scratch = await browser.newPage();
+      return await captureAndHash(page as never, scratch as never, profile);
+    } finally {
+      await browser.close();
+    }
+  };
+}
+
+/** Takes a view from a page the tool has already loaded. */
+export async function captureFromPage(
+  profile: CaptureProfile,
+  page: unknown,
+  scratch: unknown,
+): Promise<TakenView> {
+  const { captureAndHash } = await import('./capture-runner.js');
+  return captureAndHash(page as never, scratch as never, profile);
 }

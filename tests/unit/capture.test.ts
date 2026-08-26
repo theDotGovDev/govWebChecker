@@ -58,7 +58,7 @@ describe('the device profiles are the ones the traffic data chose (D5)', () => {
  * saving the check exists to buy.
  */
 describe('a view is re-stored only when it meaningfully changed (D6, FR-344)', () => {
-  const A = ('1'.repeat(16) + '0'.repeat(16)).repeat(8); // 256 bits, like the real thing
+  const A = ('1'.repeat(16) + '0'.repeat(16)).repeat(CHANGE_RULE.bits / 32); // as wide as the real thing
 
   test('an identical view is not a change', () => {
     assert.equal(hasMeaningfullyChanged(hash(A), hash(A)), false);

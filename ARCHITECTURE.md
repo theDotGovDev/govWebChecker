@@ -191,11 +191,15 @@ assumed.
   is a build artifact regenerated into each deploy, so latest-only holds by
   construction rather than by policy.
 
-  Change detection is a difference hash over a 16×17 greyscale grid, computed in
-  the browser that already decoded the image rather than by adding an image
-  library. An average hash was tried first and returned a distance of *zero* for
-  a complete redesign, because government pages are mostly white and nearly every
-  cell sat above the mean — a method that reports having checked and has not. The
+  Change detection is a difference hash over a 17×17 greyscale grid, compared
+  both left-to-right and top-to-bottom, computed in the browser that already
+  decoded the image rather than by adding an image library. Two earlier versions
+  failed in the same shape, each reporting having checked when it had not: an
+  average hash returned a distance of *zero* for a complete redesign, because
+  government pages are mostly white and nearly every cell sat above the mean; and
+  a horizontal-only difference hash returned all zeroes for a desktop view,
+  because comparing left to right finds vertical edges and a page of full-width
+  bands has none. The
   threshold is versioned and states what it was measured from, because we drew
   that line rather than citing one, and it errs low: a spurious re-store costs
   bytes, while a missed change leaves a picture published as current that is no

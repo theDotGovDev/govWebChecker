@@ -103,10 +103,15 @@ export interface CaptureFinding {
  * about, and re-storing it would spend exactly the saving this check exists to
  * buy.
  *
- * The comparison is a difference hash: the view reduced to a 16×17 greyscale
- * grid, each cell compared with its right-hand neighbour. That measures where
- * the *edges* are — which is what layout is — and is deliberately blind to
- * overall brightness and to fine detail.
+ * The comparison is a difference hash: the view reduced to a 17×17 greyscale
+ * grid, each cell compared with its right-hand neighbour and with the one below
+ * it. That measures where the *edges* are — which is what layout is — and is
+ * deliberately blind to overall brightness and to fine detail.
+ *
+ * Both directions are needed, and the second was added after a desktop view
+ * hashed to all zeroes. Comparing left to right finds vertical edges: columns,
+ * sidebars, cards. A full-width banner has none — and a government page at
+ * desktop width is mostly full-width bands, so half the layout was invisible.
  *
  * An average hash was tried first and does not work here. Government pages are
  * mostly white, so nearly every cell sits above the mean and the hash collapses:
@@ -119,35 +124,37 @@ export interface CaptureFinding {
  */
 export const CHANGE_RULE = {
   version: 'capture-change/1',
-  /** 16×17 greyscale cells, compared with the cell to their right. */
-  bits: 256,
-  threshold: 5,
+  /** A 17×17 greyscale grid, each cell compared with the one to its right and the one below. */
+  bits: 512,
+  threshold: 10,
   what:
-    'the view reduced to a 16×17 greyscale grid, each cell compared with the one to its right; ' +
-    'more than five of the 256 comparisons flipping counts as a change',
+    'the view reduced to a 17×17 greyscale grid, each cell compared with the one to its right ' +
+    'and the one below it; more than ten of the 512 comparisons flipping counts as a change',
   /**
-   * Why five, stated because we drew this line rather than citing one.
+   * Why ten, stated because we drew this line rather than citing one.
    *
-   * Measured against local fixtures, distance out of 256. Noise — an identical
-   * page re-rendered, a date changing in the strapline, a heading reworded —
-   * reached 1. Signal started at 9, for one image swapped; a banner appearing
-   * scored 70 and a redesign 63.
+   * Measured against local fixtures, distance out of 512. On the phone profile,
+   * noise — a re-render, a date changing in the strapline, a heading reworded —
+   * reached 3; signal started at 33, for one image swapped, with a banner at 109
+   * and a redesign at 89. On the desktop profile noise was 0 and signal started
+   * at 37.
    *
-   * A first attempt put this at ten, from an earlier fixture where the smallest
-   * image swap scored 18. On a second fixture the same change scored 9, which
-   * would have been called unchanged. The lesson is that the gap is narrower
-   * than one measurement suggested, so the threshold sits near the noise floor
-   * rather than midway.
+   * Two corrections got here. The first threshold was set from a fixture where
+   * the smallest visible change scored 18 out of 256; on a second fixture the
+   * same kind of change scored 9, which that threshold would have called
+   * unchanged. The second came from adding the vertical pass, which widened the
+   * gap on both profiles and made the desktop view measurable at all.
    *
    * The failure modes are not symmetric, and that decides the direction of the
    * error. A spurious re-store costs bytes. A missed change leaves a picture
    * published as current that is no longer true — a claim about someone else's
-   * site that we would keep making. So this errs toward capturing again.
+   * site that we would keep making. So this sits nearer the noise floor than the
+   * middle of the gap.
    */
   basis:
-    'measured on local fixtures: re-renders and text-only edits reach 1, the smallest visible ' +
-    'change measured (one image swapped) reaches 9; set near the noise floor because a missed ' +
-    'change publishes a view that is no longer true',
+    'measured on local fixtures, out of 512: re-renders and text-only edits reach 3, the smallest ' +
+    'visible change measured (one image swapped) reaches 33; set near the noise floor because a ' +
+    'missed change publishes a view that is no longer true',
 } as const;
 
 /** Hamming distance between two equal-length bit strings. */

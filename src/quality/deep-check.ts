@@ -144,7 +144,16 @@ export interface ToolResult {
  * That is the difference between a capture costing nothing and a capture costing
  * someone else's server another page load.
  */
-export type ToolRun = (url: string, onPage?: () => Promise<void>) => Promise<ToolResult>;
+export type ToolRun = (url: string, onPage?: OnPage) => Promise<ToolResult>;
+
+/**
+ * Handed the tool's own page once it has finished, before it closes.
+ *
+ * The types are structural and deliberately minimal — the page comes from a
+ * browser library this module does not import, and the record's shape should not
+ * become a function of one.
+ */
+export type OnPage = (page: unknown, scratch: unknown) => Promise<void>;
 
 export const SCHEMA = 'govwebchecker/quality/1';
 
@@ -246,7 +255,7 @@ export function readingFromRun(result: ToolResult, context: ReadingContext, chec
 export interface DeepCheckOptions {
   run: ToolRun;
   /** Called on the tool's own page, after it finishes and before it closes. */
-  onPage?: () => Promise<void>;
+  onPage?: OnPage;
   limiter: RateLimiter;
   /** The backend the navigation will reach, when it is known. */
   address?: string;

@@ -5,6 +5,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { CAPTURE_PROFILES, CHANGE_RULE, distance, hasMeaningfullyChanged } from '../../src/quality/capture.js';
 import { captureAndHash } from '../../src/quality/capture-runner.js';
+import { standaloneCapturer } from '../../src/quality/runner.js';
 
 function findBrowser(): string | undefined {
   if (process.env['CHROME_PATH']) return process.env['CHROME_PATH'];
@@ -232,5 +233,103 @@ describe('a view changes when a reader would say it changed (D6, FR-344)', () =>
     );
     assert.ok(noise < CHANGE_RULE.threshold && CHANGE_RULE.threshold < signal,
       `noise reached ${noise}, signal starts at ${signal}, threshold is ${CHANGE_RULE.threshold}`);
+  });
+});
+
+/**
+ * A capture that races the render is worse than no capture.
+ *
+ * Change detection compares this run's view with the last one. If the view is
+ * unstable — caught mid-paint, before a webfont swaps, before an image
+ * decodes — then every run reports a change, every image is rewritten, and the
+ * whole point of checking is spent. Observed exactly that way: three runs
+ * against an unchanged page produced 4,480 then 24,918 then 4,258 bytes.
+ *
+ * Against a local server on 127.0.0.1 — never a government site.
+ */
+describe('a view of an unchanged page is the same view (D6)', () => {
+  let server: http.Server;
+  let url: string;
+  let current: string | undefined;
+
+  before(async () => {
+    const path = findBrowser();
+    assert.ok(path, 'no browser found — set CHROME_PATH so this guarantee can be checked');
+    process.env['CHROME_PATH'] = path;
+    // Deliberately slow to settle: an image that arrives after the document
+    // does, which is what every real page looks like.
+    const body =
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      `<title>Fixture Agency</title><style>${CSS}</style></head><body>` +
+      '<header><h1>Fixture Agency</h1></header><main><img id="hero" width="600" height="200" alt="">' +
+      ['Permits', 'Records', 'Payments'].map((c) => `<div class="card"><h2>${c}</h2></div>`).join('') +
+      '</main><script>setTimeout(()=>{document.getElementById("hero").src=' +
+      '"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27600%27 height=%27200%27%3E' +
+      '%3Crect width=%27600%27 height=%27200%27 fill=%27%231a4480%27/%3E%3C/svg%3E";},250)</script>' +
+      '</body></html>';
+    server = http.createServer((req, res) => {
+      if (current !== undefined) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(current);
+        return;
+      }
+      if (req.url === '/slow.svg') {
+        setTimeout(() => {
+          res.writeHead(200, { 'content-type': 'image/svg+xml' });
+          res.end('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><rect width="600" height="200" fill="#1a4480"/></svg>');
+        }, 250);
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(body);
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  });
+
+  after(() => server?.close());
+
+  test('capturing the same page three times gives the same hash', async () => {
+    const desktop = CAPTURE_PROFILES.find((p) => p.formFactor === 'desktop')!;
+    const capturer = standaloneCapturer();
+    const views = [await capturer(url, desktop), await capturer(url, desktop), await capturer(url, desktop)];
+    const hashes = new Set(views.map((v) => v.hash));
+    assert.equal(hashes.size, 1,
+      `three captures of one page produced ${hashes.size} different views ` +
+        `(${views.map((v) => v.bytes).join(', ')} bytes) — change detection would report a change every run`);
+    assert.equal(hasMeaningfullyChanged(views[0]!.hash, views[2]!.hash), false);
+  });
+
+  test('a page made only of full-width bands still hashes to something', async () => {
+    // The case that forced the vertical pass. Comparing each cell only with the
+    // one to its right finds vertical edges — columns, sidebars, cards. A page
+    // of stacked full-width bands has none, and a desktop view of one hashed to
+    // all zeroes: two completely different layouts would have compared equal.
+    const bands = (top: string, middle: string) =>
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<title>Fixture Agency</title><style>body{margin:0}div{height:200px}</style></head><body>' +
+      `<div style="background:${top}"></div><div style="background:${middle}"></div>` +
+      '<div style="background:#ffffff"></div><div style="background:#333333"></div></body></html>';
+
+    const desktop = CAPTURE_PROFILES.find((p) => p.formFactor === 'desktop')!;
+    const capturer = standaloneCapturer();
+
+    current = bands('#1a4480', '#eeeeee');
+    const before = await capturer(url, desktop);
+    assert.ok(before.hash.includes('1'),
+      'a page of horizontal bands produced a hash with no bits set — half of layout is invisible');
+
+    current = bands('#8b1a1a', '#333333');
+    const after = await capturer(url, desktop);
+    assert.equal(hasMeaningfullyChanged(before.hash, after.hash), true,
+      'restacking the bands must register as a change');
+  });
+
+  test('the view is of the loaded page, not of a blank one', async () => {
+    const desktop = CAPTURE_PROFILES.find((p) => p.formFactor === 'desktop')!;
+    const view = await standaloneCapturer()(url, desktop);
+    assert.ok(view.hash.includes('1'),
+      'a hash of all zeroes is a uniform image — the page had not painted when it was taken');
   });
 });

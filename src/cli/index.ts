@@ -7,7 +7,8 @@ import { executeCensus } from '../census/run.js';
 import { buildFrame, DEFAULT_SOURCE, type Frame, type Exclusion } from '../census/frame.js';
 import { sliceForDate, SLICES } from '../census/slice.js';
 import { executeDeepRun } from '../quality/run.js';
-import { lighthouseRunner, PRESETS } from '../quality/runner.js';
+import { lighthouseRunner, standaloneCapturer, captureFromPage, PRESETS } from '../quality/runner.js';
+import type { DeepReading } from '../quality/deep-check.js';
 
 /**
  * The traffic limits. Constants, not options.
@@ -78,6 +79,7 @@ const TOOL_VERSION = '0.1.0';
 interface Args {
   command: string;
   preset: 'mobile' | 'desktop';
+  views?: string;
   targets: string;
   out: string;
   only?: string;
@@ -109,6 +111,11 @@ function parseArgs(argv: string[]): Args {
       const value = argv[++i];
       if (value === undefined) throw new Error('--only requires a target id');
       args.only = value;
+    }
+    else if (arg === '--views') {
+      const value = argv[++i];
+      if (value === undefined) throw new Error('--views requires a directory');
+      args.views = value;
     }
     else if (arg === '--preset') {
       const value = argv[++i];
@@ -301,6 +308,13 @@ async function deepCheckCommand(args: Args): Promise<number> {
   if (args.only && selected.length === 0) throw new Error(`no active target with id "${args.only}"`);
 
   const preset = PRESETS[args.preset];
+
+  // What the last run saw, so an unchanged page is not photographed again.
+  // Read from the record rather than from the image directory: the record is
+  // the durable thing, and the images may have come from a cache that was
+  // evicted (constitution 2.1.0).
+  const lastHash = await previousViewHashes(args.out);
+
   const summary = await executeDeepRun({
     targets: selected,
     dataDir: args.out,
@@ -315,6 +329,10 @@ async function deepCheckCommand(args: Args): Promise<number> {
       ...(args.dryRun ? { dryRun: true } : {}),
     },
     run: lighthouseRunner(preset),
+    captureView: captureFromPage,
+    captureStandalone: standaloneCapturer(),
+    ...(args.views ? { viewsDir: args.views } : {}),
+    previousHash: (host, profile) => lastHash.get(`${host}\u0000${profile}`),
   });
 
   if (args.dryRun) {
@@ -336,11 +354,45 @@ async function deepCheckCommand(args: Args): Promise<number> {
   return 0;
 }
 
+/**
+ * The most recent hash per host and device, read from the published record.
+ *
+ * Scans the current and previous month, which is enough: a domain checked less
+ * often than that has no recent view to reuse anyway, and an absent hash simply
+ * means the next capture counts as a change.
+ */
+async function previousViewHashes(dataDir: string): Promise<Map<string, string>> {
+  const latest = new Map<string, { at: string; hash: string }>();
+  const dir = path.join(dataDir, 'quality');
+  const files = await fs.readdir(dir).catch(() => [] as string[]);
+
+  for (const file of files.filter((f) => f.endsWith('.jsonl')).sort().slice(-2)) {
+    const text = await fs.readFile(path.join(dir, file), 'utf8').catch(() => '');
+    for (const line of text.split('\n')) {
+      if (line.trim() === '') continue;
+      let row: DeepReading;
+      try {
+        row = JSON.parse(line) as DeepReading;
+      } catch {
+        // A malformed line is not a reason to abandon the rest of the record.
+        continue;
+      }
+      for (const view of row.views ?? []) {
+        const key = `${row.host}\u0000${view.profile}`;
+        const prev = latest.get(key);
+        if (!prev || prev.at < view.captured_at) latest.set(key, { at: view.captured_at, hash: view.hash });
+      }
+    }
+  }
+  return new Map([...latest].map(([k, v]) => [k, v.hash]));
+}
+
 const USAGE = `govWebChecker
 
   check        [--targets <path>] [--out <dir>] [--only <id>] [--dry-run]
   census       [--frame <path>] [--slice <0-6>] [--out <dir>] [--dry-run]
-  deep-check   [--targets <path>] [--preset mobile|desktop] [--only <id>] [--out <dir>] [--dry-run]
+  deep-check   [--targets <path>] [--preset mobile|desktop] [--only <id>] [--out <dir>]
+               [--views <dir>] [--dry-run]
   build-frame  [--frame <path>] [--exclusions <path>] [--source <url>] [--dry-run]
   verify       <record.jsonl> [--frame <path>]
 

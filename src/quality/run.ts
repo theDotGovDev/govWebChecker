@@ -49,7 +49,7 @@ export interface DeepRunInput {
    * the profile matching the tool's preset is photographed from it rather than
    * from a page load of its own.
    */
-  captureView?: (profile: CaptureProfile) => Promise<TakenView>;
+  captureView?: (profile: CaptureProfile, page: unknown, scratch: unknown) => Promise<TakenView>;
   /**
    * Takes a view that cannot ride the deep check — a different form factor needs
    * a different viewport, and that means its own navigation. It is a page load
@@ -175,10 +175,10 @@ export async function executeDeepRun({
           limiter,
           ...(captureView
             ? {
-                onPage: async () => {
+                onPage: async (page: unknown, scratch: unknown) => {
                   for (const profile of CAPTURE_PROFILES) {
                     if (!ridesTheDeepCheck(profile, config.preset)) continue;
-                    taken.push({ profile, view: await captureView(profile) });
+                    taken.push({ profile, view: await captureView(profile, page, scratch) });
                   }
                 },
               }
