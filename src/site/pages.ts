@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Observation } from '../record/types.js';
 import type { Frame } from '../census/frame.js';
+import type { CaptureFinding } from '../quality/capture.js';
 import type { SiteModel } from './model.js';
 import { renderSite, sharedCss } from './render.js';
 import {
@@ -22,6 +23,8 @@ export interface WritePagesInput {
   generatedAt: string;
   /** Domains withdrawn from current views; their rows stay in the record (FR-248). */
   excluded?: string[];
+  /** The most recent rendered views per host, keyed by host. */
+  views?: Map<string, CaptureFinding[]>;
 }
 
 export interface WrittenPages {
@@ -80,7 +83,7 @@ export async function writePages(input: WritePagesInput): Promise<WrittenPages> 
   await fs.writeFile(path.join(outDir, 'index.html'), renderSite(model, generatedAt), 'utf8');
   await fs.writeFile(path.join(outDir, '.nojekyll'), '', 'utf8');
 
-  const all = listings(observations);
+  const all = listings(observations, input.views);
   // Withdrawal is from current views, never from the record (FR-248, FR-241).
   const current = all.filter((l) => !excluded.has(l.domain) && !excluded.has(l.host));
 

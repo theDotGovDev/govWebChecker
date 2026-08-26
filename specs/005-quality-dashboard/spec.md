@@ -312,8 +312,17 @@ labeled with the device and the moment captured.
   regenerated into each deploy and MAY be cached between runs (D6,
   constitution 2.1.0).
 - **FR-344**: A capture MUST be re-taken only when the view has meaningfully
-  changed, judged by a stored perceptual hash; an unchanged view MUST be reused
-  rather than re-fetched.
+  changed, judged by a stored perceptual hash. The rule MUST be versioned and
+  MUST state what its threshold was measured from, because it is a line this
+  project drew rather than one it can cite.
+- **FR-345**: A capture MUST be of a page that has finished rendering. A view
+  taken mid-paint is unstable, and an unstable view makes change detection report
+  a change every run — which spends the saving it exists to buy and publishes a
+  picture of nothing.
+- **FR-346**: A published view MUST carry its device, viewport and capture time
+  beside it, and MUST be presented as one dated moment rather than as the site's
+  condition. A finding whose image is missing MUST render as absence, never as a
+  broken picture.
 
 ---
 
@@ -494,9 +503,16 @@ recalled:
 
 **Profiles selected, and why each earns its place:**
 
-1. **Phone, Chromium, 414×896** — the single most common mobile viewport (13.24%).
+1. **Phone, Chromium, 412×823** — the tool's own preset viewport. The most common
+   mobile viewport is 414×896 (13.24%), and the two-pixel difference is not worth
+   a second page load against someone else's server: at 412×823 this capture
+   rides the deep check's existing navigation and costs no extra traffic.
 2. **Phone, WebKit, 390×844** — covers Safari's 16.47%, which no Chromium profile
-   can speak for, at the iPhone-typical viewport.
+   can speak for, at the iPhone-typical viewport. **Not yet built**: WebKit needs
+   Playwright, which this project does not depend on, and a Chromium capture
+   labelled as Safari would be a lie about what a visitor sees. Stated as a gap
+   rather than quietly dropped — engine coverage is Blink's ~77.5% until it
+   lands.
 3. **Desktop, Chromium, 1920×1080** — the single most common desktop viewport
    (22.41%).
 

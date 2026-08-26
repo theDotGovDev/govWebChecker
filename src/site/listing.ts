@@ -1,6 +1,7 @@
 import type { Observation, Presence } from '../record/types.js';
 import { registrableDomain } from '../politeness/domain.js';
 import { figure, formatFigure, type Figure } from './figure.js';
+import type { CaptureFinding } from '../quality/capture.js';
 
 /**
  * One site's page (D2, D3). Keyed on HOST, never target_id: the record carries
@@ -20,6 +21,8 @@ export interface DayCell {
 
 export interface Listing {
   host: string;
+  /** Rendered views of this page, when any have been taken (constitution 2.1.0). */
+  views?: CaptureFinding[];
   /** Daily history for the strip; present with two or more days of readings (FR-285). */
   history?: { days: DayCell[]; caption: Figure };
   /** The registered name, as a grouping — never as the unit (D3). */
@@ -41,7 +44,11 @@ export interface DomainGroup {
   listings: Listing[];
 }
 
-export function listings(rows: Observation[]): Listing[] {
+export function listings(
+  rows: Observation[],
+  /** The most recent views per host, when any have been taken. */
+  views?: Map<string, CaptureFinding[]>,
+): Listing[] {
   const byHost = new Map<string, Observation[]>();
   for (const o of rows) {
     const list = byHost.get(o.host);
@@ -54,6 +61,7 @@ export function listings(rows: Observation[]): Listing[] {
     list.sort((a, b) => a.checked_at.localeCompare(b.checked_at));
     const latest = list[list.length - 1]!;
     const tier = latest.tier ?? 'untiered';
+    const hostViews = views?.get(host);
     const succeeded = list.filter((o) => o.outcome === 'success').length;
     const answered =
       succeeded > 0
@@ -107,6 +115,7 @@ export function listings(rows: Observation[]): Listing[] {
 
     result.push({
       host,
+      ...(hostViews && hostViews.length > 0 ? { views: hostViews } : {}),
       ...(history ? { history } : {}),
       domain: registrableDomain(host),
       targetIds: [...new Set(list.map((o) => o.target_id))].sort(),
@@ -206,6 +215,59 @@ ${l.answered ? `<p>Answered ${formatFigure(l.answered)}.</p>` : ''}
  * palette as everywhere else, for the same reason: a refusal is not a failure
  * and a gap is not a verdict.
  */
+/**
+ * The rendered views, with what each is a view of.
+ *
+ * A picture is the most legible evidence this project can offer — "this site is
+ * unusable on a phone" is a claim a reader must take on trust, where a picture
+ * at a stated viewport is one they can check. It is also the easiest thing to
+ * over-claim with, so the caption does the work the constitution asks of it:
+ * the device, the viewport and the moment travel with the image, and it is
+ * dated rather than left to stand for how the site is.
+ *
+ * The image is referenced, never inlined. It is a build artifact that lives
+ * beside the page, not part of it — which is the same boundary that keeps it out
+ * of the record.
+ */
+function viewGallery(host: string, views: CaptureFinding[] | undefined): string {
+  if (!views || views.length === 0) {
+    return `<section class="views">
+  <h2>How the page looked</h2>
+  <p class="absence">This page has not been photographed yet.
+    <span class="method">a picture nobody has taken, not a finding about the site</span></p>
+</section>`;
+  }
+
+  const figures = views
+    .map((v) => {
+      const label = PROFILE_LABEL[v.profile] ?? v.profile;
+      const day = when(v.captured_at);
+      return `<figure class="view">
+  <img src="../views/${escape(host)}/${escape(v.profile)}.webp"
+       width="${v.width}" height="${v.height}" loading="lazy" decoding="async"
+       alt="The top of ${escape(host)} as it appeared on a ${escape(label.toLowerCase())} screen ${escape(day)}">
+  <figcaption>
+    <strong>${escape(label)}</strong> — as it looked on ${escape(day)}
+    <span class="method">${v.width}×${v.height} pixels · ${escape(v.engine)} engine ·
+      top of the page only · one moment, not the site's settled condition</span>
+  </figcaption>
+</figure>`;
+    })
+    .join('\n');
+
+  return `<section class="views">
+  <h2>How the page looked</h2>
+  ${figures}
+</section>`;
+}
+
+/** Device names as a reader would say them, keyed by profile id. */
+const PROFILE_LABEL: Record<string, string> = {
+  'phone-blink': 'Phone',
+  'desktop-blink': 'Desktop',
+  'phone-webkit': 'Phone (Safari)',
+};
+
 function historyStrip(h: NonNullable<Listing['history']>): string {
   const W = 1000;
   const gap = 3;
@@ -246,6 +308,7 @@ export function renderListing(l: Listing): string {
 <h1>${escape(l.host)}</h1>
 ${l.history ? historyStrip(l.history) : ''}
 ${body}
+${viewGallery(l.host, l.views)}
 ${provenance}
 ${CORRECTION}
 </article>`;

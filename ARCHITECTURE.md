@@ -232,6 +232,13 @@ build has no network path at all, which is stronger than a rule.
   passes, does not pass, not evaluated — and the third never collapses into the
   second, which is Principle V's absence rule applied where it is easiest to lose.
 
+- `listing.ts` publishes the rendered views a site has, with what each is a view
+  *of*: the device, the viewport and the day, captioned as one dated moment
+  rather than as how the site is. The image is referenced, never inlined — it is
+  a build artifact beside the page, which is the same boundary that keeps it out
+  of the record. A finding whose image is missing renders as absence rather than
+  as a broken picture: the record is permanent and the images live in a cache
+  that can be evicted, so the two will disagree.
 - `figure.ts` — the choke point. There is no numeric type in the view model
   other than `Figure`, which cannot be constructed without its tier, population,
   window, sample count and vantage — so a published number without its method is

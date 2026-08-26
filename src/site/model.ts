@@ -724,6 +724,12 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
     const totalPass = checks.reduce((n, c) => n + c.passed, 0);
     const totalJudged = checks.reduce((n, c) => n + c.passed + c.failed, 0);
 
+    // Readings exist but nothing was judged — every metric absent, or every
+    // check unevaluated. There is no share to report, and a share computed from
+    // no judgements would be a number conjured from nothing. The tile falls back
+    // to not-yet-measured, which is what happened.
+    if (totalJudged === 0) return undefined;
+
     return {
       checks,
       pages: readings.length,

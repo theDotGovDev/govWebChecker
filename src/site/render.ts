@@ -628,6 +628,11 @@ export function sharedCss(): string {
   .band--good { color: var(--ok); }
   .band--fair { color: var(--notable); }
   .band--poor { color: var(--poor); }
+  .views { margin: 1.4rem 0; }
+  .view { margin: 0 0 1.2rem; }
+  .view img { display: block; width: 100%; height: auto; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; }
+  .view figcaption { margin-top: .45rem; font-size: .9rem; }
   .verdict { display: inline-block; font-size: .74rem; font-weight: 650;
     padding: .1rem .42rem; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
   .verdict--good { color: var(--ok); }

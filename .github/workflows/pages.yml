@@ -18,6 +18,7 @@ on:
     # immediately rather than waiting for the next slot.
     paths:
       - 'src/site/**'
+      - 'src/quality/capture*.ts'
       - 'src/cli/build-site.ts'
       - 'targets/**'
       - '.github/workflows/pages.yml'
@@ -45,12 +46,23 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Restore the rendered views
+        # Read-only here: this workflow shows the views, deep-check.yml takes
+        # them. A miss is not a failure — the site simply says a page has not
+        # been photographed yet, which is true (constitution 2.1.0).
+        uses: actions/cache/restore@v4
+        with:
+          path: views
+          key: views-
+          restore-keys: |
+            views-
+
       - name: Generate the site
         # Builds the whole site: index, one listing per site the record knows,
         # one page per registered domain, and a not-yet-checked page for frame
         # domains the rolling census has not reached. Measured at ~21,300 pages
         # in under four seconds from today's record.
-        run: node dist/src/cli/build-site.js --data data --out docs
+        run: node dist/src/cli/build-site.js --data data --out docs --views views
 
       - uses: actions/configure-pages@v5
         with:

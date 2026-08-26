@@ -44,8 +44,42 @@ jobs:
         # in the log a reader can go back to.
         run: google-chrome --version
 
+      - name: Restore the views taken last time
+        # The saving change detection buys is only real if the unchanged images
+        # survive between runs. They are never committed — git history is
+        # immutable, so "latest only" would bound the checkout while the pack
+        # grew forever (constitution 2.1.0) — so the cache is where they live.
+        #
+        # `restore-keys` means a run still starts from the most recent cache when
+        # today's key does not exist yet, which is what makes reuse the normal
+        # case rather than the lucky one.
+        uses: actions/cache@v4
+        with:
+          path: views
+          key: views-${{ github.run_id }}
+          restore-keys: |
+            views-
+
       - name: Deep-check the target list
-        run: node dist/src/cli/index.js deep-check --preset mobile
+        run: node dist/src/cli/index.js deep-check --preset mobile --views views
+
+      - name: Say how much was re-captured
+        # A change rate near 100% every run means change detection is not working
+        # and the cache is being missed, which is a cost nobody would otherwise
+        # see. Printed rather than gated: it is a signal, not a guarantee.
+        run: |
+          node -e '
+            const fs = require("fs");
+            const dir = "data/quality";
+            if (!fs.existsSync(dir)) process.exit(0);
+            const file = fs.readdirSync(dir).sort().pop();
+            let changed = 0, total = 0;
+            for (const line of fs.readFileSync(`${dir}/${file}`, "utf8").split("\n")) {
+              if (!line.trim()) continue;
+              for (const v of (JSON.parse(line).views ?? [])) { total++; if (v.changed) changed++; }
+            }
+            console.log(`views: ${changed}/${total} re-captured`);
+          '
 
       - name: Verify our own conduct before publishing it
         # Same gate as availability: a record that fails our own stated checks
