@@ -108,6 +108,11 @@ assumed.
   are the ways a record stops being honest.
 - `writer.ts` — append, and only append. No update, no delete, no deduplication,
   since a correction is a new observation rather than an edit.
+- `quality.ts` — the gate on a deep reading. Separate from `validate.ts` because
+  a deep reading makes a larger claim than an availability row and is admitted on
+  its own terms: the emulation must be present, no derived figure may appear, and
+  no page content may. A tool's own composite score is refused by name — it is
+  exactly what the tool hands us and exactly what belongs in analysis instead.
 
 ### `src/checker/` — performing the measurement
 
