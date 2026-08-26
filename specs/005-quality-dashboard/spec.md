@@ -277,6 +277,11 @@ labeled with the device and the moment captured.
 - **FR-325**: The rotation MUST be drawn so every domain in the frame is reached
   in bounded time, and every published deep-check aggregate MUST state how much
   of the frame it covers rather than implying a census.
+- **FR-326a**: Every request a deep check causes MUST identify the project,
+  including the ones the tool makes on its own behalf rather than as the page.
+  The page's emulated device string is preserved and the identification appended;
+  requests the emulation does not cover are identified at the browser level. This
+  MUST be checked against observed traffic, not against the flags alone.
 - **FR-326**: A deep reading MUST record only measured audit values. The tool's
   own category scores are a weighted composite and belong to the analysis layer
   under D3, where the weighting is published and recomputable from what is

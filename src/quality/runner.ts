@@ -97,10 +97,22 @@ export interface ChromeTarget {
  * DNS, so the pin has to be pushed down into it or the guarantee stops at the
  * edge of this process.
  *
- * There is nothing here that weakens what we send or what we accept: no UA
- * override (that would defeat the identification above), no disabled web
- * security, no ignored certificate errors — a TLS failure is a measurement, not
- * an obstacle.
+ * The user-agent flag is the other one, and it is here because of what the flags
+ * alone could not show. The tool's standard preset fetches more than the page —
+ * the agentic-browsing audit asks for `/llms.txt` and `/robots.txt` — and those
+ * went out under Chrome's own anonymous user agent, because `emulatedUserAgent`
+ * governs the page and not the tool's own fetches. Principle III says *every*
+ * request identifies itself, not merely the interesting ones.
+ *
+ * A browser-level agent sets the default for exactly those uncovered requests;
+ * the page's emulation still wins where it applies, so the page is still
+ * requested as the device it claims to be. Measured against a local fixture:
+ * identification on every request, the device string unchanged on the page, and
+ * the tool's own numbers unmoved.
+ *
+ * There is nothing here that weakens what we send or what we accept: no disabled
+ * web security, no ignored certificate errors — a TLS failure is a measurement,
+ * not an obstacle.
  */
 export function chromeFlags(target: ChromeTarget): string[] {
   return [
@@ -109,6 +121,7 @@ export function chromeFlags(target: ChromeTarget): string[] {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
+    `--user-agent=${USER_AGENT}`,
     ...(target.address ? [`--host-resolver-rules=MAP ${target.host} ${target.address}`] : []),
   ];
 }

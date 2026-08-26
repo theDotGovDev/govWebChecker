@@ -177,7 +177,11 @@ assumed.
   than substituted, since replacing the device string would change which page a
   site serves; and Chrome is pinned to the backend the limiter accounted for with
   a resolver rule, because a browser does its own DNS and the pin would otherwise
-  stop at the edge of this process. Chrome is relaunched per target — a second
+  stop at the edge of this process. Identification is applied twice, for a reason
+  the flags alone could not show: the emulated device string covers the page, and
+  a browser-level agent covers the requests it does not — the tool's standard
+  preset fetches `/llms.txt` and `/robots.txt` on its own behalf, and those went
+  out anonymous until traffic was actually observed. Chrome is relaunched per target — a second
   against a fifteen-second check, for complete isolation between measurements.
 - `run.ts` — one deep pass, **serial by construction**. The availability pass
   runs different hosts concurrently because politeness is a property of what we

@@ -74,9 +74,22 @@ describe('the browser is pinned to the backend the limiter accounted for (FR-140
     assert.ok(!flags.some((f) => f.startsWith('--host-resolver-rules')));
   });
 
-  test('nothing in the browser flags weakens what we send', () => {
+  test('the browser itself identifies the requests the page emulation does not cover', () => {
+    // An earlier version of this test asserted --user-agent must be ABSENT, on
+    // the reasoning that it would defeat the emulated device string. That was
+    // wrong in a way only real traffic showed: the emulation covers the page,
+    // the browser-level agent covers everything else, and without it the tool's
+    // own /llms.txt and /robots.txt fetches went out anonymous.
+    const flags = chromeFlags({ host: 'example.gov' });
+    const ua = flags.find((f) => f.startsWith('--user-agent='));
+    assert.ok(ua, 'requests the page emulation does not cover would arrive anonymous');
+    assert.ok(ua.includes(USER_AGENT));
+  });
+
+  test('nothing in the browser flags weakens what we send or accept', () => {
     const flags = chromeFlags({ host: 'example.gov' }).join(' ');
-    for (const forbidden of ['--user-agent', '--disable-web-security', '--ignore-certificate-errors']) {
+    for (const forbidden of ['--disable-web-security', '--ignore-certificate-errors',
+                             '--allow-running-insecure-content', '--disable-features=IsolateOrigins']) {
       assert.ok(!flags.includes(forbidden), `${forbidden} would misrepresent the traffic or the result`);
     }
   });
