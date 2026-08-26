@@ -41,6 +41,11 @@ export interface CaptureProfile {
  * WebKit between them speak for about 94%. Firefox's 3.34% is uncovered, and
  * that is stated rather than papered over.
  *
+ * Each viewport is the *tool's own* — Lighthouse's preset for the Blink phone,
+ * Playwright's iPhone descriptor for the WebKit one. Picking round numbers
+ * ourselves would make every reading incomparable to what anyone else measures
+ * with the same tools, which is the whole reason for using them.
+ *
  * `scale: 1` is deliberate. A 2× capture of the phone viewport measured 103 KB
  * against 38 KB at 1×, and at census scale that difference is the whole storage
  * argument. The view is evidence of layout, not of typography.
@@ -60,6 +65,22 @@ export const CAPTURE_PROFILES: CaptureProfile[] = [
     share: 13.24,
     source: 'StatCounter Global Stats, July 2026 — 414×896 is the most common mobile viewport at 13.24%',
     label: 'Phone',
+  },
+  {
+    id: 'phone-webkit',
+    formFactor: 'phone',
+    engine: 'webkit',
+    // Playwright's own iPhone descriptor, taken as the standard the way
+    // Lighthouse's preset is for the Blink phone. 390×664 is the *visible*
+    // viewport — the device screen is 844 tall and Safari's chrome takes the
+    // rest — so this is what a visitor actually sees, which is what a view is
+    // evidence of.
+    width: 390,
+    height: 664,
+    scale: 1,
+    share: 16.47,
+    source: 'StatCounter Global Stats, July 2026 — Safari is 16.47% of browsers, which no Blink profile can speak for',
+    label: 'Phone (Safari)',
   },
   {
     id: 'desktop-blink',

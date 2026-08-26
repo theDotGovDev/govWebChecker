@@ -96,6 +96,44 @@ describe('a capture costs what it says it costs (Principle I, FR-322)', () => {
     } finally { await site.close(); }
   });
 
+  test('only a profile the deep check\'s own browser can speak for rides its page', async () => {
+    // The deep check runs Blink. A WebKit profile photographed from that page
+    // would be a Chromium picture filed under Safari — the exact lie the profile
+    // exists to avoid — and matching on form factor alone did precisely that,
+    // because both phone profiles are phones.
+    const site = await fastServer();
+    try {
+      const rode: string[] = [];
+      const standalone: string[] = [];
+      await executeDeepRun({
+        targets: [target('ok', site)],
+        dataDir: await tmp(),
+        config: { ...CONFIG, dryRun: true },
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async (profile) => {
+          rode.push(profile.id);
+          return { hash: SAME, bytes: 10, image: new Uint8Array([1]) };
+        },
+        captureStandalone: async (_url, profile) => {
+          standalone.push(profile.id);
+          return { hash: SAME, bytes: 10, image: new Uint8Array([1]) };
+        },
+      });
+      for (const id of rode) {
+        const profile = CAPTURE_PROFILES.find((p) => p.id === id)!;
+        assert.equal(profile.engine, 'blink',
+          `${id} rode a Blink page but claims the ${profile.engine} engine`);
+      }
+      const webkit = CAPTURE_PROFILES.filter((p) => p.engine === 'webkit').map((p) => p.id);
+      for (const id of webkit) {
+        assert.ok(standalone.includes(id), `${id} must be taken by its own browser`);
+        assert.ok(!rode.includes(id), `${id} must not be photographed by the wrong engine`);
+      }
+      // Between them, every profile is still covered.
+      assert.deepEqual([...rode, ...standalone].sort(), CAPTURE_PROFILES.map((p) => p.id).sort());
+    } finally { await site.close(); }
+  });
+
   test('a reading that never loaded the page captures nothing', async () => {
     const site = await fastServer();
     try {
@@ -193,8 +231,11 @@ describe('an unchanged view is not stored again (D6, FR-344)', () => {
         captureStandalone: async () => ({ hash: DIFFERENT, bytes: 20, image: new Uint8Array([2]) }),
         viewsDir: dir,
       });
+      // Every profile, not a fixed pair: adding one must not silently go
+      // uncaptured, which is what a hard-coded list would allow.
       const ids = summary.readings[0]!.views!.map((v) => v.profile).sort();
-      assert.deepEqual(ids, [DESKTOP.id, PHONE.id].sort());
+      assert.deepEqual(ids, CAPTURE_PROFILES.map((p) => p.id).sort());
+      assert.ok(ids.includes(PHONE.id) && ids.includes(DESKTOP.id));
     } finally { await site.close(); await fs.rm(dir, { recursive: true, force: true }); }
   });
 });

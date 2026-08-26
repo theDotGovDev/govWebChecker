@@ -41,6 +41,23 @@ describe('the device profiles are the ones the traffic data chose (D5)', () => {
     assert.ok(CAPTURE_PROFILES.some((p: CaptureProfile) => p.formFactor === 'desktop'));
   });
 
+  test('both engines are covered, because one cannot speak for the other', () => {
+    // Safari is 16.47% of browsers and renders on a different engine. A Blink
+    // capture labelled as Safari would be a claim about what a visitor sees that
+    // is simply untrue.
+    const engines = new Set(CAPTURE_PROFILES.map((p: CaptureProfile) => p.engine));
+    assert.ok(engines.has('blink'), 'Chrome, Edge, Samsung and Opera are about 77.5% of browsers');
+    assert.ok(engines.has('webkit'), 'Safari is 16.47%, and no Blink profile covers it');
+  });
+
+  test('every profile id says which engine took the view', () => {
+    // The id becomes the image filename and the caption's key. A view whose
+    // engine is not in its name invites a Blink picture being read as Safari.
+    for (const p of CAPTURE_PROFILES) {
+      assert.ok(p.id.endsWith(`-${p.engine}`), `${p.id} does not name its engine`);
+    }
+  });
+
   test('tablet is absent, and that is the data speaking', () => {
     // The type forbids it too, which is the stronger guarantee; this states the
     // decision in the place a reader would look for it.

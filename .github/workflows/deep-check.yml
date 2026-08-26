@@ -37,12 +37,21 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Install WebKit
+        # Safari is 16.47% of browsers and renders on its own engine, so one of
+        # the three device profiles cannot be taken by Chrome. `--with-deps`
+        # installs the system libraries WebKit needs, which a runner does not
+        # have by default. Chromium is already on the image and is not fetched.
+        run: npx playwright install --with-deps webkit
+
       - name: Show the browser this run will measure with
         # The browser version is part of the method: a reading is of a page as
         # rendered by a specific engine. Printed rather than pinned, because the
         # runner image supplies it and a silent change should at least be visible
         # in the log a reader can go back to.
-        run: google-chrome --version
+        run: |
+          google-chrome --version
+          node -e 'console.log("playwright", require("playwright/package.json").version)'
 
       - name: Restore the views taken last time
         # The saving change detection buys is only real if the unchanged images

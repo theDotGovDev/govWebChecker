@@ -71,8 +71,12 @@ export async function capture(page: CapturePage, profile: CaptureProfile): Promi
  * already. This runs on a blank page with a `data:` URI, so it makes no network
  * request of any kind — nothing here can reach a target.
  */
-export async function hashView(scratch: HashPage, image: Uint8Array): Promise<string> {
-  const uri = `data:image/webp;base64,${Buffer.from(image).toString('base64')}`;
+export async function hashView(
+  scratch: HashPage,
+  image: Uint8Array,
+  mime = 'image/webp',
+): Promise<string> {
+  const uri = `data:${mime};base64,${Buffer.from(image).toString('base64')}`;
   const bits = await scratch.evaluate(async (dataUri: string) => {
     const blob = await (await fetch(dataUri)).blob();
     const bitmap = await createImageBitmap(blob);

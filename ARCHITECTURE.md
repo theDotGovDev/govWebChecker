@@ -169,6 +169,14 @@ assumed.
   A tool failure is recorded as a failure of the *check*, never merged into the
   availability outcome — a browser crash says nothing about whether a government
   website was up.
+- `runner.ts` — driving the real browsers. Identification is applied on both
+  engines: appended to Chrome's emulated device string and to Playwright's
+  iPhone descriptor, never replacing either, since sites serve different pages to
+  different agents. One guarantee is weaker on the WebKit path and is stated
+  rather than hidden: Blink pins the connection to the backend the limiter
+  accounted for with a resolver rule, and WebKit has no equivalent, so for a host
+  publishing several addresses the socket may reach a different one than the
+  record names.
 - `runner.ts` — driving the real tool. Kept apart from the reading logic so that
   stays a pure function over a result, testable without a browser. Every choice
   here is a constraint rather than a knob: the preset is the tool's own, because
@@ -190,6 +198,15 @@ assumed.
   view never enters the record — what is stored is the *finding*, and the image
   is a build artifact regenerated into each deploy, so latest-only holds by
   construction rather than by policy.
+
+  Three device profiles, two engines. The Blink phone rides the deep check's own
+  navigation and costs no extra traffic; the Blink desktop and the WebKit phone
+  each take their own page load through the limiter. A profile may only ride the
+  deep check when *both* its form factor and its engine match — matching on form
+  factor alone filed a Chromium picture under Safari, which is the one claim the
+  WebKit profile exists to avoid. Each viewport is the tool's own — Lighthouse's
+  preset for Blink, Playwright's iPhone descriptor for WebKit — because a number
+  we picked ourselves would not be comparable to anyone else's.
 
   Change detection is a difference hash over a 17×17 greyscale grid, compared
   both left-to-right and top-to-bottom, computed in the browser that already

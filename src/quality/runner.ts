@@ -196,6 +196,7 @@ export function standaloneCapturer(
   resolveAddress?: (host: string) => Promise<string | undefined>,
 ): (url: string, profile: CaptureProfile) => Promise<TakenView> {
   return async (url: string, profile: CaptureProfile): Promise<TakenView> => {
+    if (profile.engine === 'webkit') return captureWithWebkit(url, profile);
     const [{ default: puppeteer }, { captureAndHash }] = await Promise.all([
       import('puppeteer-core'),
       import('./capture-runner.js'),
@@ -232,4 +233,61 @@ export async function captureFromPage(
 ): Promise<TakenView> {
   const { captureAndHash } = await import('./capture-runner.js');
   return captureAndHash(page as never, scratch as never, profile);
+}
+
+/**
+ * A view taken by WebKit, for the profile no Blink browser can speak for.
+ *
+ * Safari is 16.47% of browsers and renders on its own engine; a Blink capture
+ * labelled as Safari would be a claim about what a visitor sees that is simply
+ * untrue. So this is a second browser, and it is the reason Playwright is a
+ * dependency at all.
+ *
+ * The device descriptor is Playwright's own, for the same reason the Blink phone
+ * uses Lighthouse's preset: a viewport we picked ourselves would make the reading
+ * incomparable to what anyone else measures with the same tool. The identification
+ * is appended to the descriptor's user agent rather than replacing it, exactly as
+ * on the Blink path — sites serve different pages to different agents.
+ *
+ * **One guarantee is weaker here, and it is stated rather than hidden.** The
+ * Blink path pins the connection to the backend the limiter accounted for, via a
+ * Chrome resolver rule; WebKit has no equivalent, so this capture resolves the
+ * host itself. The limiter still applies its name-keyed limits, and the slot is
+ * still acquired against the address we resolved — conservative accounting — but
+ * for a host publishing several addresses the socket may reach a different one
+ * than the record names (FR-140). One page load per site per cycle.
+ */
+async function captureWithWebkit(url: string, profile: CaptureProfile): Promise<TakenView> {
+  const [{ webkit, devices }, { hashView }] = await Promise.all([
+    import('playwright'),
+    import('./capture-runner.js'),
+  ]);
+
+  const device = devices['iPhone 13']!;
+  const browser = await webkit.launch();
+  try {
+    const context = await browser.newContext({
+      ...device,
+      // 1x for the same storage reason as every other profile: a view is
+      // evidence of layout, not of typography.
+      deviceScaleFactor: profile.scale,
+      viewport: { width: profile.width, height: profile.height },
+      userAgent: `${device.userAgent} ${USER_AGENT}`,
+    });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 30_000 });
+    const image = await page.screenshot({
+      // WebP, like every other profile: one format on disk, one extension in the
+      // markup, and the same size argument that made captures affordable.
+      type: 'webp',
+      quality: 75,
+      clip: { x: 0, y: 0, width: profile.width, height: profile.height },
+    });
+    // Reduced by the same function the Blink path uses, on this page, so the two
+    // engines' hashes are produced identically even though the pixels differ.
+    const hash = await hashView(page as never, image);
+    return { image, hash, bytes: image.length };
+  } finally {
+    await browser.close();
+  }
 }

@@ -507,12 +507,20 @@ recalled:
    mobile viewport is 414×896 (13.24%), and the two-pixel difference is not worth
    a second page load against someone else's server: at 412×823 this capture
    rides the deep check's existing navigation and costs no extra traffic.
-2. **Phone, WebKit, 390×844** — covers Safari's 16.47%, which no Chromium profile
-   can speak for, at the iPhone-typical viewport. **Not yet built**: WebKit needs
-   Playwright, which this project does not depend on, and a Chromium capture
-   labelled as Safari would be a lie about what a visitor sees. Stated as a gap
-   rather than quietly dropped — engine coverage is Blink's ~77.5% until it
-   lands.
+2. **Phone, WebKit, 390×664** — covers Safari's 16.47%, which no Chromium profile
+   can speak for. The viewport is Playwright's own iPhone descriptor, taken as the
+   standard the way Lighthouse's preset is for the Blink phone: 664 is the
+   *visible* area, since the device screen is 844 and Safari's chrome takes the
+   rest, so it is what a visitor actually sees. Adding Playwright as a dev
+   dependency is what this profile costs, and the owner approved it.
+
+   **One guarantee is weaker on this path and is stated rather than hidden**: the
+   Blink capture pins its connection to the backend the limiter accounted for via
+   a Chrome resolver rule, and WebKit has no equivalent. The name-keyed limits
+   still apply and the slot is still acquired against the address we resolved, so
+   the accounting is conservative; but for a host publishing several addresses the
+   socket may reach a different one than the record names (FR-140). One page load
+   per site per cycle.
 3. **Desktop, Chromium, 1920×1080** — the single most common desktop viewport
    (22.41%).
 

@@ -85,12 +85,18 @@ const DIMENSION = 'quality';
 /**
  * Which profiles the deep check's own navigation can speak for.
  *
+ * Two things have to match, and the engine is the one that is easy to forget.
  * The tool renders at its preset's form factor, so a view at that form factor is
- * the page it already loaded. Anything else is a different rendering and needs
- * its own page load — which is a real cost, paid deliberately rather than
- * hidden.
+ * the page it already loaded — but it renders in Blink, so a WebKit profile
+ * photographed from that page would be a Chromium picture filed under Safari.
+ * That is exactly the claim the WebKit profile exists to avoid making, and
+ * matching on form factor alone made it: both phone profiles are phones.
+ *
+ * Anything that cannot ride is a different rendering and needs its own page
+ * load, which is a real cost paid deliberately rather than hidden.
  */
 function ridesTheDeepCheck(profile: CaptureProfile, preset: string): boolean {
+  if (profile.engine !== 'blink') return false;
   return preset.endsWith('/mobile') ? profile.formFactor === 'phone' : profile.formFactor === 'desktop';
 }
 
