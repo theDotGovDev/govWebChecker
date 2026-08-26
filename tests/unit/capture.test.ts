@@ -26,6 +26,16 @@ describe('the device profiles are the ones the traffic data chose (D5)', () => {
     }
   });
 
+  test('every profile captures at 1x, because the doubling is the storage argument', () => {
+    // Measured on a local fixture, above the fold, WebP quality 75: 14.7 KB at
+    // 1x against 31.8 KB at 2x. Across the frame that difference is the whole
+    // reason captures are affordable. A view is evidence of layout, not of
+    // typography, and 1x is enough for layout.
+    for (const p of CAPTURE_PROFILES) {
+      assert.equal(p.scale, 1, `${p.id} captures at ${p.scale}x`);
+    }
+  });
+
   test('a phone and a desktop are both covered, since half of traffic is each', () => {
     assert.ok(CAPTURE_PROFILES.some((p: CaptureProfile) => p.formFactor === 'phone'));
     assert.ok(CAPTURE_PROFILES.some((p: CaptureProfile) => p.formFactor === 'desktop'));
@@ -48,7 +58,7 @@ describe('the device profiles are the ones the traffic data chose (D5)', () => {
  * saving the check exists to buy.
  */
 describe('a view is re-stored only when it meaningfully changed (D6, FR-344)', () => {
-  const A = '1'.repeat(32) + '0'.repeat(32);
+  const A = ('1'.repeat(16) + '0'.repeat(16)).repeat(8); // 256 bits, like the real thing
 
   test('an identical view is not a change', () => {
     assert.equal(hasMeaningfullyChanged(hash(A), hash(A)), false);
@@ -60,23 +70,29 @@ describe('a view is re-stored only when it meaningfully changed (D6, FR-344)', (
   });
 
   test('a handful of differing bits is noise, not a redesign', () => {
-    const nudged = '0' + A.slice(1, 60) + '1010';
-    assert.ok(distance(A, nudged) > 0, 'the fixture must actually differ');
-    assert.ok(distance(A, nudged) <= CHANGE_RULE.threshold);
-    assert.equal(hasMeaningfullyChanged(A, nudged), false);
+    // Below the threshold but not zero: the wobble a re-render produces.
+    const nudged = A.split('');
+    for (let i = 0; i < CHANGE_RULE.threshold; i++) nudged[i * 7] = nudged[i * 7] === '1' ? '0' : '1';
+    const near = nudged.join('');
+    assert.ok(distance(A, near) > 0, 'the fixture must actually differ');
+    assert.ok(distance(A, near) <= CHANGE_RULE.threshold);
+    assert.equal(hasMeaningfullyChanged(A, near), false);
   });
 
   test('a wholly different page is a change', () => {
-    const other = '0'.repeat(32) + '1'.repeat(32);
-    assert.equal(distance(A, other), 64);
+    const other = A.split('').map((b) => (b === '1' ? '0' : '1')).join('');
+    assert.equal(distance(A, other), CHANGE_RULE.bits);
     assert.equal(hasMeaningfullyChanged(A, other), true);
   });
 
   test('the threshold is stated and versioned, so a change to it is visible', () => {
     assert.match(CHANGE_RULE.version, /\/\d+$/, 'versioned like presence/1');
-    assert.ok(CHANGE_RULE.threshold > 0 && CHANGE_RULE.threshold < 32,
+    assert.ok(CHANGE_RULE.threshold > 0 && CHANGE_RULE.threshold < CHANGE_RULE.bits / 2,
       'a threshold at or above half the bits would call two unrelated pages the same');
     assert.ok(CHANGE_RULE.what.length > 20, 'it must say in words what it compares');
+    // We drew this line rather than citing one, so it has to show its working.
+    assert.match(CHANGE_RULE.basis, /\d/, 'a threshold we chose must state what it was chosen from');
+    assert.ok(CHANGE_RULE.basis.includes('measured'), 'and that it was measured rather than assumed');
   });
 
   test('hashes of different lengths are refused rather than compared', () => {
@@ -99,7 +115,7 @@ describe('the record stores the finding, never the view (constitution 2.1.0)', (
     scale: 2,
     engine: 'blink',
     captured_at: '2026-08-26T10:15:00Z',
-    hash: '1'.repeat(64),
+    hash: '1'.repeat(256),
     rule: CHANGE_RULE.version,
     bytes: 31_402,
     changed: true,
@@ -109,7 +125,7 @@ describe('the record stores the finding, never the view (constitution 2.1.0)', (
     const json = JSON.stringify(finding);
     assert.doesNotMatch(json, /data:image|base64|iVBOR|UklGR/,
       'a rendered frame is the page, not a measurement of it');
-    assert.ok(json.length < 400, `a finding must stay small: ${json.length} bytes`);
+    assert.ok(json.length < 700, `a finding must stay small: ${json.length} bytes`);
   });
 
   test('a finding states the device profile, the viewport and when it was taken', () => {

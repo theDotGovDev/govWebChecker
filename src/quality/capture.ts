@@ -103,20 +103,51 @@ export interface CaptureFinding {
  * about, and re-storing it would spend exactly the saving this check exists to
  * buy.
  *
- * The comparison is an average hash: the view reduced to 8×8 greyscale, each
- * cell above or below the mean. That measures *layout* — where the dark and
- * light regions sit — which is what a view is evidence of. It is deliberately
- * blind to colour and to fine detail.
+ * The comparison is a difference hash: the view reduced to a 16×17 greyscale
+ * grid, each cell compared with its right-hand neighbour. That measures where
+ * the *edges* are — which is what layout is — and is deliberately blind to
+ * overall brightness and to fine detail.
+ *
+ * An average hash was tried first and does not work here. Government pages are
+ * mostly white, so nearly every cell sits above the mean and the hash collapses:
+ * on a local fixture a complete redesign scored a distance of zero. A method
+ * that returns "unchanged" for a redesign is worse than no method, because it
+ * reports having checked.
  *
  * Versioned because it is a threshold we drew rather than one anybody published,
  * and a threshold nobody published is one that has to be visible when it moves.
  */
 export const CHANGE_RULE = {
   version: 'capture-change/1',
-  threshold: 6,
+  /** 16×17 greyscale cells, compared with the cell to their right. */
+  bits: 256,
+  threshold: 5,
   what:
-    'the view reduced to an 8×8 greyscale average hash; more than six of the 64 cells ' +
-    'flipping counts as a change, which is layout moving rather than pixels wobbling',
+    'the view reduced to a 16×17 greyscale grid, each cell compared with the one to its right; ' +
+    'more than five of the 256 comparisons flipping counts as a change',
+  /**
+   * Why five, stated because we drew this line rather than citing one.
+   *
+   * Measured against local fixtures, distance out of 256. Noise — an identical
+   * page re-rendered, a date changing in the strapline, a heading reworded —
+   * reached 1. Signal started at 9, for one image swapped; a banner appearing
+   * scored 70 and a redesign 63.
+   *
+   * A first attempt put this at ten, from an earlier fixture where the smallest
+   * image swap scored 18. On a second fixture the same change scored 9, which
+   * would have been called unchanged. The lesson is that the gap is narrower
+   * than one measurement suggested, so the threshold sits near the noise floor
+   * rather than midway.
+   *
+   * The failure modes are not symmetric, and that decides the direction of the
+   * error. A spurious re-store costs bytes. A missed change leaves a picture
+   * published as current that is no longer true — a claim about someone else's
+   * site that we would keep making. So this errs toward capturing again.
+   */
+  basis:
+    'measured on local fixtures: re-renders and text-only edits reach 1, the smallest visible ' +
+    'change measured (one image swapped) reaches 9; set near the noise floor because a missed ' +
+    'change publishes a view that is no longer true',
 } as const;
 
 /** Hamming distance between two equal-length bit strings. */

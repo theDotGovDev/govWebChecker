@@ -183,6 +183,23 @@ assumed.
   preset fetches `/llms.txt` and `/robots.txt` on its own behalf, and those went
   out anonymous until traffic was actually observed. Chrome is relaunched per target — a second
   against a fifteen-second check, for complete isolation between measurements.
+- `capture.ts` / `capture-runner.ts` — rendered views: what a visitor actually
+  sees. Permitted by constitution 2.1.0 because a picture at a stated viewport is
+  evidence a reader can check, where "this site is unusable on a phone" is a
+  claim they must take on trust. The bound that makes it permissible is that a
+  view never enters the record — what is stored is the *finding*, and the image
+  is a build artifact regenerated into each deploy, so latest-only holds by
+  construction rather than by policy.
+
+  Change detection is a difference hash over a 16×17 greyscale grid, computed in
+  the browser that already decoded the image rather than by adding an image
+  library. An average hash was tried first and returned a distance of *zero* for
+  a complete redesign, because government pages are mostly white and nearly every
+  cell sat above the mean — a method that reports having checked and has not. The
+  threshold is versioned and states what it was measured from, because we drew
+  that line rather than citing one, and it errs low: a spurious re-store costs
+  bytes, while a missed change leaves a picture published as current that is no
+  longer true.
 - `run.ts` — one deep pass, **serial by construction**. The availability pass
   runs different hosts concurrently because politeness is a property of what we
   do to one server; a deep pass cannot borrow that argument, and the reason is
