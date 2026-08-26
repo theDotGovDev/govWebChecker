@@ -4,6 +4,12 @@ import { ResolutionCache } from '../checker/resolve.js';
 import { robotsAllows } from '../checker/permission.js';
 import { appendQualityReading, appendRunSummary } from '../record/writer.js';
 import { deepCheck, SCHEMA, type DeepReading, type ToolRun } from './deep-check.js';
+import {
+  CAPTURE_PROFILES, CHANGE_RULE, hasMeaningfullyChanged,
+  type CaptureFinding, type CaptureProfile,
+} from './capture.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 export interface DeepTarget {
   id: string;
@@ -24,11 +30,36 @@ export interface DeepRunConfig {
   dryRun?: boolean;
 }
 
+/** One taken view, before it becomes a finding. */
+export interface TakenView {
+  hash: string;
+  bytes: number;
+  image: Uint8Array;
+}
+
 export interface DeepRunInput {
   targets: DeepTarget[];
   dataDir: string;
   config: DeepRunConfig;
   run: ToolRun;
+  /**
+   * Takes a view from the deep check's own page, once the tool has finished.
+   *
+   * This is what makes the phone view free: the navigation already happened, and
+   * the profile matching the tool's preset is photographed from it rather than
+   * from a page load of its own.
+   */
+  captureView?: (profile: CaptureProfile) => Promise<TakenView>;
+  /**
+   * Takes a view that cannot ride the deep check — a different form factor needs
+   * a different viewport, and that means its own navigation. It is a page load
+   * like any other and goes through the limiter.
+   */
+  captureStandalone?: (url: string, profile: CaptureProfile) => Promise<TakenView>;
+  /** Where images are written. Absent means take and hash but store nothing. */
+  viewsDir?: string;
+  /** The hash last seen for this host and profile, if the record holds one. */
+  previousHash?: (host: string, profile: string) => string | undefined;
 }
 
 export interface DeepRunSummary {
@@ -52,6 +83,34 @@ export interface DeepRunSummary {
 const DIMENSION = 'quality';
 
 /**
+ * Which profiles the deep check's own navigation can speak for.
+ *
+ * The tool renders at its preset's form factor, so a view at that form factor is
+ * the page it already loaded. Anything else is a different rendering and needs
+ * its own page load — which is a real cost, paid deliberately rather than
+ * hidden.
+ */
+function ridesTheDeepCheck(profile: CaptureProfile, preset: string): boolean {
+  return preset.endsWith('/mobile') ? profile.formFactor === 'phone' : profile.formFactor === 'desktop';
+}
+
+async function storeView(
+  viewsDir: string | undefined,
+  host: string,
+  profile: CaptureProfile,
+  view: TakenView,
+  changed: boolean,
+): Promise<void> {
+  // An unchanged view is left exactly where it is. Rewriting an identical file
+  // would spend the saving the change check exists to buy, and would touch a
+  // build artifact for no reason.
+  if (!viewsDir || !changed) return;
+  const file = path.join(viewsDir, host, `${profile.id}.webp`);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, view.image);
+}
+
+/**
  * One deep pass: ask permission, load the page once, write down what happened.
  *
  * **Serial, deliberately.** The availability pass checks different hosts
@@ -73,6 +132,10 @@ export async function executeDeepRun({
   dataDir,
   config,
   run,
+  captureView,
+  captureStandalone,
+  viewsDir,
+  previousHash,
 }: DeepRunInput): Promise<DeepRunSummary> {
   const started_at = new Date().toISOString();
   const run_id = `${started_at}/${DIMENSION}/${randomUUID().slice(0, 8)}`;
@@ -104,10 +167,22 @@ export async function executeDeepRun({
       backends,
     );
 
+    const taken: { profile: CaptureProfile; view: TakenView }[] = [];
+
     const reading: DeepReading = permission.allowed
       ? await deepCheck(context, {
           run,
           limiter,
+          ...(captureView
+            ? {
+                onPage: async () => {
+                  for (const profile of CAPTURE_PROFILES) {
+                    if (!ridesTheDeepCheck(profile, config.preset)) continue;
+                    taken.push({ profile, view: await captureView(profile) });
+                  }
+                },
+              }
+            : {}),
           ...((await backends.get(target.host)).address !== undefined
             ? { address: (await backends.get(target.host)).address! }
             : {}),
@@ -132,6 +207,42 @@ export async function executeDeepRun({
             source: 'self_run',
           },
         };
+
+    // A page that did not load has nothing to photograph, and asking again would
+    // be a second request to a site that just failed.
+    if (reading.outcome === 'measured' && captureStandalone) {
+      for (const profile of CAPTURE_PROFILES) {
+        if (ridesTheDeepCheck(profile, config.preset)) continue;
+        // Its own navigation, so its own slot. A second page load is still a
+        // page load, and the limiter is where that is accounted for.
+        await limiter.acquire(target.host, (await backends.get(target.host)).address);
+        taken.push({ profile, view: await captureStandalone(target.url, profile) });
+      }
+    }
+
+    if (taken.length > 0) {
+      const views: CaptureFinding[] = [];
+      for (const { profile, view } of taken) {
+        const changed = hasMeaningfullyChanged(previousHash?.(target.host, profile.id), view.hash);
+        await storeView(viewsDir, target.host, profile, view, changed);
+        views.push({
+          profile: profile.id,
+          width: profile.width,
+          height: profile.height,
+          scale: profile.scale,
+          engine: profile.engine,
+          captured_at: reading.checked_at,
+          hash: view.hash,
+          rule: CHANGE_RULE.version,
+          bytes: view.bytes,
+          changed,
+        });
+      }
+      // "We looked and it was the same" is a measurement. Recording only the
+      // changes would make an unchanged page indistinguishable from one nobody
+      // ever photographed.
+      reading.views = views;
+    }
 
     readings.push(reading);
     if (reading.outcome === 'measured') measured++;

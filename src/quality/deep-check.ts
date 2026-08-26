@@ -136,7 +136,15 @@ export interface ToolResult {
   audits?: Record<string, { numericValue?: number; numericUnit?: string }>;
 }
 
-export type ToolRun = (url: string) => Promise<ToolResult>;
+/**
+ * Runs the tool against one URL.
+ *
+ * `onPage` is invoked once the tool has finished and before the page is closed,
+ * so a rendered view can be taken from the navigation that already happened.
+ * That is the difference between a capture costing nothing and a capture costing
+ * someone else's server another page load.
+ */
+export type ToolRun = (url: string, onPage?: () => Promise<void>) => Promise<ToolResult>;
 
 export const SCHEMA = 'govwebchecker/quality/1';
 
@@ -237,6 +245,8 @@ export function readingFromRun(result: ToolResult, context: ReadingContext, chec
 
 export interface DeepCheckOptions {
   run: ToolRun;
+  /** Called on the tool's own page, after it finishes and before it closes. */
+  onPage?: () => Promise<void>;
   limiter: RateLimiter;
   /** The backend the navigation will reach, when it is known. */
   address?: string;
@@ -253,7 +263,7 @@ export interface DeepCheckOptions {
 export async function deepCheck(context: ReadingContext, options: DeepCheckOptions): Promise<DeepReading> {
   const granted = new Date(await options.limiter.acquire(context.host, options.address));
   try {
-    return readingFromRun(await options.run(context.url), context, granted);
+    return readingFromRun(await options.run(context.url, options.onPage), context, granted);
   } catch (error) {
     return {
       schema: SCHEMA,
