@@ -6,6 +6,8 @@ import { verifyRecord, formatReport } from './verify.js';
 import { executeCensus } from '../census/run.js';
 import { buildFrame, DEFAULT_SOURCE, type Frame, type Exclusion } from '../census/frame.js';
 import { sliceForDate, SLICES } from '../census/slice.js';
+import { executeDeepRun } from '../quality/run.js';
+import { lighthouseRunner, PRESETS } from '../quality/runner.js';
 
 /**
  * The traffic limits. Constants, not options.
@@ -75,6 +77,7 @@ const TOOL_VERSION = '0.1.0';
 
 interface Args {
   command: string;
+  preset: 'mobile' | 'desktop';
   targets: string;
   out: string;
   only?: string;
@@ -94,6 +97,7 @@ function parseArgs(argv: string[]): Args {
     dryRun: false,
     frame: 'targets/dotgov-frame.json',
     exclusions: 'targets/excluded.json',
+    preset: 'mobile',
   };
 
   for (let i = 1; i < argv.length; i++) {
@@ -105,6 +109,13 @@ function parseArgs(argv: string[]): Args {
       const value = argv[++i];
       if (value === undefined) throw new Error('--only requires a target id');
       args.only = value;
+    }
+    else if (arg === '--preset') {
+      const value = argv[++i];
+      if (value !== 'mobile' && value !== 'desktop') {
+        throw new Error('--preset requires mobile or desktop');
+      }
+      args.preset = value;
     }
     else if (arg === '--frame') args.frame = argv[++i] ?? args.frame;
     else if (arg === '--exclusions') args.exclusions = argv[++i] ?? args.exclusions;
@@ -272,10 +283,64 @@ async function census(args: Args): Promise<number> {
   return 0;
 }
 
+/**
+ * One deep quality pass.
+ *
+ * Runs the same target list `check` uses. The traffic difference is real — a
+ * whole page load rather than one request — and it is still one visitor's worth,
+ * which is the line Principle I draws. What keeps it there is that the pass is
+ * serial, takes one navigation per site, and never retries.
+ */
+async function deepCheckCommand(args: Args): Promise<number> {
+  const targets = parseTargets(await fs.readFile(args.targets, 'utf8'));
+  const selected = (args.only
+    ? activeTargets(targets).filter((t) => t.id === args.only)
+    : activeTargets(targets)
+  ).map((t) => ({ id: t.id, host: t.host, url: t.url }));
+
+  if (args.only && selected.length === 0) throw new Error(`no active target with id "${args.only}"`);
+
+  const preset = PRESETS[args.preset];
+  const summary = await executeDeepRun({
+    targets: selected,
+    dataDir: args.out,
+    config: {
+      timeoutMs: LIMITS.timeoutMs,
+      maxRedirects: LIMITS.maxRedirects,
+      hostIntervalMs: LIMITS.hostIntervalMs,
+      domainIntervalMs: LIMITS.domainIntervalMs,
+      addressIntervalMs: LIMITS.addressIntervalMs,
+      vantage: vantage(),
+      preset: preset.id,
+      ...(args.dryRun ? { dryRun: true } : {}),
+    },
+    run: lighthouseRunner(preset),
+  });
+
+  if (args.dryRun) {
+    for (const reading of summary.readings) console.log(JSON.stringify(reading));
+  }
+
+  const breakdown = Object.entries(summary.outcome_breakdown)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' ');
+
+  console.error(
+    `deep-check ${summary.run_id}\n` +
+      `  ${summary.targets_attempted} targets at ${preset.id}, ${breakdown}` +
+      `${args.dryRun ? ' (dry run, nothing written)' : ''}` +
+      (summary.all_targets_failed ? '\n  WARNING: nothing measured — suspect our own runner' : ''),
+  );
+
+  // A page that would not render is data, not a failure of this command.
+  return 0;
+}
+
 const USAGE = `govWebChecker
 
   check        [--targets <path>] [--out <dir>] [--only <id>] [--dry-run]
   census       [--frame <path>] [--slice <0-6>] [--out <dir>] [--dry-run]
+  deep-check   [--targets <path>] [--preset mobile|desktop] [--only <id>] [--out <dir>] [--dry-run]
   build-frame  [--frame <path>] [--exclusions <path>] [--source <url>] [--dry-run]
   verify       <record.jsonl> [--frame <path>]
 
@@ -292,6 +357,8 @@ async function main(): Promise<number> {
       return check(args);
     case 'census':
       return census(args);
+    case 'deep-check':
+      return deepCheckCommand(args);
     case 'build-frame':
       return buildFrameCommand(args);
     case 'verify':

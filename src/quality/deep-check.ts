@@ -150,8 +150,7 @@ const METRICS: Record<string, string> = {
   'total-byte-weight': 'total_byte_weight',
 };
 
-function utc(value: string | undefined, fallback: Date): string {
-  const at = value ? new Date(value) : fallback;
+function utc(at: Date): string {
   return `${at.toISOString().slice(0, 19)}Z`;
 }
 
@@ -183,8 +182,15 @@ function emulation(result: ToolResult): { device: DeviceEmulation; network: Netw
   };
 }
 
-/** Builds a reading from a completed run. Throws if the run cannot state its method. */
-export function readingFromRun(result: ToolResult, context: ReadingContext, now = new Date()): DeepReading {
+/**
+ * Builds a reading from a completed run. Throws if the run cannot state its method.
+ *
+ * `checkedAt` is the moment the limiter released this check, not the tool's own
+ * `fetchTime` — a different clock in a different process. Dating a reading to the
+ * grant is what makes the record's spacing checkable by a reader rather than
+ * taken on trust, and it is what the availability record already does.
+ */
+export function readingFromRun(result: ToolResult, context: ReadingContext, checkedAt = new Date()): DeepReading {
   const { device, network } = emulation(result);
 
   const metrics: Record<string, Metric> = {};
@@ -203,7 +209,7 @@ export function readingFromRun(result: ToolResult, context: ReadingContext, now 
     host: context.host,
     url: context.url,
     dimension: 'quality',
-    checked_at: utc(result.fetchTime, now),
+    checked_at: utc(checkedAt),
     outcome: 'measured',
     ...(result.finalDisplayedUrl ? { final_url: result.finalDisplayedUrl } : {}),
     metrics,
@@ -224,7 +230,6 @@ export interface DeepCheckOptions {
   limiter: RateLimiter;
   /** The backend the navigation will reach, when it is known. */
   address?: string;
-  now?: () => Date;
 }
 
 /**
@@ -236,10 +241,9 @@ export interface DeepCheckOptions {
  * Principle IV asks and what Principle I requires.
  */
 export async function deepCheck(context: ReadingContext, options: DeepCheckOptions): Promise<DeepReading> {
-  const now = options.now ?? (() => new Date());
-  await options.limiter.acquire(context.host, options.address);
+  const granted = new Date(await options.limiter.acquire(context.host, options.address));
   try {
-    return readingFromRun(await options.run(context.url), context, now());
+    return readingFromRun(await options.run(context.url), context, granted);
   } catch (error) {
     return {
       schema: SCHEMA,
@@ -248,7 +252,7 @@ export async function deepCheck(context: ReadingContext, options: DeepCheckOptio
       host: context.host,
       url: context.url,
       dimension: 'quality',
-      checked_at: utc(undefined, now()),
+      checked_at: utc(granted),
       outcome: 'check_failed',
       check_failure: error instanceof Error ? error.message : String(error),
       metrics: {},

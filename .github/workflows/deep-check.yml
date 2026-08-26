@@ -1,0 +1,70 @@
+name: deep-check
+
+on:
+  schedule:
+    # Daily, and that cadence is a consequence rather than a preference. A deep
+    # check is a whole page load in a real browser and runs serially — two
+    # browsers on one runner CPU inflate the blocking time of both, so the
+    # numbers would describe our scheduling rather than the page. At roughly
+    # half a minute per target that is well under an hour for the list, but it
+    # is not something to repeat hourly against sites we do not own.
+    #
+    # Quality changes on the scale of a redesign or a deploy, not of an outage.
+    # Availability is what needs hourly sampling; this does not.
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: deep-check
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deep-check:
+    runs-on: ubuntu-latest
+    # Serial by design, so a hung browser would otherwise sit until the six-hour
+    # default. Long enough for the whole list with room to spare.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Show the browser this run will measure with
+        # The browser version is part of the method: a reading is of a page as
+        # rendered by a specific engine. Printed rather than pinned, because the
+        # runner image supplies it and a silent change should at least be visible
+        # in the log a reader can go back to.
+        run: google-chrome --version
+
+      - name: Deep-check the target list
+        run: node dist/src/cli/index.js deep-check --preset mobile
+
+      - name: Verify our own conduct before publishing it
+        # Same gate as availability: a record that fails our own stated checks
+        # does not get committed. For quality readings that includes the vantage
+        # check — a reading taken anywhere but a runner measures that machine
+        # rather than the target.
+        run: |
+          set -e
+          shopt -s nullglob
+          files=(data/quality/*.jsonl)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no quality readings produced — nothing to verify or publish"
+            exit 0
+          fi
+          for file in "${files[@]}"; do
+            echo "verifying $file"
+            node dist/src/cli/index.js verify "$file"
+          done
+
+      - name: Publish the record
+        run: |
+          scripts/publish-record.sh "${GITHUB_REF_NAME}" "data: quality readings $(date -u +%Y-%m-%dT%H:%MZ)"

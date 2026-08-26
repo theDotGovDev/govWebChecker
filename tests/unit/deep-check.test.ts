@@ -135,7 +135,7 @@ describe('a deep check is one visitor, once (FR-322, FR-324)', () => {
   test('a failed run is recorded as a failed check and never retried', async () => {
     let calls = 0;
     const run: ToolRun = async () => { calls += 1; throw new Error('NO_FCP: page did not paint'); };
-    const r = await deepCheck(context, { run, limiter: limiter(), now: () => new Date('2026-08-26T10:20:00Z') });
+    const r = await deepCheck(context, { run, limiter: limiter() });
     assert.equal(calls, 1, 'retrying against a site that just failed is what Principle I forbids');
     assert.equal(r.outcome, 'check_failed');
     assert.match(r.check_failure!, /NO_FCP/);
@@ -144,7 +144,7 @@ describe('a deep check is one visitor, once (FR-322, FR-324)', () => {
 
   test('a check failure is never expressed in availability terms (FR-324)', async () => {
     const run: ToolRun = async () => { throw new Error('protocol timeout'); };
-    const r = await deepCheck(context, { run, limiter: limiter(), now: () => new Date('2026-08-26T10:20:00Z') });
+    const r = await deepCheck(context, { run, limiter: limiter() });
     assert.equal(r.dimension, 'quality');
     const json = JSON.stringify(r);
     for (const availability of ['timeout', 'http_error', 'connection_failure', 'dns_failure']) {
@@ -165,5 +165,58 @@ describe('a deep check is one visitor, once (FR-322, FR-324)', () => {
     await deepCheck(context, { run, limiter: slow });
     assert.deepEqual(order, ['acquire', 'navigate'],
       'the limiter is the only thing standing between this and unbounded traffic');
+  });
+});
+
+/**
+ * The tool holds frames of the rendered page in memory — that is how it measures
+ * paint at all, and the constitution permits it. What it must never do is put one
+ * in the record: this project stores measurements of a site, not the site.
+ */
+describe('no part of the page reaches the reading (Principle IV)', () => {
+  test('a result carrying rendered frames yields a reading carrying none', () => {
+    const withFrames = lhr({
+      audits: {
+        'final-screenshot': { id: 'final-screenshot', details: { data: 'data:image/webp;base64,AAAA' } },
+        'screenshot-thumbnails': {
+          id: 'screenshot-thumbnails',
+          details: { items: [{ data: 'data:image/jpeg;base64,BBBB' }] },
+        },
+        'largest-contentful-paint': {
+          id: 'largest-contentful-paint', numericValue: 2412.3, numericUnit: 'millisecond',
+          details: { debugData: { snippet: '<h1>Some page text</h1>' } },
+        },
+      },
+    });
+    const json = JSON.stringify(readingFromRun(withFrames, context));
+    assert.doesNotMatch(json, /data:image/, 'a rendered frame is the page, not a measurement of it');
+    assert.doesNotMatch(json, /Some page text/, 'nor is a snippet of its content');
+    assert.doesNotMatch(json, /details/, 'a reading copies named metrics; it does not filter a result');
+    assert.equal(JSON.parse(json).metrics.largest_contentful_paint.value, 2412.3);
+  });
+});
+
+/**
+ * The availability record dates a reading to the moment the limiter released it,
+ * not to a clock read later, so the gap between two published timestamps is the
+ * gap the limiter arithmetic actually produced. A deep reading has to do the
+ * same, or the record's spacing could not be checked by a reader — and the tool's
+ * own `fetchTime` is a different clock in a different process.
+ */
+describe('a reading is dated to when the limiter released it', () => {
+  test('checked_at is the grant moment, not the tool\'s fetchTime', async () => {
+    const lim = limiter();
+    let granted = 0;
+    const original = lim.acquire.bind(lim);
+    lim.acquire = async (host: string, address?: string) => {
+      granted = await original(host, address);
+      return granted;
+    };
+    // The tool reports a fetchTime from a year that never happened, so a reading
+    // that trusted it would be unmistakable.
+    const run: ToolRun = async () => lhr({ fetchTime: '2001-01-01T00:00:00.000Z' });
+    const r = await deepCheck(context, { run, limiter: lim });
+    assert.equal(r.checked_at, `${new Date(granted).toISOString().slice(0, 19)}Z`);
+    assert.doesNotMatch(r.checked_at, /^2001/);
   });
 });

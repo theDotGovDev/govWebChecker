@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readingFromRun, type ToolResult } from '../../src/quality/deep-check.js';
+import { PRESETS } from '../../src/quality/runner.js';
 
 /**
  * The unit tests build readings from a hand-written result, which proves the code
@@ -85,5 +86,22 @@ describe('a reading built from real tool output (FR-320, FR-321)', () => {
     assert.ok(audits.length > 100, 'the fixture holds the tool\'s full audit set');
     assert.equal(Object.keys(r.metrics).length, 8,
       'only the published metric list is carried; the record is not whatever the tool happened to emit');
+  });
+});
+
+/**
+ * The one thing a recorded fixture cannot guard, because it is a fact about the
+ * installed tool rather than about a past run.
+ */
+describe('the presets stay the tool\'s own (FR-320)', () => {
+  test('the device user agents match what the tool ships', async () => {
+    const { userAgents } = (await import('lighthouse/core/config/constants.js')) as unknown as {
+      userAgents: { mobile: string; desktop: string };
+    };
+    // A device string that silently drifted out of date would change which page a
+    // site serves us, and every reading after that would be of a different page
+    // than it claims to be.
+    assert.equal(PRESETS['mobile']!.deviceUserAgent, userAgents.mobile);
+    assert.equal(PRESETS['desktop']!.deviceUserAgent, userAgents.desktop);
   });
 });

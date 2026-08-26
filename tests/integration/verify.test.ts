@@ -29,7 +29,7 @@ function row(overrides: Partial<Observation> = {}): Observation {
     redirect_chain: [],
     latency: { samples: 1, median_ms: 10, min_ms: 10, max_ms: 10 },
     method: {
-      vantage: 'test',
+      vantage: 'github-actions/test',
       timeout_ms: 1_000,
       sample_count: 1,
       tool_version: '0.1.0',

@@ -26,7 +26,7 @@ flowchart LR
     checker --> dns
     frame[targets/dotgov-frame.json<br/>the census frame, generated] --> census
     census[census<br/>frame, slices, URL rule, presence] --> checker
-    census --> quality
+    targets --> quality
     subgraph quality[quality]
         direction TB
         Q1[one emulated visitor<br/>Lighthouse, standard preset] --> Q2[keep the measured audits<br/>drop the tool's rollups]
@@ -35,7 +35,7 @@ flowchart LR
     checker --> record[record<br/>validate then append]
     quality --> record
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
-    data --> verify[verify<br/>checks our conduct from the record]
+    data --> verify[verify<br/>checks our conduct from the record<br/>availability and quality, each on its own contract]
     data --> site
     subgraph site[site]
         direction TB
@@ -169,6 +169,16 @@ assumed.
   A tool failure is recorded as a failure of the *check*, never merged into the
   availability outcome — a browser crash says nothing about whether a government
   website was up.
+- `runner.ts` — driving the real tool. Kept apart from the reading logic so that
+  stays a pure function over a result, testable without a browser. Every choice
+  here is a constraint rather than a knob: the preset is the tool's own, because
+  comparability with the same tool run elsewhere is the entire reason for
+  choosing it; the emulated User-Agent has our identification *appended* rather
+  than substituted, since replacing the device string would change which page a
+  site serves; and Chrome is pinned to the backend the limiter accounted for with
+  a resolver rule, because a browser does its own DNS and the pin would otherwise
+  stop at the edge of this process. Chrome is relaunched per target — a second
+  against a fifteen-second check, for complete isolation between measurements.
 - `run.ts` — one deep pass, **serial by construction**. The availability pass
   runs different hosts concurrently because politeness is a property of what we
   do to one server; a deep pass cannot borrow that argument, and the reason is
