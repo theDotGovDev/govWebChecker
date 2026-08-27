@@ -176,3 +176,61 @@ describe('a view never reaches the record, only the finding (constitution 2.1.0)
       'a second view of one page on one device is a history, which is what the bound forbids');
   });
 });
+
+/**
+ * A capture that could not be taken is recorded as such. The gate keeps that
+ * distinct from a capture nobody attempted, which is the same absence rule the
+ * rest of the record lives by.
+ */
+describe('a capture that failed is admitted, and says why', () => {
+  test('a well-formed failure is admitted', () => {
+    assert.deepEqual(
+      validateQualityReading({
+        ...reading(),
+        view_failures: [{ profile: 'phone-webkit', reason: 'TypeError: Load failed' }],
+      }),
+      [],
+    );
+  });
+
+  test('a failure with no reason is refused', () => {
+    for (const bad of [{ profile: 'phone-webkit' }, { profile: 'phone-webkit', reason: '' }]) {
+      assert.ok(
+        validateQualityReading({ ...reading(), view_failures: [bad] }).some((p: string) => /reason/.test(p)),
+        'a capture that failed for no stated reason is a gap wearing a label',
+      );
+    }
+  });
+
+  test('a failure with no device is refused', () => {
+    assert.ok(
+      validateQualityReading({ ...reading(), view_failures: [{ reason: 'boom' }] })
+        .some((p: string) => /profile/.test(p)),
+    );
+  });
+
+  test('a device cannot be both taken and failed', () => {
+    const view = {
+      profile: 'phone-blink', width: 412, height: 823, scale: 1, engine: 'blink' as const,
+      captured_at: '2026-08-26T10:15:00Z', hash: '1'.repeat(512), rule: 'capture-change/1',
+      bytes: 31_402, changed: true,
+    };
+    assert.ok(
+      validateQualityReading({
+        ...reading(),
+        views: [view],
+        view_failures: [{ profile: 'phone-blink', reason: 'boom' }],
+      }).some((p: string) => /both|already/i.test(p)),
+      'one device, one outcome — a reader cannot act on a contradiction',
+    );
+  });
+
+  test('image data in a failure is refused too', () => {
+    assert.ok(
+      validateQualityReading({
+        ...reading(),
+        view_failures: [{ profile: 'phone-webkit', reason: 'boom', data: 'data:image/webp;base64,AAAA' }],
+      }).length > 0,
+    );
+  });
+});

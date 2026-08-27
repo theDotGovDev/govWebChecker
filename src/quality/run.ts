@@ -82,6 +82,10 @@ export interface DeepRunSummary {
 
 const DIMENSION = 'quality';
 
+function reasonFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Which profiles the deep check's own navigation can speak for.
  *
@@ -174,6 +178,7 @@ export async function executeDeepRun({
     );
 
     const taken: { profile: CaptureProfile; view: TakenView }[] = [];
+    const failed: { profile: string; reason: string }[] = [];
 
     const reading: DeepReading = permission.allowed
       ? await deepCheck(context, {
@@ -184,7 +189,14 @@ export async function executeDeepRun({
                 onPage: async (page: unknown, scratch: unknown) => {
                   for (const profile of CAPTURE_PROFILES) {
                     if (!ridesTheDeepCheck(profile, config.preset)) continue;
-                    taken.push({ profile, view: await captureView(profile, page, scratch) });
+                    try {
+                      taken.push({ profile, view: await captureView(profile, page, scratch) });
+                    } catch (error) {
+                      // The tool measured the page. A camera failing afterwards
+                      // does not unmeasure it, and letting this throw would turn
+                      // a good reading into `check_failed`.
+                      failed.push({ profile: profile.id, reason: reasonFor(error) });
+                    }
                   }
                 },
               }
@@ -222,9 +234,18 @@ export async function executeDeepRun({
         // Its own navigation, so its own slot. A second page load is still a
         // page load, and the limiter is where that is accounted for.
         await limiter.acquire(target.host, (await backends.get(target.host)).address);
-        taken.push({ profile, view: await captureStandalone(target.url, profile) });
+        try {
+          taken.push({ profile, view: await captureStandalone(target.url, profile) });
+        } catch (error) {
+          // One site's photograph is not the run. Letting this throw ended the
+          // first live pass four minutes in and discarded every reading already
+          // taken — a failing check is data, not an incident (Principle IV).
+          failed.push({ profile: profile.id, reason: reasonFor(error) });
+        }
       }
     }
+
+    if (failed.length > 0) reading.view_failures = failed;
 
     if (taken.length > 0) {
       const views: CaptureFinding[] = [];

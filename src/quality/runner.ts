@@ -284,9 +284,19 @@ async function captureWithWebkit(url: string, profile: CaptureProfile): Promise<
       quality: 75,
       clip: { x: 0, y: 0, width: profile.width, height: profile.height },
     });
-    // Reduced by the same function the Blink path uses, on this page, so the two
-    // engines' hashes are produced identically even though the pixels differ.
-    const hash = await hashView(page as never, image);
+    // Reduced on a page of our own, never on the captured site's.
+    //
+    // Hashing means handing the image to a browser as a `data:` URI and reading
+    // it back, and a page inherits its site's Content-Security-Policy — a
+    // `connect-src` restriction, which is ordinary on a government site, blocks
+    // that fetch outright. The first live run died exactly here: `TypeError:
+    // Load failed`, four minutes in. The Blink paths never had the bug because
+    // they already used a blank page; this one did not, and nothing local caught
+    // it because a fixture serves no policy unless you write one.
+    //
+    // A fresh context, so the site's policy does not travel with it.
+    const scratch = await (await browser.newContext()).newPage();
+    const hash = await hashView(scratch as never, image);
     return { image, hash, bytes: image.length };
   } finally {
     await browser.close();

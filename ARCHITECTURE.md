@@ -216,6 +216,12 @@ assumed.
   preset for Blink, Playwright's iPhone descriptor for WebKit — because a number
   we picked ourselves would not be comparable to anyone else's.
 
+  A capture that fails costs only that capture: it does not end the pass, and it
+  does not discard the measurement it rode with. The failure is recorded with its
+  device and reason, so a view nobody could take stays distinguishable from one
+  nobody attempted, and the site publishes it as something we could not do rather
+  than as a finding about the page.
+
   Change detection is a difference hash over a 17×17 greyscale grid, compared
   both left-to-right and top-to-bottom, computed in the browser that already
   decoded the image rather than by adding an image library. Two earlier versions

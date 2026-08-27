@@ -6,7 +6,7 @@ import path from 'node:path';
 import { executeDeepRun, type DeepRunConfig } from '../../src/quality/run.js';
 import type { ToolResult } from '../../src/quality/deep-check.js';
 import { CAPTURE_PROFILES, CHANGE_RULE } from '../../src/quality/capture.js';
-import { fastServer, type Fixture } from '../fixtures/servers.js';
+import { fastServer, fastServerOn, type Fixture } from '../fixtures/servers.js';
 
 function lhr(): ToolResult {
   return {
@@ -237,5 +237,97 @@ describe('an unchanged view is not stored again (D6, FR-344)', () => {
       assert.deepEqual(ids, CAPTURE_PROFILES.map((p) => p.id).sort());
       assert.ok(ids.includes(PHONE.id) && ids.includes(DESKTOP.id));
     } finally { await site.close(); await fs.rm(dir, { recursive: true, force: true }); }
+  });
+});
+
+/**
+ * A capture that fails is data, not an incident (Principle IV).
+ *
+ * The first live run died on this. One site's WebKit capture threw, the
+ * exception escaped `executeDeepRun`, and the whole pass ended — discarding
+ * every reading already taken, four minutes of measurements, because one
+ * photograph could not be developed. A page that will not be photographed says
+ * nothing about whether the page was measured, and nothing at all about the
+ * fifty sites after it.
+ */
+describe('a capture that fails costs only that capture (live-run defect)', () => {
+  const boom = async (): Promise<never> => { throw new Error('TypeError: Load failed'); };
+
+  test('a failing standalone capture does not end the pass', async () => {
+    const sites = await Promise.all(['127.0.0.2', '127.0.0.3'].map((a) => fastServerOn(a)));
+    try {
+      const summary = await executeDeepRun({
+        targets: sites.map((s: Fixture, i: number) => target(`ok-${i}`, s)),
+        dataDir: await tmp(),
+        config: { ...CONFIG, dryRun: true },
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+        captureStandalone: boom,
+      });
+      assert.equal(summary.readings.length, 2, 'both sites must still have been read');
+      assert.equal(summary.targets_measured, 2, 'the measurements themselves succeeded');
+    } finally { await Promise.all(sites.map((s: Fixture) => s.close())); }
+  });
+
+  test('a failing capture does not discard the measurement it rode with', async () => {
+    const site = await fastServer();
+    try {
+      const summary = await executeDeepRun({
+        targets: [target('ok', site)],
+        dataDir: await tmp(),
+        config: { ...CONFIG, dryRun: true },
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: boom,
+        captureStandalone: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+      });
+      const reading = summary.readings[0]!;
+      assert.equal(reading.outcome, 'measured',
+        'Lighthouse measured the page; a camera failing afterwards does not unmeasure it');
+      assert.ok(Object.keys(reading.metrics).length > 0, 'and its metrics must survive');
+    } finally { await site.close(); }
+  });
+
+  test('the failure is recorded, with which device and why', async () => {
+    const site = await fastServer();
+    try {
+      const summary = await executeDeepRun({
+        targets: [target('ok', site)],
+        dataDir: await tmp(),
+        config: { ...CONFIG, dryRun: true },
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+        captureStandalone: boom,
+      });
+      const failures = summary.readings[0]!.view_failures ?? [];
+      assert.ok(failures.length > 0,
+        'a capture nobody could take must be distinguishable from one nobody attempted');
+      assert.ok(failures.every((f) => f.profile && f.reason),
+        'each must name the device and what stopped it');
+      assert.match(failures[0]!.reason, /Load failed/);
+      // The profiles that DID work are still published.
+      const taken = summary.readings[0]!.views?.map((v) => v.profile) ?? [];
+      assert.ok(taken.length > 0, 'a failure on one device must not suppress the others');
+      for (const f of failures) assert.ok(!taken.includes(f.profile));
+    } finally { await site.close(); }
+  });
+
+  test('every profile is accounted for — taken or failed, never silently missing', async () => {
+    const site = await fastServer();
+    try {
+      const summary = await executeDeepRun({
+        targets: [target('ok', site)],
+        dataDir: await tmp(),
+        config: { ...CONFIG, dryRun: true },
+        run: async (_u, onPage) => { if (onPage) await onPage(undefined, undefined); return lhr(); },
+        captureView: async () => ({ hash: SAME, bytes: 10, image: new Uint8Array([1]) }),
+        captureStandalone: boom,
+      });
+      const reading = summary.readings[0]!;
+      const seen = [
+        ...(reading.views ?? []).map((v) => v.profile),
+        ...(reading.view_failures ?? []).map((f) => f.profile),
+      ].sort();
+      assert.deepEqual(seen, CAPTURE_PROFILES.map((p) => p.id).sort());
+    } finally { await site.close(); }
   });
 });

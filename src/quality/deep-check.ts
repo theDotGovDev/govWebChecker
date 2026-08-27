@@ -104,6 +104,15 @@ export interface DeepReading {
    * history to accumulate, latest-only holds by construction.
    */
   views?: CaptureFinding[];
+  /**
+   * Devices where a view was attempted and could not be taken.
+   *
+   * Kept apart from `views` so a photograph nobody could develop stays
+   * distinguishable from one nobody attempted — the same distinction the
+   * three-state checks make, in the place it is easiest to lose. A capture
+   * failing says nothing about whether the page was measured.
+   */
+  view_failures?: { profile: string; reason: string }[];
   method: DeepMethod;
 }
 
