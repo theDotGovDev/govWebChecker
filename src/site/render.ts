@@ -295,8 +295,8 @@ function tierPanel(tier: TierView): string {
     untiered: 'These rows predate the record distinguishing tiers, and are shown for completeness.',
   };
   const titles: Record<string, string> = {
-    hot: 'The busiest federal sites, checked every hour',
-    broad: 'Every registered .gov domain, checked weekly',
+    hot: 'The busiest federal sites, aiming for a check every hour',
+    broad: 'Every registered .gov domain, aiming for a weekly check',
     untiered: 'Earlier observations',
   };
   const icon = tier.tier === 'hot' ? ICON['clock'] : tier.tier === 'broad' ? ICON['map'] : '';
@@ -965,11 +965,20 @@ ${model.sites.map(row).join('\n')}
 <div class="panel">
   <h3>Sampling is occasional, so gaps are gaps</h3>
   <p>
-    Sites are checked hourly rather than continuously, which gives a short
-    interruption a fair chance of landing in the record without pretending to be
-    outage detection — an outage between checks is still invisible to us, and one
-    we catch is dated to when we looked. Where we have no measurement, this page
-    says so rather than showing a zero.
+    We aim to check each site hourly rather than continuously, which gives a
+    short interruption a fair chance of landing in the record without pretending
+    to be outage detection — an outage between checks is still invisible to us,
+    and one we catch is dated to when we looked. Where we have no measurement,
+    this page says so rather than showing a zero.
+  </p>
+  <p>
+    The cadence is a target, not a promise. Checks are scheduled on GitHub
+    Actions, which delivers scheduled runs on a best-effort basis and can be
+    late or skip a slot entirely — over 26&ndash;27 August 2026 the hourly
+    schedule fired twice in fifteen hours. So every figure states the interval
+    its readings actually arrived at alongside the cadence they were aiming for,
+    and a thinner stretch of the record means we looked less often, not that the
+    sites changed.
   </p>
 </div>
 

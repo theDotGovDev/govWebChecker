@@ -100,11 +100,53 @@ export function figure(parts: Figure): Figure {
  * they must stay distinguishable: a figure names exactly one of them, and a test
  * fails if one ever names both.
  */
+/**
+ * The cadence names what the schedule *asks for*, never what it achieved.
+ *
+ * It used to read "checked hourly", which was never a fact — it was a cron
+ * expression, and GitHub delivers scheduled events on a best-effort basis. Over
+ * 2026-08-26/27 the hourly schedule fired twice in fifteen hours, and for eight
+ * hours not at all, while the page went on telling readers each site was checked
+ * hourly. A published number carrying a method that did not produce it is
+ * precisely what Principle V forbids, so the label reports the target and lets
+ * `observedInterval` say what arrived.
+ */
 const CADENCE_LABEL: Record<Cadence, string> = {
-  hourly: 'checked hourly',
-  daily: 'checked daily',
-  weekly: 'checked weekly',
+  hourly: 'hourly target',
+  daily: 'daily target',
+  weekly: 'weekly target',
 };
+
+/**
+ * How far apart the readings behind this figure actually landed.
+ *
+ * Computed from the figure's own published parts rather than plumbed in
+ * alongside them, which is the point: window, samples and population are already
+ * on the page, so a reader can check this with arithmetic on numbers in front of
+ * them, and it cannot drift from the readings it describes the way an asserted
+ * cadence did.
+ *
+ * `undefined` when there is at most one reading per site. A single reading
+ * spaces nothing, and dividing the window by it would report a gap that no pair
+ * of readings ever had — reading absence as data, which FR-204 exists to stop.
+ */
+function observedInterval(f: Figure): string | undefined {
+  const perSite = f.samples / f.population;
+  const gaps = perSite - 1;
+  if (gaps < 1) return undefined;
+
+  const span = Date.parse(f.window.to) - Date.parse(f.window.from);
+  if (!Number.isFinite(span) || span <= 0) return undefined;
+
+  const minutes = Math.round(span / gaps / 60_000);
+  const hours = Math.floor(minutes / 60);
+  // "a reading every ..." rather than "checked every ...": these are the readings
+  // *behind this figure*, which for a latency is only the checks that produced a
+  // usable number. A site we checked hourly and that answered rarely would
+  // otherwise read as one we rarely visited.
+  const gap = hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+  return `a reading every ${gap}`;
+}
 
 function day(iso: string): string {
   return iso.slice(0, 10);
@@ -141,8 +183,10 @@ export function formatFigure(f: Figure | Absence, opts?: { note?: string }): str
   if ('kind' in f) {
     return `<span class="absence">— <span class="method">${escapeHtml(f.reason)}</span></span>`;
   }
+  const observed = observedInterval(f);
   const method =
-    `${CADENCE_LABEL[f.cadence]} · ${f.population === 1 ? '1 site' : `${f.population} sites`} · ` +
+    `${CADENCE_LABEL[f.cadence]}${observed ? `, ${observed}` : ''} · ` +
+    `${f.population === 1 ? '1 site' : `${f.population} sites`} · ` +
     `${day(f.window.from)} to ${day(f.window.to)} · ` +
     `${f.samples} readings · from ${escapeHtml(f.vantage)}` +
     (f.rule ? ` · rule ${escapeHtml(f.rule)}` : '') +

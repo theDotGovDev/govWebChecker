@@ -330,8 +330,8 @@ describe('tiers never blend (FR-220 to FR-223, SC-203)', () => {
     const figures = body(html).match(/<span class="figure">[\s\S]*?<\/span><\/span>/g) ?? [];
     assert.ok(figures.length > 0);
     for (const f of figures) {
-      const hot = /checked hourly/.test(f);
-      const broad = /checked weekly/.test(f);
+      const hot = /hourly target/.test(f);
+      const broad = /weekly target/.test(f);
       assert.ok(hot !== broad, `a figure must belong to exactly one tier: ${f}`);
     }
   });
@@ -693,7 +693,7 @@ describe('the ecosystem view (D5, FR-280 to FR-286)', () => {
       assert.doesNotMatch(m, /\btiers?\b|\bslices?\b/i,
         `a reader should not meet our machinery in a method line: ${m}`);
     }
-    assert.ok(methods.some((m) => /checked (hourly|weekly)/.test(m)),
+    assert.ok(methods.some((m) => /(hourly|weekly) target/.test(m)),
       'a figure must still say how often the reading was taken');
 
     // The cadence phrase is what now keeps the two populations apart, so the
@@ -701,7 +701,7 @@ describe('the ecosystem view (D5, FR-280 to FR-286)', () => {
     // weekly census figure read as an hourly one, which is the blend the tier
     // labels existed to prevent (FR-220) — and no other check would notice.
     const cadences = new Set(
-      methods.map((m) => m.match(/checked (hourly|weekly)/)?.[1]).filter(Boolean),
+      methods.map((m) => m.match(/(hourly|weekly) target/)?.[1]).filter(Boolean),
     );
     assert.ok(cadences.size >= 2,
       `a page carrying both populations must distinguish them: saw ${[...cadences].join(', ')}`);
@@ -836,15 +836,15 @@ describe('the first screen answers rather than enumerates (FR-310 to FR-312)', (
     // anything passes 'daily'.
     const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
     const section = html.slice(html.indexOf('id="page-experience"'), html.indexOf('<h2', html.indexOf('id="page-experience"') + 10));
-    const cadences = new Set(section.match(/checked (?:hourly|daily|weekly)/g) ?? []);
+    const cadences = new Set(section.match(/(?:hourly|daily|weekly) target/g) ?? []);
     assert.ok(cadences.size > 0, 'the section must publish figures at all');
-    assert.deepEqual([...cadences], ['checked daily'],
+    assert.deepEqual([...cadences], ['daily target'],
       `deep readings are taken daily; this section claims ${[...cadences].join(', ')}`);
 
     // And the tile that leads to it must agree with the section it leads to.
     const tile = html.match(/<a class="tile[^>]*id="tile-page-experience"[\s\S]*?<\/a>/)![0];
-    assert.match(tile, /checked daily/);
-    assert.doesNotMatch(tile, /checked hourly|checked weekly/);
+    assert.match(tile, /daily target/);
+    assert.doesNotMatch(tile, /hourly target|weekly target/);
   });
 
   test('a mixed result says how mixed, not just that it is mixed', () => {

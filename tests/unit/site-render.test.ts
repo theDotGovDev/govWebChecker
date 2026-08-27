@@ -126,7 +126,7 @@ describe('the page never publishes a figure without its population (SC-107)', ()
     tiers: [
       {
         tier: 'hot',
-        population: 'federal hosts selected by measured public traffic, checked hourly',
+        population: 'federal hosts selected by measured public traffic, aiming for an hourly check',
         observations: 100,
         domains: 58,
         responded: 90,

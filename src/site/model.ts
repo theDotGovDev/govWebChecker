@@ -244,8 +244,8 @@ export interface AgencyView {
 }
 
 const POPULATIONS: Record<string, string> = {
-  hot: 'federal hosts selected by measured public traffic, checked hourly',
-  broad: 'all registered US .gov domains, checked on a rolling weekly cycle',
+  hot: 'federal hosts selected by measured public traffic, aiming for an hourly check',
+  broad: 'all registered US .gov domains, aiming for a weekly check of each',
   untiered: 'observations recorded before the record distinguished tiers',
 };
 

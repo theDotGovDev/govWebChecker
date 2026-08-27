@@ -145,16 +145,103 @@ describe('a figure cannot claim a cadence it was not taken at (Principle V, D4)'
 
   test('a daily reading says daily, not hourly', () => {
     const html = formatFigure(figure({ ...base, value: 6512, unit: 'milliseconds', cadence: 'daily' }));
-    assert.match(html, /checked daily/);
+    assert.match(html, /daily target/);
     assert.doesNotMatch(html, /hourly|weekly/,
       'a deep quality reading is taken once a day; saying hourly overstates it 24-fold');
   });
 
   test('the cadences stay distinct from one another', () => {
     const cadences = (['hourly', 'weekly', 'daily'] as const).map((cadence) =>
-      formatFigure(figure({ ...base, value: 1, unit: 'count', cadence })).match(/checked \w+/)![0],
+      formatFigure(figure({ ...base, value: 1, unit: 'count', cadence })).match(/\w+ target/)![0],
     );
     assert.equal(new Set(cadences).size, 3,
       `two populations sharing a cadence phrase would read as one: ${cadences.join(', ')}`);
+  });
+});
+
+/**
+ * A cadence is what we aim for, not what we achieved.
+ *
+ * The site said "checked hourly" as a bare fact. It was never a fact: it was a
+ * cron expression, and GitHub delivers scheduled events on a best-effort basis.
+ * Over 2026-08-26/27 the hourly schedule fired twice in fifteen hours, and for
+ * eight hours it fired not at all — while the page went on telling readers each
+ * site was checked hourly.
+ *
+ * This is the same defect as the one below it in this file, one level up: there
+ * the *field* was misnamed and a daily reading claimed hourly; here the field is
+ * right and the *world* does not comply. Both publish a number whose stated
+ * method is not the method that produced it, which Principle V forbids.
+ *
+ * The fix is that the label reports rather than asserts. The observed interval
+ * is computed from the figure's own published parts — window, samples,
+ * population — so it cannot drift from the readings it describes, and a reader
+ * can check it with arithmetic on numbers already in front of them.
+ */
+describe('a cadence is a target, and the figure says what actually happened', () => {
+  const base = {
+    value: 99.2,
+    unit: 'percent' as const,
+    population: 58,
+    vantage: 'github-actions/ubuntu-24.04',
+  };
+
+  test('never states a cadence as an accomplished fact', () => {
+    const html = formatFigure(
+      figure({
+        ...base,
+        cadence: 'hourly',
+        window: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' },
+        samples: 58 * 25,
+      }),
+    );
+    assert.doesNotMatch(
+      html,
+      /checked hourly/,
+      'the schedule is a request to GitHub, not a description of what happened',
+    );
+    assert.match(html, /hourly target/, 'the reader still needs to know what was aimed at');
+  });
+
+  test('reports the interval the readings actually arrived at', () => {
+    // 58 sites, 3 readings each, across 15 hours: 2 gaps per site, 7h30m apart.
+    const html = formatFigure(
+      figure({
+        ...base,
+        cadence: 'hourly',
+        window: { from: '2026-08-27T05:00:00Z', to: '2026-08-27T20:00:00Z' },
+        samples: 58 * 3,
+      }),
+    );
+    assert.match(html, /a reading every 7h 30m/, html);
+  });
+
+  test('an interval close to the target still reports what it measured', () => {
+    // 58 sites, 25 readings each across 24h — 23 gaps, ~62m apart.
+    const html = formatFigure(
+      figure({
+        ...base,
+        cadence: 'hourly',
+        window: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' },
+        samples: 58 * 25,
+      }),
+    );
+    assert.match(html, /a reading every 1h 0m/, html);
+  });
+
+  test('states no interval when there is only one reading per site to space', () => {
+    // The census: one reading per domain per cycle. There is no gap to measure,
+    // and inventing one from a single reading would be reading absence as data.
+    const html = formatFigure(
+      figure({
+        ...base,
+        cadence: 'weekly',
+        population: 16535,
+        window: { from: '2026-08-20T00:00:00Z', to: '2026-08-27T00:00:00Z' },
+        samples: 16535,
+      }),
+    );
+    assert.match(html, /weekly target/);
+    assert.doesNotMatch(html, /a reading every/, 'one reading per site spaces nothing');
   });
 });
