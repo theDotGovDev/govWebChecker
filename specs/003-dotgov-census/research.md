@@ -162,6 +162,27 @@ kind of "polite by convention" the constitution warns against — it is acceptab
 only because the concurrency bound already caps what either process can do, and
 the record makes a violation visible after the fact through `verify`.
 
+**Superseded on 2026-08-27.** The scheduling convention failed, in the way this
+paragraph anticipated. On 2026-08-26 a census slice and an hourly check ran at
+once and hit one WordPress VIP edge 126ms apart — `fraud.gov` from the census,
+`covidtests.gov` from the hot tier, both resolving to `192.0.66.230`. Both
+name-keyed limits passed, because every name involved was different; only the
+per-address key could see it, and neither process held the other's.
+
+`verify` did make it visible, but "visible after the fact" understated the cost.
+The record is append-only, so the pair could not be taken back out, and `verify`
+gates publication: every subsequent hourly run failed on that one immutable pair
+and discarded the readings it had just taken. Twenty hours of hot-tier readings
+were collected and thrown away before the red workflow was noticed.
+
+The budget is now shared by *construction* rather than by convention: `check`,
+`census` and `deep-check` sit in one `target-traffic` concurrency group, so only
+one collector process is ever live and a process-local limiter is again
+sufficient. The cost is the one this decision was written to avoid — a long
+census delays the hourly check, and can drop one slot — but one or two slots a
+day is the smaller loss by two orders of magnitude, and a delayed reading is a
+gap the record can state honestly where a breached guarantee is not.
+
 ---
 
 ## R6. Removal is data, applied at frame-build time

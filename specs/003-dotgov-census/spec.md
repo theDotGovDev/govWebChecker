@@ -514,12 +514,85 @@ rule below.
   redirect hop and the `robots.txt` fetch. A redirect onto a vendor's shared host
   is one of the commonest shapes in the registry, so the hop that reaches the
   shared backend is the one that most needs accounting.
+- **FR-140e**: The shared budget in FR-106 MUST be shared by construction: at
+  most one collector may be sending traffic at a time. The limits are held in a
+  process, so two collectors running at once are two budgets, and every
+  name-keyed limit still passes — only the per-address key can see the collision,
+  and neither process holds the other's. Spacing the collectors by *schedule* is
+  the "polite by convention" the constitution rejects, and it failed in exactly
+  that way on 2026-08-26 (research.md R5).
 - **FR-141**: The backend contacted MUST be recorded with the observation, so the
   spacing guarantee in FR-140 is provable by a reader from the stored record
   alone rather than taken on trust (Principle V). Where no backend was
   established the field is absent, and absence MUST NOT be read as a shared key.
 - **FR-142**: Observations written before this field existed MUST remain valid
   and MUST NOT be rewritten (FR-136).
+- **FR-134**: A `robots.txt` fetch and the page it governs MUST be charged as one
+  visit: the backend budget applies, the name-keyed interval does not. The
+  per-host interval exists to space two *independent* readings, and asking a
+  site's permission before acting on the answer is not two. This is the same rule
+  already applied to redirect hops (FR-003b), one request earlier.
+- **FR-134a**: The continuation MUST cover one visit only. A second *sample* is a
+  second independent reading and MUST pay the full interval, and a test MUST fail
+  if it does not — a limit nothing checks is a comment.
+- **FR-133**: Raising the bound in FR-132 MUST remain blocked until the
+  shared-hosting limit (FR-140) is enforced and provable (FR-141). That condition
+  is now met, so the block is discharged — but raising the bound remains a
+  separate decision needing its own evidence, not an automatic consequence of
+  closing the gap. Nothing here argues for a higher bound.
+
+**The shared-hosting limit**
+
+- **FR-140**: Requests MUST be limited on the backend actually contacted, not
+  only on the names used to reach it. Distinct registrable domains sharing one
+  machine MUST share a budget for it.
+
+  The measured basis is in *Where `.gov` is hosted*: 531 unrelated domains on one
+  address, and 30.2% of the frame in clusters large enough for a single run to
+  occupy every worker against one machine. Both name-keyed limits pass such a
+  burst, because every name in it is different.
+- **FR-140a**: The limit MUST NOT depend on classifying a backend as a shared
+  origin or a content delivery network. The survey shows that distinction cannot
+  be drawn from DNS for roughly a third of the domains involved, so a design
+  requiring it would rest on a maintained guess that goes stale silently. Erring
+  toward limiting a network with capacity to spare is the affordable error;
+  erring toward not limiting a municipal server is not.
+- **FR-140b**: The backend a request is limited against MUST be the backend it is
+  sent to. Accounting for one address and connecting to another would make the
+  published guarantee false on its own record.
+- **FR-140c**: Where the backend cannot be established, the name-keyed limits
+  MUST still apply and the record MUST NOT claim to know where the request went.
+  An unknown backend is not an unlimited one.
+- **FR-140d**: Every request a check makes MUST pass the limits, including each
+  redirect hop and the `robots.txt` fetch. A redirect onto a vendor's shared host
+  is one of the commonest shapes in the registry, so the hop that reaches the
+  shared backend is the one that most needs accounting.
+- **FR-140e**: The shared budget in FR-106 MUST be shared by construction: at
+  most one collector may be sending traffic at a time. The limits are held in a
+  process, so two collectors running at once are two budgets, and every
+  name-keyed limit still passes — only the per-address key can see the collision,
+  and neither process holds the other's. Spacing the collectors by *schedule* is
+  the "polite by convention" the constitution rejects, and it failed in exactly
+  that way on 2026-08-26 (research.md R5).
+- **FR-141**: The backend contacted MUST be recorded with the observation, so the
+  spacing guarantee in FR-140 is provable by a reader from the stored record
+  alone rather than taken on trust (Principle V). Where no backend was
+  established the field is absent, and absence MUST NOT be read as a shared key.
+- **FR-142**: Observations written before this field existed MUST remain valid
+  and MUST NOT be rewritten (FR-136).
+- **FR-143**: A breach already present in the record MUST be capable of being
+  carried without disabling the check that found it. The record is append-only,
+  so a violation that got committed cannot be taken back out; `verify` gates
+  publication, so one immutable bad pair otherwise discards every honest reading
+  taken after it, and did — twenty hours of hot-tier readings on 2026-08-26.
+
+  An acknowledgement MUST name one check, one key and the two exact timestamps,
+  so it forgives that pair and nothing else; it MUST stay visible in the verify
+  report rather than silencing the check; and `verify` MUST fail when an
+  acknowledgement matches no pair in the record, so the list cannot be written
+  ahead of a breach or outlive the rows that justify it. An entry is admissible
+  only with the cause found and the fix landed — this is an allow-marker, not a
+  suppressed failure.
 - **FR-134**: `robots.txt` MUST continue to be honored per target, and every
   request MUST continue to identify itself (Principle II, Principle III).
 - **FR-135**: A run MUST NOT retry harder against a domain that has already

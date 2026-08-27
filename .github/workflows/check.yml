@@ -14,10 +14,28 @@ on:
     - cron: '23 * * * *'
   workflow_dispatch:
 
-# Two runs must never race the commit. Queue rather than cancel: a cancelled run
-# is a gap in the record, and gaps are meant to mean "we did not measure".
+# One group across every workflow that sends traffic to a target — `check`,
+# `census` and `deep-check`. The politeness limits live in a RateLimiter
+# *instance*, so they hold within one process and are blind to a second collector
+# on another runner. Serializing the collectors is what makes the per-address
+# guarantee true of the published record rather than merely true of each run.
+#
+# This reverses a deliberate choice (research.md R5): the groups were split so a
+# long census could not block the hourly check, accepting cross-tier overlap as a
+# bounded risk "visible afterwards through verify". It materialised on
+# 2026-08-26 — a census slice and an hourly check hit one WordPress VIP edge
+# 126ms apart — and the cost was the opposite of what the split protected. The
+# record is append-only, so that pair failed verify on every subsequent run and
+# twenty hours of hourly readings were collected and discarded, against the one
+# or two slots per day that queueing costs.
+#
+# Queue rather than cancel: a cancelled run is a gap in the record, and gaps are
+# meant to mean "we did not measure". GitHub still keeps only one run pending per
+# group, so an hourly check that collides with a long collector runs late, and a
+# second one behind it is dropped. That is a visible gap rather than a false
+# claim, which is the direction Principle V requires erring in.
 concurrency:
-  group: availability-check
+  group: target-traffic
   cancel-in-progress: false
 
 permissions:

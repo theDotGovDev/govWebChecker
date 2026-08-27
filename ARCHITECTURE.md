@@ -326,6 +326,11 @@ rather than from our own run summaries.
 someone who has never seen this repository can run the same check against the
 published data and reach the same verdict.
 
+The politeness limits are held in a `RateLimiter` *instance*, which is why every
+workflow that sends traffic to a target — `check`, `census`, `deep-check` — sits
+in one `target-traffic` concurrency group. Two collectors running at once are two
+budgets, and the name-keyed limits cannot see the collision (FR-140e).
+
 The CLI has no flag that weakens a limit — no `--concurrency`, no
 `--rate-limit`, no `--timeout`, not even for local runs, since a local run
 reaches the same government servers a scheduled one does. Tests inject limits at
