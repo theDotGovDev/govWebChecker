@@ -281,8 +281,19 @@ rather than "not present".
   frequently; expensive browser-based audits run rarely. The tiers MUST be
   separately scheduled so the expensive tier cannot inherit the cheap tier's
   frequency.
-- **FR-009**: Availability sampling MUST run at least hourly per target *in the
-  hot tier*.
+- **FR-009**: Availability sampling MUST *target* at least hourly per target *in
+  the hot tier*, and MUST NOT be published as a guarantee that it achieved it.
+
+  **Revised again on 2026-08-27.** The cadence is a request to a scheduler, not
+  a property of the system. GitHub delivers scheduled events on a best-effort
+  basis: over 2026-08-26/27 the hourly schedule fired twice in fifteen hours,
+  and for eight hours not at all, while the site went on telling readers each
+  site was "checked hourly". Restating the target as a target is not a weakening
+  of this requirement — the requirement was always about what we ask for, and
+  only the published wording claimed more. What is now required in addition is
+  that every published figure states the interval its readings actually arrived
+  at, computed from the figure's own window, sample count and population, so a
+  reader can see the difference without trusting us.
 
   **Revised by `003`.** This originally applied to every target. A census of
   16,535 domains cannot be sampled hourly and stay within Principle I, so the

@@ -279,6 +279,13 @@ build has no network path at all, which is stronger than a rule.
   window, sample count and vantage — so a published number without its method is
   unrepresentable rather than discouraged (Principle V). Absence is its own
   type, never a zero. The renderer accepts `Figure`, never `number`.
+
+  A cadence names what the schedule asks for, never what it achieved: labels read
+  "hourly target", and the method line states the interval the readings actually
+  arrived at, derived from the figure's own window, samples and population rather
+  than plumbed in beside them. GitHub delivers scheduled runs best-effort — over
+  2026-08-26/27 the hourly schedule fired twice in fifteen hours — so a figure
+  that asserted its cadence was publishing a method that had not produced it.
 - `model.ts` — builds the dashboard: four tiles that answer before they
   enumerate. The first tile is the one that matters most and is the easiest place
   to be unfair — a 403 is an *answer*, the server responded and declined a robot,

@@ -487,8 +487,14 @@ reconciliation:
   a weekly reading cannot support a claim about a thirty-minute outage, whatever
   frame it came from.
 - **The site never names a tier** — already true after `002` D5 (FR-286). It says
-  "checked hourly" or "checked weekly", which is a fact about the reading rather
+  "hourly target" or "weekly target", which is a fact about the reading rather
   than a category the reader must learn.
+
+  Reworded on 2026-08-27. It read "checked hourly", which was not a fact about
+  the reading at all — it was the cron expression, restated as an accomplishment.
+  A figure now names the cadence it aimed for and, where it has more than one
+  reading per site to space, the interval those readings actually arrived at
+  (`001` FR-009).
 
 `tier` in the record is retained as historical provenance for rows already
 written — the record is append-only and history is not rewritten — but it stops

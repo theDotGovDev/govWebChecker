@@ -5,8 +5,12 @@ Check popular gov websites for status and speed.
 ## Where the project is right now
 
 Feature `001` is built and running. The checker collects availability
-measurements for 58 federal hosts on an hourly schedule in GitHub Actions and
-commits the results to `data/`. Treat the stack and the record format as
+measurements for 58 federal hosts on an hourly *target* schedule in GitHub
+Actions and commits the results to `data/`. The cadence is best effort, not a
+guarantee: GitHub delivers scheduled events when it can, and over 2026-08-26/27
+the hourly schedule fired twice in fifteen hours. Figures on the site therefore
+state the interval their readings actually arrived at alongside the cadence they
+aimed for — don't reintroduce wording that asserts a cadence as a fact. Treat the stack and the record format as
 decided; a change here is a change to working software, not a greenfield choice.
 
 - **Stack**: TypeScript on Node 22, no runtime dependencies. `node --test` for
