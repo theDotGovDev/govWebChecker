@@ -827,6 +827,53 @@ describe('the first screen answers rather than enumerates (FR-310 to FR-312)', (
     }
   });
 
+  test('the quality figures state the cadence they were actually taken at', () => {
+    // The defect this pins: every deep-quality figure read "checked hourly" on
+    // the first real build, because the model constructed them with the hourly
+    // tier. The deep check runs once a day. Overstating a cadence
+    // twenty-four-fold is a false method, and the label test alone could not
+    // catch it — that only proved 'daily' renders as "checked daily", never that
+    // anything passes 'daily'.
+    const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
+    const section = html.slice(html.indexOf('id="page-experience"'), html.indexOf('<h2', html.indexOf('id="page-experience"') + 10));
+    const cadences = new Set(section.match(/checked (?:hourly|daily|weekly)/g) ?? []);
+    assert.ok(cadences.size > 0, 'the section must publish figures at all');
+    assert.deepEqual([...cadences], ['checked daily'],
+      `deep readings are taken daily; this section claims ${[...cadences].join(', ')}`);
+
+    // And the tile that leads to it must agree with the section it leads to.
+    const tile = html.match(/<a class="tile[^>]*id="tile-page-experience"[\s\S]*?<\/a>/)![0];
+    assert.match(tile, /checked daily/);
+    assert.doesNotMatch(tile, /checked hourly|checked weekly/);
+  });
+
+  test('a mixed result says how mixed, not just that it is mixed', () => {
+    // "Mixed" for six of seven rows is what the first real build published, and
+    // it tells a reader nothing: eight sites passing out of forty-nine reads
+    // identically to thirty-seven. The counts exist in the model; hiding them
+    // wastes the only thing that makes a check actionable.
+    const html = render(fixtureRows(), undefined, [], [
+      qualityReading(GOOD_PAGE),
+      qualityReading({ ...GOOD_PAGE, largest_contentful_paint: 9000 },
+        { host: 'slow.gov', target_id: 'slow-gov', url: 'https://slow.gov/' }),
+    ]);
+    const section = html.slice(html.indexOf('id="page-experience"'));
+    const row = section.match(/<tr>\s*<th scope="row">Does the main content appear quickly\?[\s\S]*?<\/tr>/)![0];
+    const text = row.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.match(text, /\b1 of 2\b/,
+      `a mixed row must publish how many passed of how many measured: ${text}`);
+  });
+
+  test('the count of sites passing carries its method, like any other figure', () => {
+    const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
+    const section = html.slice(html.indexOf('id="page-experience"'));
+    // A bare "1 of 2 sites" would be a published quantity with no window, no
+    // vantage and no cadence — the thing the Figure type exists to prevent.
+    const naked = outsideFigures(section);
+    assert.doesNotMatch(naked, /\b\d[\d,]*\s+(?:sites?|pages?)\b/,
+      'a count of sites outside a Figure is a number without a method');
+  });
+
   test('the page-experience tile summarises the checks without hiding them', () => {
     const html = render(fixtureRows(), undefined, [], [qualityReading(GOOD_PAGE)]);
     // The composite is permitted as analysis (D3) only while the parts stay

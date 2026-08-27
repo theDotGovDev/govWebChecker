@@ -453,9 +453,16 @@ function experienceSection(exp: ExperienceView): string {
             : c.passed === 0
               ? '<span class="verdict verdict--poor">Does not pass</span>'
               : '<span class="verdict verdict--mixed">Mixed</span>';
+      // The count belongs beside the verdict: "Mixed" alone hides whether that
+      // is most sites or a handful, which is the only part a reader can act on.
+      const howMany = c.share
+        ? `<div class="count">${formatFigure(c.share, {
+            note: `${c.passed} of ${c.passed + c.failed} pages passed`,
+          })}</div>`
+        : '';
       return `<tr>
   <th scope="row">${escape(c.question)}</th>
-  <td>${verdict}</td>
+  <td>${verdict}${howMany}</td>
   <td class="num">${c.typical ? formatFigure(c.typical) : '<span class="absence">— <span class="method">not measured on any page</span></span>'}</td>
   <td class="threshold">${c.threshold ? `${escape(c.threshold)} — ${escape(c.source)}` : 'no published threshold, so nothing is claimed'}</td>
 </tr>`;
@@ -633,6 +640,7 @@ export function sharedCss(): string {
   .view img { display: block; width: 100%; height: auto; border: 1px solid var(--line);
     border-radius: 8px; background: #fff; }
   .view figcaption { margin-top: .45rem; font-size: .9rem; }
+  .count { margin-top: .3rem; font-size: .85rem; }
   .views-missing { list-style: none; padding: 0; margin: .8rem 0 0; }
   .views-missing li { border-left: 3px solid var(--viz-unknown); padding: .35rem 0 .35rem .7rem;
     margin: .4rem 0; font-size: .9rem; color: var(--muted); }

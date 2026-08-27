@@ -73,7 +73,7 @@ export function listings(
         ? figure({
             value: (100 * succeeded) / list.length,
             unit: 'percent',
-            tier: tier === 'broad' ? 'broad' : 'hot',
+            cadence: tier === 'broad' ? 'weekly' : 'hourly',
             population: 1,
             window: { from: list[0]!.checked_at, to: latest.checked_at },
             samples: list.length,
@@ -109,7 +109,7 @@ export function listings(
         caption: figure({
           value: (100 * succeeded) / list.length,
           unit: 'percent',
-          tier: tier === 'broad' ? 'broad' : 'hot',
+          cadence: tier === 'broad' ? 'weekly' : 'hourly',
           population: 1,
           window: { from: list[0]!.checked_at, to: latest.checked_at },
           samples: list.length,

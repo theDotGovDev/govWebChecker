@@ -78,7 +78,7 @@ export function censusSeries(
         figure({
           value: judged.filter((o) => o.presence!.state === state).length,
           unit: 'count',
-          tier: 'broad',
+          cadence: 'weekly',
           population: judged.length,
           window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
           samples: judged.length,
