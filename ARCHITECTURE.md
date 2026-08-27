@@ -326,6 +326,14 @@ rather than from our own run summaries.
 someone who has never seen this repository can run the same check against the
 published data and reach the same verdict.
 
+Because the record is append-only and `verify` gates publication, a breach that
+got committed cannot be taken back out and would discard every reading taken
+after it. `data/acknowledged-breaches.json` carries such a breach without
+disabling the check: an entry names one check, one key and the two exact
+timestamps, so it forgives that pair and nothing else, it stays visible in the
+report, and `verify` fails if it ever stops matching a real pair. There is one
+entry, from the 2026-08-26 cross-run collision (FR-143).
+
 The politeness limits are held in a `RateLimiter` *instance*, which is why every
 workflow that sends traffic to a target — `check`, `census`, `deep-check` — sits
 in one `target-traffic` concurrency group. Two collectors running at once are two

@@ -372,3 +372,105 @@ describe('verify proves census coverage (FR-114, SC-102)', () => {
     assert.ok(!report.checks.some((c) => c.name === 'census coverage'));
   });
 });
+
+/**
+ * A breach that is already in the record.
+ *
+ * The record is append-only, so a violation that got committed cannot be taken
+ * back out. `verify` gates publication, which means one immutable bad pair would
+ * otherwise discard every honest reading taken after it — and it did: the
+ * cross-run collision of 2026-08-26 cost twenty hours of hourly readings before
+ * anyone noticed the workflow was red.
+ *
+ * So a breach can be acknowledged, and an acknowledgement is deliberately
+ * narrow: it names one check, one key and the two exact timestamps. It forgives
+ * that pair and nothing else, it stays visible in the report, and it fails if it
+ * ever stops matching a real pair — so the list cannot be written ahead of a
+ * breach or outlive one.
+ */
+describe('verify carries a breach the append-only record cannot un-commit', () => {
+  const COLLISION = [
+    row({
+      target_id: 'fraud.gov',
+      host: 'fraud.gov',
+      url: 'https://fraud.gov/',
+      address: '192.0.66.230',
+      checked_at: '2026-08-26T10:04:30.429Z',
+    }),
+    row({
+      target_id: 'covidtests-gov',
+      host: 'covidtests.gov',
+      url: 'https://covidtests.gov/',
+      address: '192.0.66.230',
+      checked_at: '2026-08-26T10:04:30.555Z',
+    }),
+  ];
+
+  const ACK = {
+    record: 'record.jsonl',
+    check: 'per-address spacing',
+    key: '192.0.66.230',
+    earlier: '2026-08-26T10:04:30.429Z',
+    later: '2026-08-26T10:04:30.555Z',
+    cause: 'two collector workflows ran concurrently, each with its own limiter',
+    fixed_by: 'one concurrency group across every workflow that sends target traffic',
+  };
+
+  test('an acknowledged pair does not fail the record, and is still reported', async () => {
+    const file = await writeRecord(COLLISION);
+    const report = await verifyRecord(file, LIMITS, undefined, [ACK]);
+    assert.equal(report.ok, true, JSON.stringify(report.checks));
+    const check = report.checks.find((c) => c.name === 'per-address spacing');
+    assert.ok(check?.pass);
+    assert.match(check.detail, /1 acknowledged/, 'a forgiven breach must stay visible in the report');
+  });
+
+  test('a second, unacknowledged breach on the same backend still fails', async () => {
+    const file = await writeRecord([
+      ...COLLISION,
+      row({
+        target_id: 'usa-gov',
+        host: 'www.usa.gov',
+        url: 'https://www.usa.gov/',
+        address: '192.0.66.230',
+        checked_at: '2026-08-26T10:04:31.000Z',
+      }),
+    ]);
+    const report = await verifyRecord(file, LIMITS, undefined, [ACK]);
+    assert.equal(report.ok, false, 'acknowledging one pair must not forgive the next one');
+    assert.ok(report.checks.some((c) => c.name === 'per-address spacing' && !c.pass));
+  });
+
+  test('an acknowledgement matching no pair in the record fails', async () => {
+    const file = await writeRecord([
+      row({ checked_at: '2026-07-31T06:00:00Z' }),
+      row({ checked_at: '2026-07-31T06:01:00Z' }),
+    ]);
+    const report = await verifyRecord(file, LIMITS, undefined, [ACK]);
+    assert.equal(report.ok, false, 'an acknowledgement that forgives nothing is a blanket exemption');
+    const check = report.checks.find((c) => c.name === 'every acknowledged breach is in the record');
+    assert.ok(check && !check.pass, JSON.stringify(report.checks));
+    assert.match(check.detail, /192\.0\.66\.230/, 'the report must name the stale acknowledgement');
+  });
+
+  test('an acknowledgement does not forgive a different pair on the same backend', async () => {
+    const file = await writeRecord([
+      row({
+        target_id: 'fraud.gov',
+        host: 'fraud.gov',
+        url: 'https://fraud.gov/',
+        address: '192.0.66.230',
+        checked_at: '2026-08-27T10:04:30.429Z',
+      }),
+      row({
+        target_id: 'covidtests-gov',
+        host: 'covidtests.gov',
+        url: 'https://covidtests.gov/',
+        address: '192.0.66.230',
+        checked_at: '2026-08-27T10:04:30.555Z',
+      }),
+    ]);
+    const report = await verifyRecord(file, LIMITS, undefined, [ACK]);
+    assert.equal(report.ok, false, 'a day later is a different breach');
+  });
+});

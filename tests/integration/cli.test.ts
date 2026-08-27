@@ -125,6 +125,51 @@ describe('the verify command', () => {
     return file;
   }
 
+  /**
+   * An acknowledgement belongs to the record it was written for.
+   *
+   * The default acknowledgement path is repo-relative, so every `verify` run
+   * picks the same file up. Applying its entries to whatever record is on the
+   * command line makes them all stale against any other file and fails a record
+   * that has nothing to do with the breach — a real failure invented out of an
+   * unrelated exemption.
+   */
+  test('an acknowledgement written for another record does not touch this one', async () => {
+    const file = await record([
+      { ...base, checked_at: '2026-07-31T06:00:00Z' },
+      { ...base, checked_at: '2026-07-31T06:01:00Z' },
+    ]);
+    const acknowledged = path.join(dir, 'ack.json');
+    await fs.writeFile(
+      acknowledged,
+      JSON.stringify({
+        breaches: [
+          {
+            record: 'data/availability/1999-01.jsonl',
+            check: 'per-address spacing',
+            key: '192.0.66.230',
+            earlier: '1999-01-01T00:00:00.000Z',
+            later: '1999-01-01T00:00:00.100Z',
+            cause: 'elsewhere',
+            fixed_by: 'elsewhere',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const result = await cli(['verify', file, '--acknowledged', acknowledged]);
+    assert.equal(result.code, 0, result.stdout);
+    assert.doesNotMatch(result.stdout, /acknowledged breach/);
+  });
+
+  test('a malformed acknowledgement file fails loudly rather than verifying against none', async () => {
+    const file = await record([{ ...base, checked_at: '2026-07-31T06:00:00Z' }]);
+    const acknowledged = path.join(dir, 'ack.json');
+    await fs.writeFile(acknowledged, '{ not json', 'utf8');
+    const result = await cli(['verify', file, '--acknowledged', acknowledged]);
+    assert.equal(result.code, 1, result.stdout);
+  });
+
   test('exits 0 and prints a verdict table for a clean record', async () => {
     const file = await record([
       { ...base, checked_at: '2026-07-31T06:00:00Z' },
