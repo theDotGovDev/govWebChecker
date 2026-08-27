@@ -5,3 +5,10 @@ dist/
 # Local scratch only. `data/` is deliberately NOT ignored — the record of
 # measurements is the product, and it is meant to be committed and readable.
 .scratch/
+
+# Rendered views of measured pages. Build artifacts, never committed: git history
+# is immutable, so "latest only" would bound the working tree while the pack grew
+# forever. They live in the Actions cache between runs and are copied into
+# `docs/` at build time, and the record keeps the finding rather than the image
+# (constitution 2.1.0).
+views/

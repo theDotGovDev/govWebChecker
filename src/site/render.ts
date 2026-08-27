@@ -1,6 +1,7 @@
-import type { SiteModel, SiteView, TierView, TrendChart, EcosystemView, AgencyView } from './model.js';
+import type { SiteModel, SiteView, TierView, TrendChart, EcosystemView, AgencyView, DashboardTile, ExperienceView } from './model.js';
 import type { CensusSeries, CensusMark } from './series.js';
 import { formatFigure, type Figure } from './figure.js';
+import { interpret } from './interpret.js';
 
 function escape(text: string): string {
   return text
@@ -46,6 +47,8 @@ const ICON: Record<string, string> = {
   clock: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 5.8V10l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   map: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="3" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="11" y="3" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="11" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="11" y="11" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>`,
   scale: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v14M4 6h12M4 6l-2.2 5a2.6 2.6 0 0 0 4.4 0L4 6zm12 0l-2.2 5a2.6 2.6 0 0 0 4.4 0L16 6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  gauge: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 14a7 7 0 1 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M10 14l4-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="14" r="1.4" fill="currentColor"/></svg>`,
+  phone: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="6" y="2.5" width="8" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.8 15.2h2.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   search: `<svg class="icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="5.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.6 12.6 17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
 };
 
@@ -306,7 +309,7 @@ function tierPanel(tier: TierView): string {
     <summary>Method and limits</summary>
     ${presenceFigures}
     <p><strong>Population:</strong> ${escape(tier.population)}.</p>
-    <p>
+    <p class="denominators">
       ${number(tier.domains)} domains, ${number(tier.observations)} observations,
       ${number(tier.responded)} of which got a successful response.
       ${tier.latestReading ? `Latest reading ${escape(tier.latestReading.slice(0, 16).replace('T', ' '))} UTC.` : ''}
@@ -337,7 +340,7 @@ function censusMarkCard(m: CensusMark): string {
   <details class="depth">
     <summary>Figures with method</summary>
     <p>
-      Judged ${number(m.domains)} ${m.domains === 1 ? 'domain' : 'domains'}:
+      <span class="denominators">Judged ${number(m.domains)} ${m.domains === 1 ? 'domain' : 'domains'}</span>:
       have a website ${formatFigure(m.presence.website)},
       no web address ${formatFigure(m.presence.no_website)},
       could not determine ${formatFigure(m.presence.undetermined)}.
@@ -363,6 +366,120 @@ ${marks}
 </section>`;
 }
 
+/**
+ * A sparkline: the same series as the full chart, at tile size.
+ *
+ * Deliberately not a Figure on its own. It carries no axis, no labels and no
+ * readable value — it is a shape showing direction, and the number it belongs to
+ * is the Figure printed directly above it with its full method. A sparkline that
+ * a reader could read a value off would be a published quantity without its
+ * method; this one cannot be.
+ */
+function sparkline(chart: TrendChart): string {
+  const pts = chart.points;
+  if (pts.length < 2) return '';
+  const W = 120;
+  const H = 28;
+  const values = pts.map((p) => p.value);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const x = (i: number): number => (i * W) / (pts.length - 1);
+  const y = (v: number): number => 2 + (1 - (v - lo) / span) * (H - 4);
+  const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="${line}"/></svg>`;
+}
+
+const TILE_ICON: Record<string, string> = {
+  'tile-answering': 'clock',
+  'tile-speed': 'gauge',
+  'tile-page-experience': 'phone',
+  'tile-coverage': 'map',
+};
+
+/**
+ * One tile: the question, the finding in words, then the figure with its method.
+ *
+ * That order is the point. A reader who does not know what "ms" means gets the
+ * answer first; a reader who wants the number finds it, and its method, without
+ * leaving the tile. The whole tile is the link to where the working is shown
+ * (FR-311), so there is no small target to hit on a phone.
+ */
+function tile(t: DashboardTile): string {
+  const icon = ICON[TILE_ICON[t.id] ?? 'search'] ?? '';
+  // A band element is exempt from the output-level stripper, so it must earn
+  // that exemption the same way every other band does: by carrying the
+  // threshold that decided it and the citation for that threshold.
+  // When a tile has a line, the figure printed above it IS that line's caption.
+  // Not checked — sourced. A sparkline reads as "that number over time", and
+  // taking the number from anywhere else would make it a chart of one thing
+  // captioned as another; deriving both from one object means the mismatch
+  // cannot be written rather than merely being caught.
+  const shown = t.trend ? t.trend.caption : t.reading;
+  const reading = t.band && shown ? interpret(shown, 'server_response') : undefined;
+  const state = reading
+    ? `<span class="band band--${reading.band}" title="${escape(reading.what)}: ${escape(reading.threshold)}. ${escape(reading.source)}">${escape(t.state)}</span>`
+    : escape(t.state);
+  return `<a class="tile${t.measured ? '' : ' tile--unmeasured'}" id="${escape(t.id)}" href="${escape(t.href)}">
+  <p class="tile-q">${icon} ${escape(t.question)}</p>
+  <p class="tile-state">${state}</p>
+  ${shown ? `<p class="tile-figure">${formatFigure(shown)}</p>` : ''}
+  ${t.trend ? sparkline(t.trend) : ''}
+  <p class="tile-detail">${escape(t.detail)}</p>
+  <span class="tile-more">See how this was measured</span>
+</a>`;
+}
+
+/**
+ * The checks behind the page-experience tile (US4, FR-330 to FR-332).
+ *
+ * The composite on the tile is analysis, and it is permitted only while the
+ * parts stay visible — so every check is listed here with its counts, the
+ * published line it was judged against, and who drew that line. A reader who
+ * disagrees with the weighting can see exactly what went into it.
+ */
+function experienceSection(exp: ExperienceView): string {
+  const rows = exp.checks
+    .map((c) => {
+      // Not a `band`: a band interprets one measurement against one published
+      // threshold, and is exempt from the output-level stripper on that basis.
+      // This summarises several pages, so it wears its own class and stays
+      // subject to the stripper — it carries no number, and must not gain one.
+      const verdict =
+        c.passed + c.failed === 0
+          ? '<span class="verdict verdict--unknown">Not evaluated</span>'
+          : c.failed === 0
+            ? '<span class="verdict verdict--good">Passes</span>'
+            : c.passed === 0
+              ? '<span class="verdict verdict--poor">Does not pass</span>'
+              : '<span class="verdict verdict--mixed">Mixed</span>';
+      return `<tr>
+  <th scope="row">${escape(c.question)}</th>
+  <td>${verdict}</td>
+  <td class="num">${c.typical ? formatFigure(c.typical) : '<span class="absence">— <span class="method">not measured on any page</span></span>'}</td>
+  <td class="threshold">${c.threshold ? `${escape(c.threshold)} — ${escape(c.source)}` : 'no published threshold, so nothing is claimed'}</td>
+</tr>`;
+    })
+    .join('\n');
+
+  return `<div class="panel">
+  <p>
+    Each page is loaded once in a real browser on an emulated phone over a
+    throttled connection, then judged against thresholds published by other
+    people. Nothing below is a line this project drew.
+  </p>
+  <p class="tagline">Checks passed across the pages measured: ${formatFigure(exp.caption, { note: 'share of judged checks that passed' })}</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th scope="col">Question</th><th scope="col">Result</th><th scope="col">Typical measurement</th><th scope="col">Judged against</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+  </div>
+</div>`;
+}
+
 function latencyCell(site: SiteView): string {
   // The figure is the median across observations, never the newest reading —
   // one reading is noise, not a response time (FR-011a). Until there are two,
@@ -372,9 +489,14 @@ function latencyCell(site: SiteView): string {
     const pending = site.latest ? 'not enough readings yet' : 'no measurement';
     return `<td class="num"><span class="nodata">${pending}</span></td>`;
   }
-  // The spread rides inside the figure's method so no latency token exists
-  // outside a Figure — the output-level guarantee the tests hold.
-  return `<td class="num">${formatFigure(typical.median, {
+  // The band leads, the number follows. "482 ms" is not information for most
+  // readers; "Slow — 482 ms" is, and the threshold that decided it rides in the
+  // title so the reading is checkable rather than asserted (FR-301 to FR-303).
+  const reading = interpret(typical.median, 'server_response');
+  const badge = reading
+    ? `<span class="band band--${reading.band}" title="${escape(reading.what)}: ${escape(reading.threshold)}. ${escape(reading.source)}">${escape(reading.label)}</span> `
+    : '';
+  return `<td class="num">${badge}${formatFigure(typical.median, {
     note: `spread ${number(typical.fastest_ms)}–${number(typical.slowest_ms)} ms`,
   })}</td>`;
 }
@@ -404,7 +526,7 @@ export function sharedCss(): string {
     color-scheme: light;
     --ink: #16191c; --muted: #5b6770; --line: #d6dbdf; --bg: #fcfcfb;
     --panel: #f4f6f7; --ok: #1a7f4b; --notable: #a8500a; --link: #1a4480;
-    --accent: #1a4480;
+    --accent: #1a4480; --poor: #b3261e;
     --viz-website: #2a78d6; --viz-none: #eb6834; --viz-unknown: #8a8886;
   }
   @media (prefers-color-scheme: dark) {
@@ -412,7 +534,7 @@ export function sharedCss(): string {
       color-scheme: dark;
       --ink: #e8ebed; --muted: #a3adb5; --line: #333a40; --bg: #14171a;
       --panel: #1c2126; --ok: #5ec98d; --notable: #e5a35c; --link: #8ab4f8;
-      --accent: #3987e5;
+      --accent: #3987e5; --poor: #f2a099;
       --viz-website: #3987e5; --viz-none: #d95926; --viz-unknown: #9a988f;
     }
   }
@@ -501,6 +623,43 @@ export function sharedCss(): string {
   .day-full, .day-part { fill: var(--viz-website); }
   .day-none { fill: var(--viz-none); }
   .day-gap { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .band { display: inline-block; font-size: .74rem; font-weight: 650; letter-spacing: .01em;
+    padding: .1rem .42rem; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
+  .band--good { color: var(--ok); }
+  .band--fair { color: var(--notable); }
+  .band--poor { color: var(--poor); }
+  .views { margin: 1.4rem 0; }
+  .view { margin: 0 0 1.2rem; }
+  .view img { display: block; width: 100%; height: auto; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; }
+  .view figcaption { margin-top: .45rem; font-size: .9rem; }
+  .verdict { display: inline-block; font-size: .74rem; font-weight: 650;
+    padding: .1rem .42rem; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
+  .verdict--good { color: var(--ok); }
+  .verdict--mixed { color: var(--notable); }
+  .verdict--poor { color: var(--poor); }
+  .verdict--unknown { color: var(--muted); }
+  .threshold { font-size: .82rem; color: var(--muted); }
+
+  /* The first screen. Tiles before tables — the answer before the enumeration. */
+  .dashboard { display: grid; gap: .85rem; margin: 1.4rem 0 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  .tile { display: block; background: var(--panel); border: 1px solid var(--line);
+    border-left: 4px solid var(--accent); border-radius: 10px; padding: .95rem 1.05rem;
+    color: inherit; text-decoration: none; }
+  .tile:hover, .tile:focus-visible { border-color: var(--link); border-left-color: var(--link); }
+  .tile--unmeasured { border-left-color: var(--viz-unknown); }
+  .tile-q { display: flex; align-items: center; gap: .4rem; margin: 0 0 .45rem;
+    font-size: .86rem; font-weight: 650; color: var(--muted); }
+  .tile-state { margin: 0 0 .5rem; font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+  .tile--unmeasured .tile-state { font-size: 1.05rem; color: var(--muted); font-weight: 600; }
+  .tile-figure { margin: 0 0 .45rem; }
+  .tile-detail { margin: .5rem 0 .55rem; font-size: .86rem; color: var(--muted); }
+  .tile-more { font-size: .8rem; font-weight: 650; color: var(--link); }
+  .tile-more::after { content: " →"; }
+  .spark { display: block; width: 100%; height: 28px; margin: .1rem 0 .35rem; }
+  .spark polyline { fill: none; stroke: var(--accent); stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   details.standalone { margin: 1rem 0; border-top: 0; padding-top: 0; }
   @media (max-width: 560px) {
     .eco-row { grid-template-columns: 1fr auto; }
@@ -555,24 +714,21 @@ export function renderSite(model: SiteModel, generatedAt: string): string {
     <h1>How government websites are performing</h1>
   </div>
   <p class="tagline">
-    Independent, outside-in measurements of US government websites — the busiest
-    federal sites checked every hour, and every registered <code>.gov</code>
-    domain checked weekly. Every figure here is something we observed, with the
-    method that produced it.
+    Independent, outside-in measurements of US government websites. Every figure
+    here is something we observed, published with the method that produced it.
   </p>
-  <ul class="stats">
-    <li><div>${number(summary.targets)}</div><span>sites in the hourly tier</span></li>
-    <li><div>${number(summary.observations)}</div><span>observations recorded</span></li>
-    <li><div>${escape(window)}</div><span>measurement window</span></li>
-  </ul>
 </header>
+
+<section class="dashboard" aria-label="At a glance">
+  ${model.dashboard.map(tile).join('\n  ')}
+</section>
 
 ${(() => {
   const hot = model.tiers.find((t) => t.tier === 'hot');
   const broad = model.tiers.find((t) => t.tier === 'broad');
   const untiered = model.tiers.find((t) => t.tier === 'untiered');
   return `
-<h2>${ICON['clock']} Is government online right now?</h2>
+<h2 id="online-now">${ICON['clock']} Is government online right now?</h2>
 
 <p class="tagline">
   The busiest federal websites, checked every hour from the same vantage. This
@@ -588,7 +744,7 @@ ${untiered ? `<details class="depth standalone">
   ${tierPanel(untiered)}
 </details>` : ''}
 
-<h2>${ICON['map']} What does the .gov world look like?</h2>
+<h2 id="dotgov-world">${ICON['map']} What does the .gov world look like?</h2>
 
 <p class="tagline">
   Beyond the famous sites: every registered <code>.gov</code> domain — cities,
@@ -607,6 +763,23 @@ ${model.ecosystem ? ecosystemChart(model.ecosystem) : ''}
 </p>
 
 ${model.censusSeries ? censusSeriesSection(model.censusSeries) : ''}
+
+<h2 id="page-experience">${ICON['phone']} Are the pages good to use?</h2>
+
+<p class="tagline">
+  Answering is not the same as working. This is what a visitor actually
+  experiences: how long until they can read something, whether the page holds
+  still while it loads, whether it responds when they tap. Measured on an
+  emulated phone over a throttled connection, because that is how most people
+  arrive.
+</p>
+
+${model.experience
+  ? experienceSection(model.experience)
+  : `<div class="panel"><p>
+      No pages have been loaded in a browser yet. That is a measurement nobody
+      has taken — not a finding that anything is wrong.
+    </p></div>`}
 
 ${model.agencies.length > 0 ? `<h2>${ICON['scale']} How do agencies compare?</h2>
 
@@ -818,7 +991,7 @@ ${model.sites.map(row).join('\n')}
 
 <footer>
   <p>
-    Generated ${escape(generatedAt)} from
+    Measured ${escape(window)}. Generated ${escape(generatedAt)} from
     ${number(summary.observations)} observations of ${number(summary.targets)} sites
     — ${number(summary.withData)} with measurements, ${number(summary.withoutData)} awaiting a first check.
   </p>

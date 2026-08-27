@@ -4,9 +4,8 @@ import type { Observation } from '../record/types.js';
 import { RateLimiter } from '../politeness/rate-limiter.js';
 import { appendObservation, appendRunSummary } from '../record/writer.js';
 import { sampleTarget } from './sample.js';
-import { fetchTextForEvaluation } from './check.js';
-import { pinnedLookup, ResolutionCache } from './resolve.js';
-import { parseRobots, isAllowed } from './robots.js';
+import { ResolutionCache } from './resolve.js';
+import { robotsAllows } from './permission.js';
 
 export interface RunConfig {
   samples: number;
@@ -60,39 +59,6 @@ const DIMENSION = 'availability';
  * discount.
  */
 const SUCCEEDED = new Set(['success']);
-
-interface RobotsDecision {
-  allowed: boolean;
-  /** UTC moment the limiter released the robots.txt fetch. */
-  requestedAt: string;
-}
-
-async function robotsAllows(
-  target: Target,
-  config: RunConfig,
-  limiter: RateLimiter,
-  backends: ResolutionCache,
-): Promise<RobotsDecision> {
-  const robotsUrl = new URL('/robots.txt', target.url).toString();
-  // robots.txt is a request to the same machine as the check that follows, so it
-  // spends the same budget and goes to the same pinned address.
-  const backend = await backends.get(target.host);
-  const granted = await limiter.acquire(target.host, backend.address);
-  const requestedAt = new Date(granted).toISOString();
-  const body = await fetchTextForEvaluation(robotsUrl, {
-    timeoutMs: config.timeoutMs,
-    maxRedirects: config.maxRedirects,
-    ...(backend.address !== undefined && backend.family !== undefined
-      ? { lookup: pinnedLookup(backend.address, backend.family) }
-      : {}),
-  });
-
-  // Only an explicit, readable prohibition stops us. An unreachable robots.txt is
-  // not consent, but neither is it a refusal — treating a fetch failure as a
-  // block would silently stop measuring every site having a bad day.
-  if (body === undefined) return { allowed: true, requestedAt };
-  return { allowed: isAllowed(parseRobots(body), new URL(target.url).pathname), requestedAt };
-}
 
 /**
  * One pass over the targets.
@@ -207,7 +173,13 @@ async function checkOne(
     method,
   };
 
-  const robots = await robotsAllows(target, config, limiter, backends);
+  const robots = await robotsAllows(
+    target.url,
+    target.host,
+    { timeoutMs: config.timeoutMs, maxRedirects: config.maxRedirects },
+    limiter,
+    backends,
+  );
   if (!robots.allowed) {
     return {
       ...base,

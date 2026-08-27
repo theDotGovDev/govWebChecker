@@ -26,9 +26,16 @@ flowchart LR
     checker --> dns
     frame[targets/dotgov-frame.json<br/>the census frame, generated] --> census
     census[census<br/>frame, slices, URL rule, presence] --> checker
+    targets --> quality
+    subgraph quality[quality]
+        direction TB
+        Q1[one emulated visitor<br/>Lighthouse, standard preset] --> Q2[keep the measured audits<br/>drop the tool's rollups]
+    end
+    quality -->|one navigation,<br/>through the limiter| politeness
     checker --> record[record<br/>validate then append]
+    quality --> record
     record --> data[(data/&lt;dimension&gt;/YYYY-MM.jsonl)]
-    data --> verify[verify<br/>checks our conduct from the record]
+    data --> verify[verify<br/>checks our conduct from the record<br/>availability and quality, each on its own contract]
     data --> site
     subgraph site[site]
         direction TB
@@ -101,6 +108,11 @@ assumed.
   are the ways a record stops being honest.
 - `writer.ts` — append, and only append. No update, no delete, no deduplication,
   since a correction is a new observation rather than an edit.
+- `quality.ts` — the gate on a deep reading. Separate from `validate.ts` because
+  a deep reading makes a larger claim than an availability row and is admitted on
+  its own terms: the emulation must be present, no derived figure may appear, and
+  no page content may. A tool's own composite score is refused by name — it is
+  exactly what the tool hands us and exactly what belongs in analysis instead.
 
 ### `src/checker/` — performing the measurement
 
@@ -118,6 +130,12 @@ assumed.
   rather than by error text, which drifts between Node versions. It never returns
   a body. `fetchTextForEvaluation` is the deliberate, size-capped exception, used
   only for `robots.txt` — a file whose purpose is to be read before we act.
+- `permission.ts` — asks a site's `robots.txt` whether we may fetch a path,
+  before we fetch it. Shared by the availability pass and the deep quality pass:
+  a rule about who may read a page does not weaken because a second kind of check
+  wants it, and the deep check needs it more, since it loads the subresources
+  too. The robots fetch is itself a request, so it spends the same budget and
+  goes to the same pinned address as the check that follows.
 - `robots.ts` — a small parser for the directives that decide whether we may
   fetch: User-agent grouping, Disallow, Allow. A group naming us beats the
   wildcard, and the longest matching rule wins, so a site can carve an exception
@@ -128,17 +146,139 @@ assumed.
   never runs concurrently with itself. Politeness is a property of what we do to
   a single server, not of total throughput.
 
+### `src/quality/` — how the page behaved once it answered
+
+- `deep-check.ts` — one emulated visitor loading one page, once. The availability
+  check asks whether the server answered; this asks what happened afterwards, and
+  that is where the questions people actually have live: how long until something
+  was readable, whether the layout moved under them, how much the page weighed on
+  a phone. Lighthouse at its own default preset does the measuring, so a stored
+  number means the same thing as one a reader runs themselves — comparability is
+  the reason for the tool choice, and custom tuning would trade it away.
+
+  Two constraints shape the module. The emulation *is* the method: a duration is
+  a property of a page loaded on a stated screen over a stated connection, never
+  of a site, so the device and network travel with the number and a run that
+  cannot state them yields no reading at all. And the tool's category scores stop
+  at the boundary — they are a weighted composite of the very values stored here,
+  so they belong to the analysis layer, where the weighting can be published and
+  recomputed, rather than to the record, which holds only what was observed.
+
+  There is no retry. A page that failed to render is a page under strain or a page
+  that is broken; either way the answer is to write down what happened and leave.
+  A tool failure is recorded as a failure of the *check*, never merged into the
+  availability outcome — a browser crash says nothing about whether a government
+  website was up.
+- `browser.ts` — finds the browser to drive. `puppeteer-core` ships none and
+  refuses to launch without an explicit path, so this resolves one: an explicit
+  `CHROME_PATH` first and never second-guessed, then the usual system locations,
+  then a Playwright-managed Chromium. It exists because production read only
+  `CHROME_PATH` while every integration test *set* that variable itself — so the
+  tests proved the code worked in an environment they had arranged and the
+  workflow had not. Production resolves the browser now, and the tests use the
+  same resolution; a test that arranges its own environment is testing itself.
+- `runner.ts` — driving the real browsers. Identification is applied on both
+  engines: appended to Chrome's emulated device string and to Playwright's
+  iPhone descriptor, never replacing either, since sites serve different pages to
+  different agents. One guarantee is weaker on the WebKit path and is stated
+  rather than hidden: Blink pins the connection to the backend the limiter
+  accounted for with a resolver rule, and WebKit has no equivalent, so for a host
+  publishing several addresses the socket may reach a different one than the
+  record names.
+- `runner.ts` — driving the real tool. Kept apart from the reading logic so that
+  stays a pure function over a result, testable without a browser. Every choice
+  here is a constraint rather than a knob: the preset is the tool's own, because
+  comparability with the same tool run elsewhere is the entire reason for
+  choosing it; the emulated User-Agent has our identification *appended* rather
+  than substituted, since replacing the device string would change which page a
+  site serves; and Chrome is pinned to the backend the limiter accounted for with
+  a resolver rule, because a browser does its own DNS and the pin would otherwise
+  stop at the edge of this process. Identification is applied twice, for a reason
+  the flags alone could not show: the emulated device string covers the page, and
+  a browser-level agent covers the requests it does not — the tool's standard
+  preset fetches `/llms.txt` and `/robots.txt` on its own behalf, and those went
+  out anonymous until traffic was actually observed. Chrome is relaunched per target — a second
+  against a fifteen-second check, for complete isolation between measurements.
+- `capture.ts` / `capture-runner.ts` — rendered views: what a visitor actually
+  sees. Permitted by constitution 2.1.0 because a picture at a stated viewport is
+  evidence a reader can check, where "this site is unusable on a phone" is a
+  claim they must take on trust. The bound that makes it permissible is that a
+  view never enters the record — what is stored is the *finding*, and the image
+  is a build artifact regenerated into each deploy, so latest-only holds by
+  construction rather than by policy.
+
+  Three device profiles, two engines. The Blink phone rides the deep check's own
+  navigation and costs no extra traffic; the Blink desktop and the WebKit phone
+  each take their own page load through the limiter. A profile may only ride the
+  deep check when *both* its form factor and its engine match — matching on form
+  factor alone filed a Chromium picture under Safari, which is the one claim the
+  WebKit profile exists to avoid. Each viewport is the tool's own — Lighthouse's
+  preset for Blink, Playwright's iPhone descriptor for WebKit — because a number
+  we picked ourselves would not be comparable to anyone else's.
+
+  Change detection is a difference hash over a 17×17 greyscale grid, compared
+  both left-to-right and top-to-bottom, computed in the browser that already
+  decoded the image rather than by adding an image library. Two earlier versions
+  failed in the same shape, each reporting having checked when it had not: an
+  average hash returned a distance of *zero* for a complete redesign, because
+  government pages are mostly white and nearly every cell sat above the mean; and
+  a horizontal-only difference hash returned all zeroes for a desktop view,
+  because comparing left to right finds vertical edges and a page of full-width
+  bands has none. The
+  threshold is versioned and states what it was measured from, because we drew
+  that line rather than citing one, and it errs low: a spurious re-store costs
+  bytes, while a missed change leaves a picture published as current that is no
+  longer true.
+- `run.ts` — one deep pass, **serial by construction**. The availability pass
+  runs different hosts concurrently because politeness is a property of what we
+  do to one server; a deep pass cannot borrow that argument, and the reason is
+  validity rather than politeness. Two browsers competing for one runner CPU
+  inflate blocking time and time-to-interactive on both, so the numbers would
+  describe our scheduling rather than the page — the same failure as measuring
+  from a sandbox and publishing it as a fact about an agency. The pass trades
+  wall-clock for numbers that mean something, and records its concurrency so a
+  reader does not have to take that on trust.
+
 ### `src/site/` — the published reading of the record
 
 Reads the record and writes the static site. Sends nothing to any target: the
 build has no network path at all, which is stronger than a rule.
 
+- `interpret.ts` / `checks.ts` — the translation layer. "482 ms" is not
+  information for most people: they do not know whether it is good, and the page
+  did not say. The fix is not to hide the number but to say what it means, name
+  the threshold that decided it, and cite where that threshold came from — so the
+  reading is checkable rather than an opinion asserted. Every rule is versioned
+  and recomputable over stored readings, exactly as `presence/1` is, and travels
+  with the exact figure it interprets rather than replacing it. Where nobody has
+  published a defensible line (total page weight is the case in hand) there is no
+  rule and therefore no band: an invented threshold would be indistinguishable
+  from a measurement. `checks.ts` renders those bands as three-state checks —
+  passes, does not pass, not evaluated — and the third never collapses into the
+  second, which is Principle V's absence rule applied where it is easiest to lose.
+
+- `listing.ts` publishes the rendered views a site has, with what each is a view
+  *of*: the device, the viewport and the day, captioned as one dated moment
+  rather than as how the site is. The image is referenced, never inlined — it is
+  a build artifact beside the page, which is the same boundary that keeps it out
+  of the record. A finding whose image is missing renders as absence rather than
+  as a broken picture: the record is permanent and the images live in a cache
+  that can be evicted, so the two will disagree.
 - `figure.ts` — the choke point. There is no numeric type in the view model
   other than `Figure`, which cannot be constructed without its tier, population,
   window, sample count and vantage — so a published number without its method is
   unrepresentable rather than discouraged (Principle V). Absence is its own
   type, never a zero. The renderer accepts `Figure`, never `number`.
-- `model.ts` — the record shaped for display, one view per tier and deliberately
+- `model.ts` — builds the dashboard: four tiles that answer before they
+  enumerate. The first tile is the one that matters most and is the easiest place
+  to be unfair — a 403 is an *answer*, the server responded and declined a robot,
+  and in the live record most of the gap between 100% and the success rate is
+  exactly that. So the tile publishes the *responded* rate and words itself off
+  the genuine failures; the success rate keeps its home further down where it is
+  labelled as what it is. Where a tile draws a line, the figure above it is that
+  line's own caption — sourced from one object rather than checked, so a chart of
+  one thing captioned as another cannot be written. The record shaped for
+  display, one view per tier and deliberately
   no total across them. Refuses to build from a row whose vantage is `local`.
 - `standings.ts` — per-dimension orderings. A host that never once answered has
   no rate — it is refusing automation or telling us not to check — and appears

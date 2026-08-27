@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
 import { registrableDomain } from '../politeness/domain.js';
 import { validateObservation } from '../record/validate.js';
+import { validateQualityReading } from '../record/quality.js';
 import type { Observation } from '../record/types.js';
+import type { DeepReading } from '../quality/deep-check.js';
 import type { Frame } from '../census/frame.js';
 
 export interface VerifyLimits {
@@ -40,7 +42,17 @@ export async function verifyRecord(
 ): Promise<VerifyReport> {
   const text = await fs.readFile(file, 'utf8');
   const lines = text.trimEnd().split('\n').filter((l) => l.trim() !== '');
-  const rows: Observation[] = lines.map((line) => JSON.parse(line) as Observation);
+  const parsed: unknown[] = lines.map((line) => JSON.parse(line) as unknown);
+
+  // A quality record is a different record answering a different question, so it
+  // is checked against its own contract rather than squeezed through the
+  // availability one. Our conduct toward the server is the same question for
+  // both, so those checks are shared.
+  if (parsed.some((r) => (r as { dimension?: string }).dimension === 'quality')) {
+    return verifyQualityRows(parsed as DeepReading[], limits);
+  }
+
+  const rows: Observation[] = parsed as Observation[];
 
   // Guard the shape before checking the substance. Pointed at a file of run
   // summaries — which have no host — the spacing checks used to throw a
@@ -59,6 +71,7 @@ export async function verifyRecord(
     // vendor backend — both name-keyed checks above pass such a burst.
     spacingCheck('per-address spacing', rows, limits.addressIntervalMs, (r) => r.address ?? ''),
     methodCheck(rows),
+    vantageCheck(rows.map((r) => r.method?.vantage)),
     futureTimestampCheck(rows),
     orderingCheck(rows),
     validityCheck(rows),
@@ -69,6 +82,77 @@ export async function verifyRecord(
   ];
 
   return { ok: checks.every((c) => c.pass), checks, rows: rows.length };
+}
+
+/**
+ * The gate on a published quality record.
+ *
+ * Every reading must be admissible under the record's own contract — which is
+ * where the emulation requirement and the no-derived-figures rule live — and our
+ * conduct while taking them must hold, checked from the file rather than from the
+ * code that wrote it.
+ */
+function verifyQualityRows(rows: DeepReading[], limits: VerifyLimits): VerifyReport {
+  const conduct = rows as unknown as ConductRow[];
+
+  let invalid = 0;
+  let firstProblem = '';
+  rows.forEach((row, index) => {
+    const problems = validateQualityReading(row);
+    if (problems.length > 0) {
+      invalid++;
+      if (!firstProblem) firstProblem = `row ${index + 1}: ${problems[0]}`;
+    }
+  });
+
+  const checks: VerifyCheck[] = [
+    {
+      name: 'readings match the quality contract',
+      pass: invalid === 0,
+      detail: invalid === 0 ? `${rows.length}/${rows.length} valid` : firstProblem,
+    },
+    vantageCheck(rows.map((r) => r.method?.vantage)),
+    spacingCheck('per-host spacing', conduct, limits.hostIntervalMs, (r) => r.host),
+    spacingCheck('per-domain spacing', conduct, limits.domainIntervalMs, (r) => registrableDomain(r.host)),
+    futureTimestampCheck(conduct),
+    orderingCheck(conduct),
+  ];
+
+  return { ok: checks.every((c) => c.pass), checks, rows: rows.length };
+}
+
+/**
+ * Where the reading was taken from — and whether that is somewhere it may be
+ * taken from at all.
+ *
+ * The shape checks cannot catch this, and until now nothing did. A run from a
+ * development sandbox writes into `data/`, satisfies every other guarantee, and
+ * is committable. `vantage()` labels such rows `local` rather than
+ * `github-actions/*`, so the record was at least honest about it — but a
+ * measurement taken from an ephemeral container describes that container's
+ * network, resolver and CPU rather than the target, and publishing it would put
+ * a claim about a named public institution behind a number that measured us.
+ *
+ * Working egress makes this more dangerous, not less: a broken sandbox fails
+ * loudly, while an unrestricted one produces readings that look entirely healthy.
+ */
+function vantageCheck(vantages: (string | undefined)[]): VerifyCheck {
+  const offending = new Map<string, number>();
+  for (const vantage of vantages) {
+    if (vantage === undefined || vantage === '' || !vantage.startsWith('github-actions/')) {
+      const label = vantage === undefined || vantage === '' ? '(none)' : vantage;
+      offending.set(label, (offending.get(label) ?? 0) + 1);
+    }
+  }
+  const listed = [...offending].map(([v, n]) => `${n}x ${v}`).join(', ');
+  return {
+    name: 'every reading taken from a durable vantage',
+    pass: offending.size === 0,
+    detail:
+      offending.size === 0
+        ? `${vantages.length}/${vantages.length} taken in GitHub Actions`
+        : `${listed} — a reading from anywhere else measures that machine, not the target`,
+  };
 }
 
 /** Is this an observation record at all? */
@@ -97,15 +181,31 @@ function shapeCheck(rows: Observation[]): VerifyCheck {
   };
 }
 
-function timestamp(row: Observation): number {
+function timestamp(row: ConductRow): number {
   return Date.parse(row.checked_at);
+}
+
+/**
+ * The parts of a row the conduct checks need.
+ *
+ * Availability observations and deep quality readings are different records
+ * answering different questions, but our conduct toward a server is the same
+ * question for both: when did we ask, and how close together. So the spacing,
+ * ordering and timestamp checks read this much and no more.
+ */
+interface ConductRow {
+  host: string;
+  target_id: string;
+  checked_at: string;
+  outcome: string;
+  address?: string;
 }
 
 function spacingCheck(
   name: string,
-  rows: Observation[],
+  rows: ConductRow[],
   requiredMs: number,
-  key: (row: Observation) => string,
+  key: (row: ConductRow) => string,
 ): VerifyCheck {
   let smallest = Infinity;
   let where = '';
@@ -208,7 +308,7 @@ function coverageCheck(rows: Observation[], frame: Frame): VerifyCheck {
   return { name: 'census coverage', pass, detail: lines.join('; ') };
 }
 
-function methodCheck(rows: Observation[]): VerifyCheck {
+function methodCheck(rows: { method?: unknown }[]): VerifyCheck {
   const missing = rows.filter((r) => !r.method).length;
   return {
     name: 'method on every row',
@@ -217,7 +317,7 @@ function methodCheck(rows: Observation[]): VerifyCheck {
   };
 }
 
-function futureTimestampCheck(rows: Observation[]): VerifyCheck {
+function futureTimestampCheck(rows: ConductRow[]): VerifyCheck {
   const now = Date.now();
   const ahead = rows.filter((r) => timestamp(r) > now);
   const max = rows.reduce((m, r) => Math.max(m, timestamp(r)), 0);
@@ -239,7 +339,7 @@ function futureTimestampCheck(rows: Observation[]): VerifyCheck {
  *
  * Checking global monotonicity instead would fail every honest concurrent run.
  */
-function orderingCheck(rows: Observation[]): VerifyCheck {
+function orderingCheck(rows: ConductRow[]): VerifyCheck {
   const lastPerTarget = new Map<string, number>();
   let outOfOrder = 0;
   let example = '';

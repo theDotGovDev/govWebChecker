@@ -16,7 +16,12 @@ import type { Tier } from '../record/types.js';
  */
 export interface Figure {
   readonly value: number;
-  readonly unit: 'percent' | 'milliseconds' | 'count';
+  /**
+   * `unitless` is a real unit for a ratio like layout shift, which has no
+   * dimension but is very much a measurement; `bytes` is stored raw and read out
+   * in KB or MB, because a reader thinks in those and the record should not.
+   */
+  readonly unit: 'percent' | 'milliseconds' | 'count' | 'unitless' | 'bytes';
   /** Never both. FR-220: no figure spans tiers, enforced by this being singular. */
   readonly tier: Tier;
   /** How many sites the figure covers. */
@@ -65,16 +70,28 @@ export function figure(parts: Figure): Figure {
   return Object.freeze({ ...parts });
 }
 
+/**
+ * How the reading was taken, in the reader's terms rather than ours.
+ *
+ * D4 removed tiers as a category: there is one frame, and how often a domain is
+ * checked is a property of the reading, not a class the reader has to learn
+ * (FR-286). The record still carries `tier` as provenance for rows already
+ * written — history is not rewritten — but the page says what it means.
+ *
+ * These strings are still what keeps two populations from being read as one, so
+ * they must stay distinguishable: a figure names exactly one of them, and a test
+ * fails if one ever names both.
+ */
 const TIER_LABEL: Record<Tier, string> = {
-  hot: 'hot tier, hourly',
-  broad: 'broad tier, weekly census',
+  hot: 'checked hourly',
+  broad: 'checked weekly',
 };
 
 function day(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function valueText(f: Figure): string {
+export function valueText(f: Figure): string {
   switch (f.unit) {
     case 'percent':
       return `${f.value.toFixed(1)}%`;
@@ -82,7 +99,19 @@ function valueText(f: Figure): string {
       return `${Math.round(f.value)} ms`;
     case 'count':
       return String(f.value);
+    case 'unitless':
+      // Rounding a layout-shift score to a whole number erases it: the entire
+      // published scale sits between 0 and 0.25.
+      return String(Number(f.value.toFixed(3)));
+    case 'bytes':
+      return byteText(f.value);
   }
+}
+
+function byteText(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`;
+  return `${Math.round(bytes)} bytes`;
 }
 
 /**

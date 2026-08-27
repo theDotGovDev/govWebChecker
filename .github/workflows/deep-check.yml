@@ -1,0 +1,113 @@
+name: deep-check
+
+on:
+  schedule:
+    # Daily, and that cadence is a consequence rather than a preference. A deep
+    # check is a whole page load in a real browser and runs serially — two
+    # browsers on one runner CPU inflate the blocking time of both, so the
+    # numbers would describe our scheduling rather than the page. At roughly
+    # half a minute per target that is well under an hour for the list, but it
+    # is not something to repeat hourly against sites we do not own.
+    #
+    # Quality changes on the scale of a redesign or a deploy, not of an outage.
+    # Availability is what needs hourly sampling; this does not.
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: deep-check
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deep-check:
+    runs-on: ubuntu-latest
+    # Serial by design, so a hung browser would otherwise sit until the six-hour
+    # default. Long enough for the whole list with room to spare.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install WebKit
+        # Safari is 16.47% of browsers and renders on its own engine, so one of
+        # the three device profiles cannot be taken by Chrome. `--with-deps`
+        # installs the system libraries WebKit needs, which a runner does not
+        # have by default. Chromium is already on the image and is not fetched.
+        run: npx playwright install --with-deps webkit
+
+      - name: Show the browser this run will measure with
+        # The browser version is part of the method: a reading is of a page as
+        # rendered by a specific engine. Printed rather than pinned, because the
+        # runner image supplies it and a silent change should at least be visible
+        # in the log a reader can go back to.
+        run: |
+          google-chrome --version
+          node -e 'console.log("playwright", require("playwright/package.json").version)'
+
+      - name: Restore the views taken last time
+        # The saving change detection buys is only real if the unchanged images
+        # survive between runs. They are never committed — git history is
+        # immutable, so "latest only" would bound the checkout while the pack
+        # grew forever (constitution 2.1.0) — so the cache is where they live.
+        #
+        # `restore-keys` means a run still starts from the most recent cache when
+        # today's key does not exist yet, which is what makes reuse the normal
+        # case rather than the lucky one.
+        uses: actions/cache@v4
+        with:
+          path: views
+          key: views-${{ github.run_id }}
+          restore-keys: |
+            views-
+
+      - name: Deep-check the target list
+        run: node dist/src/cli/index.js deep-check --preset mobile --views views
+
+      - name: Say how much was re-captured
+        # A change rate near 100% every run means change detection is not working
+        # and the cache is being missed, which is a cost nobody would otherwise
+        # see. Printed rather than gated: it is a signal, not a guarantee.
+        run: |
+          node -e '
+            const fs = require("fs");
+            const dir = "data/quality";
+            if (!fs.existsSync(dir)) process.exit(0);
+            const file = fs.readdirSync(dir).sort().pop();
+            let changed = 0, total = 0;
+            for (const line of fs.readFileSync(`${dir}/${file}`, "utf8").split("\n")) {
+              if (!line.trim()) continue;
+              for (const v of (JSON.parse(line).views ?? [])) { total++; if (v.changed) changed++; }
+            }
+            console.log(`views: ${changed}/${total} re-captured`);
+          '
+
+      - name: Verify our own conduct before publishing it
+        # Same gate as availability: a record that fails our own stated checks
+        # does not get committed. For quality readings that includes the vantage
+        # check — a reading taken anywhere but a runner measures that machine
+        # rather than the target.
+        run: |
+          set -e
+          shopt -s nullglob
+          files=(data/quality/*.jsonl)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no quality readings produced — nothing to verify or publish"
+            exit 0
+          fi
+          for file in "${files[@]}"; do
+            echo "verifying $file"
+            node dist/src/cli/index.js verify "$file"
+          done
+
+      - name: Publish the record
+        run: |
+          scripts/publish-record.sh "${GITHUB_REF_NAME}" "data: quality readings $(date -u +%Y-%m-%dT%H:%MZ)"

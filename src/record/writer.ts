@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Observation } from './types.js';
 import { assertValidObservation } from './validate.js';
+import type { DeepReading } from '../quality/deep-check.js';
+import { assertValidQualityReading } from './quality.js';
 
 /**
  * Where an observation belongs: one file per dimension per month, partitioned by
@@ -44,4 +46,20 @@ export async function appendRunSummary<
   const file = path.join(dir, 'runs', `${month}.jsonl`);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.appendFile(file, `${JSON.stringify(summary)}\n`, 'utf8');
+}
+
+/**
+ * Appends one deep quality reading, under the same append-only rules.
+ *
+ * Separate from `appendObservation` because the two answer different questions
+ * and are validated against different contracts. They share a partitioning
+ * scheme — one file per dimension per month — so a reader joins them by host and
+ * time without either having to know about the other.
+ */
+export async function appendQualityReading(dir: string, reading: DeepReading): Promise<void> {
+  assertValidQualityReading(reading);
+  const month = reading.checked_at.slice(0, 7);
+  const file = path.join(dir, reading.dimension, `${month}.jsonl`);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.appendFile(file, `${JSON.stringify(reading)}\n`, 'utf8');
 }

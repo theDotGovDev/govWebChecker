@@ -3,16 +3,23 @@ import type { AddressInfo } from 'node:net';
 
 export interface Fixture {
   url: string;
+  /** The hostname in `url`. Distinct per loopback address, which is what the rate limiter keys on. */
+  host: string;
   port: number;
   requests: http.IncomingMessage[];
   close(): Promise<void>;
 }
 
-async function listen(server: http.Server, requests: http.IncomingMessage[]): Promise<Fixture> {
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+async function listen(
+  server: http.Server,
+  requests: http.IncomingMessage[],
+  address = '127.0.0.1',
+): Promise<Fixture> {
+  await new Promise<void>((resolve) => server.listen(0, address, resolve));
   const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}/`,
+    url: `http://${address}:${port}/`,
+    host: address,
     port,
     requests,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
@@ -34,6 +41,22 @@ export async function fastServer(body = 'ok'): Promise<Fixture> {
     res.end(body);
   });
   return listen(server, requests);
+}
+
+/**
+ * A fast server on a chosen loopback address.
+ *
+ * 127.0.0.0/8 is all loopback, so `127.0.0.2` and `127.0.0.3` are separate hosts
+ * as far as the rate limiter is concerned while still never leaving the machine.
+ * That distinction is the only way to test behaviour that the per-host limit
+ * would otherwise mask.
+ */
+export async function fastServerOn(address: string, body = 'ok'): Promise<Fixture> {
+  const { server, requests } = recording((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(body);
+  });
+  return listen(server, requests, address);
 }
 
 export async function slowServer(delayMs: number): Promise<Fixture> {

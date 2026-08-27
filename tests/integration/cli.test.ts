@@ -116,7 +116,7 @@ describe('the verify command', () => {
     status_code: 200,
     redirect_chain: [],
     latency: { samples: 1, median_ms: 5, min_ms: 5, max_ms: 5 },
-    method: { vantage: 'x', timeout_ms: 1, sample_count: 1, tool_version: '0', source: 'self_run' },
+    method: { vantage: 'github-actions/test', timeout_ms: 1, sample_count: 1, tool_version: '0', source: 'self_run' },
   };
 
   async function record(rows: object[]): Promise<string> {
