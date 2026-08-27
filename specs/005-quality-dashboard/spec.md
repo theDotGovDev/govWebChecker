@@ -323,6 +323,15 @@ labeled with the device and the moment captured.
   beside it, and MUST be presented as one dated moment rather than as the site's
   condition. A finding whose image is missing MUST render as absence, never as a
   broken picture.
+- **FR-347**: A capture that fails MUST cost only that capture. It MUST NOT end
+  the pass, and MUST NOT discard the measurement it rode with — the tool having
+  measured a page is not undone by a camera failing afterwards. The failure MUST
+  be recorded with its device and reason, so a view nobody could take stays
+  distinguishable from one nobody attempted, and MUST be published as something
+  *we* could not do rather than as a finding about the site.
+- **FR-348**: Reducing a view to a hash MUST NOT run in the captured page's own
+  context. A site's Content-Security-Policy governs that context and can forbid
+  it, which is a site's prerogative and not a measurement failure.
 
 ---
 

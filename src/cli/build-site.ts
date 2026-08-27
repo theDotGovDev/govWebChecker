@@ -127,8 +127,17 @@ export async function buildSite(options: BuildOptions): Promise<WrittenPages> {
   );
   if (options.views) await copyViews(options.views, options.out, views);
 
+  // The most recent failure per host and device, so a missing picture explains
+  // itself rather than reading as a page nobody looked at.
+  const viewFailures = new Map<string, { profile: string; reason: string }[]>();
+  for (const r of quality) {
+    if (!listed.has(r.host) || !r.view_failures?.length) continue;
+    viewFailures.set(r.host, r.view_failures);
+  }
+
   return writePages({
     ...(views.size > 0 ? { views } : {}),
+    ...(viewFailures.size > 0 ? { viewFailures } : {}),
     model,
     observations,
     ...(frame ? { frame } : {}),

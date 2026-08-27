@@ -166,6 +166,39 @@ function validateMetrics(metrics: unknown, outcome: unknown): string[] {
   return problems;
 }
 
+/**
+ * Devices where a view was attempted and could not be taken.
+ *
+ * Validated as strictly as a finding, because it makes the same kind of claim: a
+ * capture that failed for no stated reason is a gap wearing a label, and one
+ * device cannot be both photographed and not photographed.
+ */
+function validateViewFailures(failures: unknown, taken: Set<string>): string[] {
+  if (!Array.isArray(failures)) return ['view_failures must be a list when present'];
+  const problems: string[] = [];
+  for (const [index, failure] of failures.entries()) {
+    const where = `view_failures[${index}]`;
+    if (typeof failure !== 'object' || failure === null) {
+      problems.push(`${where} must be an object`);
+      continue;
+    }
+    const f = failure as Record<string, unknown>;
+    if (typeof f['profile'] !== 'string' || f['profile'] === '') {
+      problems.push(`${where}.profile is required`);
+    }
+    if (typeof f['reason'] !== 'string' || f['reason'] === '') {
+      problems.push(`${where}.reason is required — an unexplained failure is a gap wearing a label`);
+    }
+    for (const field of VIEW_CONTENT_FIELDS) {
+      if (field in f) problems.push(`${where}.${field} would put page content in the record`);
+    }
+    if (typeof f['profile'] === 'string' && taken.has(f['profile'])) {
+      problems.push(`${where}: ${f['profile']} is both taken and failed — a reader cannot act on that`);
+    }
+  }
+  return problems;
+}
+
 /** Returns a list of problems; an empty list means the reading may be stored. */
 export function validateQualityReading(record: unknown): string[] {
   const problems: string[] = [];
@@ -216,6 +249,14 @@ export function validateQualityReading(record: unknown): string[] {
 
   problems.push(...validateMetrics(r['metrics'], r['outcome']));
   if ('views' in r) problems.push(...validateViews(r['views']));
+  if ('view_failures' in r) {
+    const taken = new Set(
+      (Array.isArray(r['views']) ? r['views'] : [])
+        .map((v) => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>)['profile'] : undefined))
+        .filter((p): p is string => typeof p === 'string'),
+    );
+    problems.push(...validateViewFailures(r['view_failures'], taken));
+  }
   problems.push(...validateMethod(r['method']));
 
   return problems;

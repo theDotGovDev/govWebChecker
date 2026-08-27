@@ -81,3 +81,25 @@ describe('a published view says what it is a view of (constitution 2.1.0, FR-340
     assert.equal((html.match(/<img/g) ?? []).length, 2);
   });
 });
+
+describe('a view that could not be taken says so (Principle IV)', () => {
+  test('a device that failed is named, with the reason, beside the ones that worked', () => {
+    const html = renderListing({
+      ...listing([view]),
+      view_failures: [{ profile: 'phone-webkit', reason: 'TypeError: Load failed' }],
+    });
+    assert.match(html, /Phone \(Safari\)/, 'the device must be named in the reader\'s terms');
+    assert.match(html, /could not be|failed/i, 'and said not to have been taken');
+    assert.match(html, /Load failed/, 'with what stopped it, so nobody has to guess');
+    assert.match(html, /<img/, 'while the views that did work are still shown');
+  });
+
+  test('a failure is not dressed as a finding about the site', () => {
+    const html = renderListing({
+      ...listing(),
+      view_failures: [{ profile: 'phone-webkit', reason: 'TypeError: Load failed' }],
+    });
+    assert.doesNotMatch(html, /\b(broken|down|unusable|failing site)\b/i,
+      'our camera failing is not a finding about their website');
+  });
+});

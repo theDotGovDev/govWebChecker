@@ -633,6 +633,9 @@ export function sharedCss(): string {
   .view img { display: block; width: 100%; height: auto; border: 1px solid var(--line);
     border-radius: 8px; background: #fff; }
   .view figcaption { margin-top: .45rem; font-size: .9rem; }
+  .views-missing { list-style: none; padding: 0; margin: .8rem 0 0; }
+  .views-missing li { border-left: 3px solid var(--viz-unknown); padding: .35rem 0 .35rem .7rem;
+    margin: .4rem 0; font-size: .9rem; color: var(--muted); }
   .verdict { display: inline-block; font-size: .74rem; font-weight: 650;
     padding: .1rem .42rem; border-radius: 999px; border: 1.5px solid currentColor; white-space: nowrap; }
   .verdict--good { color: var(--ok); }

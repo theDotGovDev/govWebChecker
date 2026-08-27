@@ -23,6 +23,8 @@ export interface Listing {
   host: string;
   /** Rendered views of this page, when any have been taken (constitution 2.1.0). */
   views?: CaptureFinding[];
+  /** Devices where a view was attempted and could not be taken. */
+  view_failures?: { profile: string; reason: string }[];
   /** Daily history for the strip; present with two or more days of readings (FR-285). */
   history?: { days: DayCell[]; caption: Figure };
   /** The registered name, as a grouping — never as the unit (D3). */
@@ -48,6 +50,8 @@ export function listings(
   rows: Observation[],
   /** The most recent views per host, when any have been taken. */
   views?: Map<string, CaptureFinding[]>,
+  /** Devices whose view could not be taken, per host. */
+  viewFailures?: Map<string, { profile: string; reason: string }[]>,
 ): Listing[] {
   const byHost = new Map<string, Observation[]>();
   for (const o of rows) {
@@ -62,6 +66,7 @@ export function listings(
     const latest = list[list.length - 1]!;
     const tier = latest.tier ?? 'untiered';
     const hostViews = views?.get(host);
+    const hostViewFailures = viewFailures?.get(host);
     const succeeded = list.filter((o) => o.outcome === 'success').length;
     const answered =
       succeeded > 0
@@ -116,6 +121,7 @@ export function listings(
     result.push({
       host,
       ...(hostViews && hostViews.length > 0 ? { views: hostViews } : {}),
+      ...(hostViewFailures && hostViewFailures.length > 0 ? { view_failures: hostViewFailures } : {}),
       ...(history ? { history } : {}),
       domain: registrableDomain(host),
       targetIds: [...new Set(list.map((o) => o.target_id))].sort(),
@@ -229,8 +235,31 @@ ${l.answered ? `<p>Answered ${formatFigure(l.answered)}.</p>` : ''}
  * beside the page, not part of it — which is the same boundary that keeps it out
  * of the record.
  */
-function viewGallery(host: string, views: CaptureFinding[] | undefined): string {
+function viewGallery(
+  host: string,
+  views: CaptureFinding[] | undefined,
+  failures: { profile: string; reason: string }[] | undefined,
+): string {
+  // Our camera failing is not a finding about their website, so this is worded
+  // as something we could not do rather than something wrong with the page.
+  const notTaken = (failures ?? [])
+    .map((f) => {
+      const label = PROFILE_LABEL[f.profile] ?? f.profile;
+      return `<li><strong>${escape(label)}</strong> — we could not take this view.
+        <span class="method">${escape(f.reason)}</span></li>`;
+    })
+    .join('\n');
+  const notTakenBlock = notTaken
+    ? `<ul class="views-missing">\n${notTaken}\n</ul>`
+    : '';
+
   if (!views || views.length === 0) {
+    if (notTakenBlock) {
+      return `<section class="views">
+  <h2>How the page looked</h2>
+  ${notTakenBlock}
+</section>`;
+    }
     return `<section class="views">
   <h2>How the page looked</h2>
   <p class="absence">This page has not been photographed yet.
@@ -258,6 +287,7 @@ function viewGallery(host: string, views: CaptureFinding[] | undefined): string 
   return `<section class="views">
   <h2>How the page looked</h2>
   ${figures}
+  ${notTakenBlock}
 </section>`;
 }
 
@@ -308,7 +338,7 @@ export function renderListing(l: Listing): string {
 <h1>${escape(l.host)}</h1>
 ${l.history ? historyStrip(l.history) : ''}
 ${body}
-${viewGallery(l.host, l.views)}
+${viewGallery(l.host, l.views, l.view_failures)}
 ${provenance}
 ${CORRECTION}
 </article>`;

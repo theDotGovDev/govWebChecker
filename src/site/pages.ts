@@ -25,6 +25,8 @@ export interface WritePagesInput {
   excluded?: string[];
   /** The most recent rendered views per host, keyed by host. */
   views?: Map<string, CaptureFinding[]>;
+  /** Devices whose view could not be taken, per host. */
+  viewFailures?: Map<string, { profile: string; reason: string }[]>;
 }
 
 export interface WrittenPages {
@@ -83,7 +85,7 @@ export async function writePages(input: WritePagesInput): Promise<WrittenPages> 
   await fs.writeFile(path.join(outDir, 'index.html'), renderSite(model, generatedAt), 'utf8');
   await fs.writeFile(path.join(outDir, '.nojekyll'), '', 'utf8');
 
-  const all = listings(observations, input.views);
+  const all = listings(observations, input.views, input.viewFailures);
   // Withdrawal is from current views, never from the record (FR-248, FR-241).
   const current = all.filter((l) => !excluded.has(l.domain) && !excluded.has(l.host));
 
