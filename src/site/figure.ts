@@ -14,6 +14,12 @@ import type { Tier } from '../record/types.js';
  * and the R8a seed rule was a comment that sabotage showed no test enforced. A
  * convention is obeyed until someone is in a hurry; a constructor is not.
  */
+/**
+ * How often a reading is taken. The site speaks in cadences, never in the
+ * collection tiers that produced them (D4, FR-286).
+ */
+export type Cadence = 'hourly' | 'daily' | 'weekly';
+
 export interface Figure {
   readonly value: number;
   /**
@@ -22,8 +28,20 @@ export interface Figure {
    * in KB or MB, because a reader thinks in those and the record should not.
    */
   readonly unit: 'percent' | 'milliseconds' | 'count' | 'unitless' | 'bytes';
-  /** Never both. FR-220: no figure spans tiers, enforced by this being singular. */
-  readonly tier: Tier;
+  /**
+   * How often the readings behind this figure are taken.
+   *
+   * Named for the cadence rather than for the collection tier that produced it,
+   * because that is what it means to a reader and what the page prints (D4,
+   * FR-286). It was `tier` once, and the mismatch between the field's name and
+   * its rendering is exactly what let every deep quality figure claim "checked
+   * hourly" when the deep check runs once a day — a daily reading overstated
+   * twenty-four-fold, on the first real build.
+   *
+   * Singular by construction: FR-220's no-blend guarantee is that a figure names
+   * exactly one of these.
+   */
+  readonly cadence: Cadence;
   /** How many sites the figure covers. */
   readonly population: number;
   readonly window: { readonly from: string; readonly to: string };
@@ -50,7 +68,7 @@ export function absence(reason: string): Absence {
 }
 
 export function figure(parts: Figure): Figure {
-  if (parts.tier === undefined) throw new Error('a figure must state its tier');
+  if (parts.cadence === undefined) throw new Error('a figure must state its cadence');
   if (!parts.population || parts.population <= 0) {
     throw new Error('a figure must state the population it covers');
   }
@@ -82,9 +100,10 @@ export function figure(parts: Figure): Figure {
  * they must stay distinguishable: a figure names exactly one of them, and a test
  * fails if one ever names both.
  */
-const TIER_LABEL: Record<Tier, string> = {
-  hot: 'checked hourly',
-  broad: 'checked weekly',
+const CADENCE_LABEL: Record<Cadence, string> = {
+  hourly: 'checked hourly',
+  daily: 'checked daily',
+  weekly: 'checked weekly',
 };
 
 function day(iso: string): string {
@@ -123,7 +142,7 @@ export function formatFigure(f: Figure | Absence, opts?: { note?: string }): str
     return `<span class="absence">— <span class="method">${escapeHtml(f.reason)}</span></span>`;
   }
   const method =
-    `${TIER_LABEL[f.tier]} · ${f.population === 1 ? '1 site' : `${f.population} sites`} · ` +
+    `${CADENCE_LABEL[f.cadence]} · ${f.population === 1 ? '1 site' : `${f.population} sites`} · ` +
     `${day(f.window.from)} to ${day(f.window.to)} · ` +
     `${f.samples} readings · from ${escapeHtml(f.vantage)}` +
     (f.rule ? ` · rule ${escapeHtml(f.rule)}` : '') +

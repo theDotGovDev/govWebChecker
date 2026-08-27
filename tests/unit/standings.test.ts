@@ -49,7 +49,7 @@ describe('a standing is a figure XOR a stated reason there is none (FR-260 to FR
     assert.equal(s.noRate, undefined);
     assert.equal(s.figure.value, 75);
     assert.equal(s.figure.samples, 4);
-    assert.equal(s.figure.tier, 'hot');
+    assert.equal(s.figure.cadence, 'hourly');
   });
 
   test('a host refusing automated traffic has no rate — not a zero (FR-261)', () => {

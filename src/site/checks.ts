@@ -121,7 +121,7 @@ export function checksFor(reading: DeepReading): PlainCheck[] {
       // reads them out. Anything else the tool reports is refused rather than
       // guessed at, because a mislabelled unit is a wrong number.
       unit: METRIC_UNITS[metric.unit] ?? 'unitless',
-      tier: 'hot',
+      cadence: 'daily',
       population: 1,
       window: { from: reading.checked_at, to: reading.checked_at },
       samples: 1,

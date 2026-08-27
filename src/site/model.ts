@@ -198,6 +198,8 @@ export interface ExperienceView {
     threshold: string;
     source: string;
     rule: string;
+    /** The share of judged pages that passed, carrying its method. */
+    share?: Figure;
     /** The typical measurement across the pages, when any were measured. */
     typical?: Figure;
     band?: Band;
@@ -286,7 +288,7 @@ function tierViews(rows: Observation[]): TierView[] {
           ? figure({
               value: (100 * succeeded) / list.length,
               unit: 'percent',
-              tier: (tier === 'broad' ? 'broad' : 'hot') as 'hot' | 'broad',
+              cadence: tier === 'broad' ? 'weekly' : 'hourly',
               population: new Set(list.map((o) => o.target_id)).size,
               window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
               samples: list.length,
@@ -306,7 +308,7 @@ function tierViews(rows: Observation[]): TierView[] {
                 figure({
                   value: judged.filter((o) => o.presence!.state === state).length,
                   unit: 'count',
-                  tier: (tier === 'broad' ? 'broad' : 'hot') as 'hot' | 'broad',
+                  cadence: tier === 'broad' ? 'weekly' : 'hourly',
                   population: judged.length,
                   window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
                   samples: judged.length,
@@ -414,7 +416,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
             median: figure({
               value: timings[Math.floor(timings.length / 2)]!,
               unit: 'milliseconds' as const,
-              tier: 'hot' as const,
+              cadence: 'hourly' as const,
               population: 1,
               window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
               samples: timings.length,
@@ -499,7 +501,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
       caption: figure({
         value: (100 * ok) / monitoring.length,
         unit: 'percent',
-        tier: 'hot',
+        cadence: 'hourly',
         samples: monitoring.length,
         ...monitoringMeta(monitoring),
       }),
@@ -540,7 +542,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
       caption: figure({
         value: (100 * asked.filter(reached).length) / asked.length,
         unit: 'percent',
-        tier: 'hot',
+        cadence: 'hourly',
         samples: asked.length,
         ...monitoringMeta(asked),
         rule: 'responded/1',
@@ -567,7 +569,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
       caption: figure({
         value: med(timed.map((o) => o.latency.median_ms!)),
         unit: 'milliseconds',
-        tier: 'hot',
+        cadence: 'hourly',
         samples: timed.length,
         ...monitoringMeta(timed),
       }),
@@ -603,7 +605,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
       caption: figure({
         value: latest.size,
         unit: 'count',
-        tier: 'broad',
+        cadence: 'weekly',
         population: latest.size,
         window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
         samples: broadRows.length,
@@ -640,7 +642,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
         figure: figure({
           value: (100 * ok) / rows.length,
           unit: 'percent',
-          tier: 'hot',
+          cadence: 'hourly',
           population: hosts.size,
           window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
           samples: rows.length,
@@ -696,7 +698,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
           ? figure({
               value: values[Math.floor(values.length / 2)]!,
               unit,
-              tier: 'hot' as const,
+              cadence: 'daily' as const,
               population: readings.length,
               window,
               samples: values.length,
@@ -704,12 +706,33 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
               rule: first.rule,
             })
           : undefined;
+      const passed = list.filter((c) => c.state === 'passes').length;
+      const failed = list.filter((c) => c.state === 'does_not_pass').length;
+      // How many passed, as a Figure. "Mixed" is not a finding a reader can act
+      // on — eight sites of forty-nine reads identically to thirty-seven — and a
+      // bare count would be a published quantity with no method.
+      const judged = passed + failed;
+      const share =
+        judged > 0
+          ? figure({
+              value: (100 * passed) / judged,
+              unit: 'percent',
+              cadence: 'daily' as const,
+              population: judged,
+              window,
+              samples: judged,
+              vantage,
+              rule: first.rule,
+            })
+          : undefined;
+
       return {
         id,
         question: first.question,
-        passed: list.filter((c) => c.state === 'passes').length,
-        failed: list.filter((c) => c.state === 'does_not_pass').length,
+        passed,
+        failed,
         notEvaluated: list.filter((c) => c.state === 'not_evaluated').length,
+        ...(share ? { share } : {}),
         threshold: first.threshold,
         source: first.source,
         rule: first.rule,
@@ -738,7 +761,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
         // recomputable from the counts printed beside it.
         value: totalJudged === 0 ? 0 : (100 * totalPass) / totalJudged,
         unit: 'percent',
-        tier: 'hot',
+        cadence: 'daily',
         population: readings.length,
         window,
         samples: totalJudged,
@@ -901,7 +924,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
             reading: figure({
               value: broadTier.domains,
               unit: 'count',
-              tier: 'broad',
+              cadence: 'weekly',
               population: broadTier.domains,
               window: {
                 from: broadRows[0]!.checked_at,

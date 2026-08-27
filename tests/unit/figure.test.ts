@@ -16,7 +16,7 @@ describe('a Figure cannot exist without its method (FR-201, FR-251)', () => {
   const whole = {
     value: 99.2,
     unit: 'percent' as const,
-    tier: 'hot' as const,
+    cadence: 'hourly' as const,
     population: 58,
     window: { from: '2026-08-01T00:00:00Z', to: '2026-08-24T00:00:00Z' },
     samples: 2955,
@@ -26,11 +26,11 @@ describe('a Figure cannot exist without its method (FR-201, FR-251)', () => {
   test('constructs when every part of the method is present', () => {
     const f = figure(whole);
     assert.equal(f.value, 99.2);
-    assert.equal(f.tier, 'hot');
+    assert.equal(f.cadence, 'hourly');
     assert.equal(f.vantage, 'github-actions/ubuntu-24.04');
   });
 
-  for (const missing of ['tier', 'population', 'window', 'samples', 'vantage'] as const) {
+  for (const missing of ['cadence', 'population', 'window', 'samples', 'vantage'] as const) {
     test(`refuses construction without ${missing}`, () => {
       const partial: Record<string, unknown> = { ...whole };
       delete partial[missing];
@@ -70,7 +70,7 @@ describe('rendering a figure keeps the method adjacent (FR-201)', () => {
   const f = figure({
     value: 99.2,
     unit: 'percent',
-    tier: 'hot',
+    cadence: 'hourly',
     population: 58,
     window: { from: '2026-08-01T00:00:00Z', to: '2026-08-24T00:00:00Z' },
     samples: 2955,
@@ -101,7 +101,7 @@ describe('rendering a figure keeps the method adjacent (FR-201)', () => {
  */
 describe('the units the deep readings measure in', () => {
   const base = {
-    tier: 'hot' as const,
+    cadence: 'hourly' as const,
     population: 1,
     window: { from: '2026-08-25T00:00:00Z', to: '2026-08-25T00:00:00Z' },
     samples: 1,
@@ -121,5 +121,40 @@ describe('the units the deep readings measure in', () => {
 
   test('a small size still reads sensibly', () => {
     assert.match(formatFigure(figure({ ...base, value: 1426, unit: 'bytes' })), /1\.4 KB/);
+  });
+});
+
+/**
+ * A figure states the cadence it was taken at, and the deep quality readings are
+ * not taken hourly.
+ *
+ * Found on the first real build: every quality figure read "checked hourly"
+ * because the model constructed it with the hourly tier, when the deep check
+ * runs once a day. D4 made cadence a property of the reading precisely so a
+ * figure's meaning could not drift from how it was collected — a daily reading
+ * described as hourly is a false method, which Principle V forbids more plainly
+ * than it forbids almost anything else.
+ */
+describe('a figure cannot claim a cadence it was not taken at (Principle V, D4)', () => {
+  const base = {
+    population: 1,
+    window: { from: '2026-08-25T00:00:00Z', to: '2026-08-25T00:00:00Z' },
+    samples: 1,
+    vantage: 'github-actions/test',
+  };
+
+  test('a daily reading says daily, not hourly', () => {
+    const html = formatFigure(figure({ ...base, value: 6512, unit: 'milliseconds', cadence: 'daily' }));
+    assert.match(html, /checked daily/);
+    assert.doesNotMatch(html, /hourly|weekly/,
+      'a deep quality reading is taken once a day; saying hourly overstates it 24-fold');
+  });
+
+  test('the cadences stay distinct from one another', () => {
+    const cadences = (['hourly', 'weekly', 'daily'] as const).map((cadence) =>
+      formatFigure(figure({ ...base, value: 1, unit: 'count', cadence })).match(/checked \w+/)![0],
+    );
+    assert.equal(new Set(cadences).size, 3,
+      `two populations sharing a cadence phrase would read as one: ${cadences.join(', ')}`);
   });
 });

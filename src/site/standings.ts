@@ -73,7 +73,7 @@ export function standings(rows: Observation[]): Standing[] {
       figure: figure({
         value: (100 * succeeded) / list.length,
         unit: 'percent',
-        tier: 'hot',
+        cadence: 'hourly',
         population: 1,
         window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
         samples: list.length,

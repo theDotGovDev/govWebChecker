@@ -7,7 +7,7 @@ function ms(value: number) {
   return figure({
     value,
     unit: 'milliseconds',
-    tier: 'hot',
+    cadence: 'hourly',
     population: 1,
     window: { from: '2026-08-01T00:00:00Z', to: '2026-08-24T00:00:00Z' },
     samples: 100,
@@ -56,7 +56,7 @@ describe('a measurement is published with what it means (FR-301, FR-302)', () =>
     const answered = figure({
       value: 79.6,
       unit: 'percent',
-      tier: 'hot',
+      cadence: 'hourly',
       population: 58,
       window: { from: '2026-08-01T00:00:00Z', to: '2026-08-24T00:00:00Z' },
       samples: 3538,

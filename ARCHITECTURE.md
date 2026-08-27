@@ -270,7 +270,11 @@ build has no network path at all, which is stronger than a rule.
   of the record. A finding whose image is missing renders as absence rather than
   as a broken picture: the record is permanent and the images live in a cache
   that can be evicted, so the two will disagree.
-- `figure.ts` — the choke point. There is no numeric type in the view model
+- `figure.ts` — the choke point. Its cadence field is named for what it means to
+  a reader — hourly, daily, weekly — rather than for the collection tier behind
+  it. It was called `tier` once, and the gap between that name and what the page
+  printed is exactly what let every deep-quality figure claim "checked hourly"
+  when the deep check runs once a day. There is no numeric type in the view model
   other than `Figure`, which cannot be constructed without its tier, population,
   window, sample count and vantage — so a published number without its method is
   unrepresentable rather than discouraged (Principle V). Absence is its own
