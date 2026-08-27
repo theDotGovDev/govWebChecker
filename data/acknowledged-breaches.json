@@ -1,0 +1,24 @@
+{
+  "note": "Breaches that are already in the append-only record. The record cannot be rewritten, so a violation that got committed stays committed; `verify` gates publication, so without this list one immutable bad pair discards every honest reading taken after it. Each entry names the record it belongs to, one check, one key and the two exact timestamps, so it forgives that pair and nothing else. It stays visible in the verify report, and `verify` fails if an entry ever stops matching a real pair — so this cannot be written ahead of a breach or outlive the rows that justify it. An entry is only admissible with the cause found and the fix landed.",
+  "breaches": [
+    {
+      "record": "data/availability/2026-08.jsonl",
+      "check": "per-address spacing",
+      "key": "192.0.66.230",
+      "earlier": "2026-08-26T10:04:30.429Z",
+      "later": "2026-08-26T10:04:30.555Z",
+      "observed_ms": 126,
+      "required_ms": 5000,
+      "hosts": [
+        "fraud.gov",
+        "covidtests.gov"
+      ],
+      "runs": [
+        "2026-08-26T09:51:13.021Z/availability/ed8ea91d",
+        "2026-08-26T10:01:35.248Z/availability/4b1a2b89"
+      ],
+      "cause": "The per-address limit lives in a RateLimiter instance, so it holds within one collector process. census.yml and check.yml sat in different concurrency groups, so a census slice and an hourly check ran at the same time on separate runners — two limiters that could not see each other. fraud.gov (census) and covidtests.gov (hourly) both resolve to one WordPress VIP edge, and the two requests landed 126ms apart. Both name-keyed limits passed, because every name involved was different.",
+      "fixed_by": "One `collectors` concurrency group across every workflow that sends traffic to a target, so only one collector process is ever live and the per-address limit is again the only thing that has to hold."
+    }
+  ]
+}

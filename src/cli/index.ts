@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseTargets, activeTargets } from '../targets/load.js';
 import { executeRun } from '../checker/run.js';
-import { verifyRecord, formatReport } from './verify.js';
+import { verifyRecord, formatReport, type AcknowledgedBreach } from './verify.js';
 import { executeCensus } from '../census/run.js';
 import { buildFrame, DEFAULT_SOURCE, type Frame, type Exclusion } from '../census/frame.js';
 import { sliceForDate, SLICES } from '../census/slice.js';
@@ -86,6 +86,7 @@ interface Args {
   dryRun: boolean;
   file?: string;
   frame: string;
+  acknowledged: string;
   exclusions: string;
   source?: string;
   slice?: number;
@@ -98,6 +99,7 @@ function parseArgs(argv: string[]): Args {
     out: 'data',
     dryRun: false,
     frame: 'targets/dotgov-frame.json',
+    acknowledged: 'data/acknowledged-breaches.json',
     exclusions: 'targets/excluded.json',
     preset: 'mobile',
   };
@@ -125,6 +127,7 @@ function parseArgs(argv: string[]): Args {
       args.preset = value;
     }
     else if (arg === '--frame') args.frame = argv[++i] ?? args.frame;
+    else if (arg === '--acknowledged') args.acknowledged = argv[++i] ?? args.acknowledged;
     else if (arg === '--exclusions') args.exclusions = argv[++i] ?? args.exclusions;
     else if (arg === '--source') {
       const value = argv[++i];
@@ -193,6 +196,13 @@ async function verify(args: Args): Promise<number> {
   // The frame is optional: `verify` runs against records that predate the census,
   // and absence of a frame is absence of a question rather than a failed answer.
   const frame = await readFrame(args.frame).catch(() => undefined);
+  // Absent by design on a record with no committed breach, so the common case
+  // carries no exemption file at all. Only a missing file is tolerated: a
+  // malformed one throws, because silently verifying against zero
+  // acknowledgements would turn a typo into a discarded run.
+  const acknowledged = (await readAcknowledged(args.acknowledged)).filter(
+    (b) => path.resolve(b.record) === path.resolve(args.file!),
+  );
   const report = await verifyRecord(
     args.file,
     {
@@ -201,9 +211,21 @@ async function verify(args: Args): Promise<number> {
       addressIntervalMs: LIMITS.addressIntervalMs,
     },
     frame,
+    acknowledged,
   );
   console.log(formatReport(report));
   return report.ok ? 0 : 1;
+}
+
+async function readAcknowledged(path: string): Promise<AcknowledgedBreach[]> {
+  let text: string;
+  try {
+    text = await fs.readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  return (JSON.parse(text) as { breaches: AcknowledgedBreach[] }).breaches;
 }
 
 async function readFrame(path: string): Promise<Frame> {
@@ -394,7 +416,7 @@ const USAGE = `govWebChecker
   deep-check   [--targets <path>] [--preset mobile|desktop] [--only <id>] [--out <dir>]
                [--views <dir>] [--dry-run]
   build-frame  [--frame <path>] [--exclusions <path>] [--source <url>] [--dry-run]
-  verify       <record.jsonl> [--frame <path>]
+  verify       <record.jsonl> [--frame <path>] [--acknowledged <path>]
 
 There is deliberately no option to weaken a rate limit, shorten a timeout, change
 the User-Agent, raise concurrency, skip resolution, fall back to http, or force a

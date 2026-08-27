@@ -12,6 +12,47 @@ export interface VerifyLimits {
   addressIntervalMs: number;
 }
 
+/**
+ * One breach that is already in the append-only record.
+ *
+ * The record cannot be rewritten, so a violation that got committed stays
+ * committed. `verify` gates publication, so without this an immutable bad pair
+ * discards every honest reading taken after it — which is exactly what happened
+ * on 2026-08-26, costing twenty hours of hourly readings.
+ *
+ * The shape is deliberately narrow. An acknowledgement names one check, one key
+ * and the two exact timestamps, so it forgives that pair and nothing else. It
+ * stays visible in the report rather than silencing the check, and it must match
+ * a real pair or `verify` fails — so the list cannot be written ahead of a breach
+ * or outlive the rows that justify it.
+ *
+ * This is the allow-marker pattern, not a disabled check: `cause` and `fixed_by`
+ * are required because an acknowledgement with no fix behind it is just a
+ * suppressed failure.
+ */
+export interface AcknowledgedBreach {
+  /**
+   * The record file this breach is in, repo-relative.
+   *
+   * A breach belongs to one record, so an acknowledgement travels with it.
+   * Without this, pointing `verify` at any other file makes every entry stale
+   * and fails a record that has nothing to do with it. The caller filters on
+   * this; `verifyRecord` treats whatever it is handed as applying to the file
+   * it was given.
+   */
+  record: string;
+  /** The check this pair breached, e.g. `per-address spacing`. */
+  check: string;
+  /** The key the two rows shared — a host, a domain, or a backend address. */
+  key: string;
+  /** `checked_at` of the earlier row, verbatim. */
+  earlier: string;
+  /** `checked_at` of the later row, verbatim. */
+  later: string;
+  cause: string;
+  fixed_by: string;
+}
+
 export interface VerifyCheck {
   name: string;
   pass: boolean;
@@ -39,6 +80,7 @@ export async function verifyRecord(
   file: string,
   limits: VerifyLimits,
   frame?: Frame,
+  acknowledged: AcknowledgedBreach[] = [],
 ): Promise<VerifyReport> {
   const text = await fs.readFile(file, 'utf8');
   const lines = text.trimEnd().split('\n').filter((l) => l.trim() !== '');
@@ -49,7 +91,7 @@ export async function verifyRecord(
   // availability one. Our conduct toward the server is the same question for
   // both, so those checks are shared.
   if (parsed.some((r) => (r as { dimension?: string }).dimension === 'quality')) {
-    return verifyQualityRows(parsed as DeepReading[], limits);
+    return verifyQualityRows(parsed as DeepReading[], limits, acknowledged);
   }
 
   const rows: Observation[] = parsed as Observation[];
@@ -62,14 +104,16 @@ export async function verifyRecord(
   const shape = shapeCheck(rows);
   if (!shape.pass) return { ok: false, checks: [shape], rows: rows.length };
 
+  const ledger = new BreachLedger(acknowledged);
   const checks: VerifyCheck[] = [
     shape,
-    spacingCheck('per-host spacing', rows, limits.hostIntervalMs, (r) => r.host),
-    spacingCheck('per-domain spacing', rows, limits.domainIntervalMs, (r) => registrableDomain(r.host)),
+    spacingCheck('per-host spacing', rows, limits.hostIntervalMs, (r) => r.host, ledger),
+    spacingCheck('per-domain spacing', rows, limits.domainIntervalMs, (r) => registrableDomain(r.host), ledger),
     // The shared-hosting guarantee. Distinct registrable domains routinely share
     // one machine, so this is the only check that can catch a burst against a
     // vendor backend — both name-keyed checks above pass such a burst.
-    spacingCheck('per-address spacing', rows, limits.addressIntervalMs, (r) => r.address ?? ''),
+    spacingCheck('per-address spacing', rows, limits.addressIntervalMs, (r) => r.address ?? '', ledger),
+    ...ledger.checks(),
     methodCheck(rows),
     vantageCheck(rows.map((r) => r.method?.vantage)),
     futureTimestampCheck(rows),
@@ -92,8 +136,13 @@ export async function verifyRecord(
  * conduct while taking them must hold, checked from the file rather than from the
  * code that wrote it.
  */
-function verifyQualityRows(rows: DeepReading[], limits: VerifyLimits): VerifyReport {
+function verifyQualityRows(
+  rows: DeepReading[],
+  limits: VerifyLimits,
+  acknowledged: AcknowledgedBreach[] = [],
+): VerifyReport {
   const conduct = rows as unknown as ConductRow[];
+  const ledger = new BreachLedger(acknowledged);
 
   let invalid = 0;
   let firstProblem = '';
@@ -112,8 +161,9 @@ function verifyQualityRows(rows: DeepReading[], limits: VerifyLimits): VerifyRep
       detail: invalid === 0 ? `${rows.length}/${rows.length} valid` : firstProblem,
     },
     vantageCheck(rows.map((r) => r.method?.vantage)),
-    spacingCheck('per-host spacing', conduct, limits.hostIntervalMs, (r) => r.host),
-    spacingCheck('per-domain spacing', conduct, limits.domainIntervalMs, (r) => registrableDomain(r.host)),
+    spacingCheck('per-host spacing', conduct, limits.hostIntervalMs, (r) => r.host, ledger),
+    spacingCheck('per-domain spacing', conduct, limits.domainIntervalMs, (r) => registrableDomain(r.host), ledger),
+    ...ledger.checks(),
     futureTimestampCheck(conduct),
     orderingCheck(conduct),
   ];
@@ -201,15 +251,64 @@ interface ConductRow {
   address?: string;
 }
 
+/**
+ * The acknowledged breaches, and whether each one still describes a real pair.
+ *
+ * Kept as an object rather than a bare list because the two halves have to stay
+ * together: a spacing check consults it to forgive a pair, and the same instance
+ * then reports which acknowledgements went unused. Splitting those apart is how
+ * an exemption list rots into a blanket exemption.
+ */
+class BreachLedger {
+  readonly #entries: AcknowledgedBreach[];
+  readonly #matched = new Set<AcknowledgedBreach>();
+
+  constructor(entries: AcknowledgedBreach[]) {
+    this.#entries = entries;
+  }
+
+  /** True if this exact pair is acknowledged. Records the match. */
+  forgives(check: string, key: string, earlier: string, later: string): boolean {
+    const hit = this.#entries.find(
+      (e) => e.check === check && e.key === key && e.earlier === earlier && e.later === later,
+    );
+    if (hit === undefined) return false;
+    this.#matched.add(hit);
+    return true;
+  }
+
+  /**
+   * Empty when nothing is acknowledged, so a record with no exemptions reads
+   * exactly as it did before this existed.
+   */
+  checks(): VerifyCheck[] {
+    if (this.#entries.length === 0) return [];
+    const stale = this.#entries.filter((e) => !this.#matched.has(e));
+    const named = stale.map((e) => `${e.check} on ${e.key} at ${e.later}`).join('; ');
+    return [
+      {
+        name: 'every acknowledged breach is in the record',
+        pass: stale.length === 0,
+        detail:
+          stale.length === 0
+            ? `${this.#entries.length}/${this.#entries.length} match a pair in this file`
+            : `${stale.length} forgive nothing here — ${named}`,
+      },
+    ];
+  }
+}
+
 function spacingCheck(
   name: string,
   rows: ConductRow[],
   requiredMs: number,
   key: (row: ConductRow) => string,
+  ledger: BreachLedger,
 ): VerifyCheck {
   let smallest = Infinity;
   let where = '';
-  const lastSeen = new Map<string, number>();
+  let forgiven = 0;
+  const lastSeen = new Map<string, { at: number; iso: string }>();
 
   for (const row of [...rows].sort((a, b) => timestamp(a) - timestamp(b))) {
     // A skipped target generated no request to the site, so it cannot have
@@ -222,22 +321,32 @@ function spacingCheck(
     if (k === '') continue;
     const previous = lastSeen.get(k);
     if (previous !== undefined) {
-      const gap = timestamp(row) - previous;
-      if (gap < smallest) {
+      const gap = timestamp(row) - previous.at;
+      // Forgiven only when this exact pair is named. The gap is still walked past
+      // rather than dropped, so the *next* row is spaced from this one and a
+      // second breach behind an acknowledged one is still found.
+      if (gap < requiredMs && ledger.forgives(name, k, previous.iso, row.checked_at)) {
+        forgiven++;
+      } else if (gap < smallest) {
         smallest = gap;
         where = k;
       }
     }
-    lastSeen.set(k, timestamp(row));
+    lastSeen.set(k, { at: timestamp(row), iso: row.checked_at });
   }
 
+  const note = forgiven === 0 ? '' : `, ${forgiven} acknowledged`;
   if (smallest === Infinity) {
-    return { name, pass: true, detail: `no repeated key to compare (required ${requiredMs}ms)` };
+    return {
+      name,
+      pass: true,
+      detail: `no repeated key to compare (required ${requiredMs}ms)${note}`,
+    };
   }
   return {
     name,
     pass: smallest >= requiredMs,
-    detail: `min observed ${smallest}ms on ${where}, required ${requiredMs}ms`,
+    detail: `min observed ${smallest}ms on ${where}, required ${requiredMs}ms${note}`,
   };
 }
 

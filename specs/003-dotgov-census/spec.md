@@ -514,12 +514,32 @@ rule below.
   redirect hop and the `robots.txt` fetch. A redirect onto a vendor's shared host
   is one of the commonest shapes in the registry, so the hop that reaches the
   shared backend is the one that most needs accounting.
+- **FR-140e**: The shared budget in FR-106 MUST be shared by construction: at
+  most one collector may be sending traffic at a time. The limits are held in a
+  process, so two collectors running at once are two budgets, and every
+  name-keyed limit still passes — only the per-address key can see the collision,
+  and neither process holds the other's. Spacing the collectors by *schedule* is
+  the "polite by convention" the constitution rejects, and it failed in exactly
+  that way on 2026-08-26 (research.md R5).
 - **FR-141**: The backend contacted MUST be recorded with the observation, so the
   spacing guarantee in FR-140 is provable by a reader from the stored record
   alone rather than taken on trust (Principle V). Where no backend was
   established the field is absent, and absence MUST NOT be read as a shared key.
 - **FR-142**: Observations written before this field existed MUST remain valid
   and MUST NOT be rewritten (FR-136).
+- **FR-143**: A breach already present in the record MUST be capable of being
+  carried without disabling the check that found it. The record is append-only,
+  so a violation that got committed cannot be taken back out; `verify` gates
+  publication, so one immutable bad pair otherwise discards every honest reading
+  taken after it, and did — twenty hours of hot-tier readings on 2026-08-26.
+
+  An acknowledgement MUST name one check, one key and the two exact timestamps,
+  so it forgives that pair and nothing else; it MUST stay visible in the verify
+  report rather than silencing the check; and `verify` MUST fail when an
+  acknowledgement matches no pair in the record, so the list cannot be written
+  ahead of a breach or outlive the rows that justify it. An entry is admissible
+  only with the cause found and the fix landed — this is an allow-marker, not a
+  suppressed failure.
 - **FR-134**: `robots.txt` MUST continue to be honored per target, and every
   request MUST continue to identify itself (Principle II, Principle III).
 - **FR-135**: A run MUST NOT retry harder against a domain that has already
