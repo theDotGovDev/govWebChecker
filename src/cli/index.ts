@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseTargets, activeTargets } from '../targets/load.js';
 import { executeRun } from '../checker/run.js';
+import { dueForCheck, type CheckedRow } from '../checker/due.js';
 import { verifyRecord, formatReport, type AcknowledgedBreach } from './verify.js';
 import { executeCensus } from '../census/run.js';
 import { buildFrame, DEFAULT_SOURCE, type Frame, type Exclusion } from '../census/frame.js';
@@ -161,6 +162,24 @@ async function check(args: Args): Promise<number> {
 
   if (args.only && selected.length === 0) throw new Error(`no active target with id "${args.only}"`);
 
+  // The cadence floor, consulted before any traffic is sent. Several workflows
+  // now trigger this command so that GitHub's delayed scheduler still delivers
+  // runs, which means more arrive than the cadence calls for — this is what keeps
+  // that safe, and why there is no flag to bypass it (see checker/due.ts).
+  //
+  // Deliberately ahead of `--dry-run`: a dry run writes nothing but sends the
+  // same traffic, so the floor governs it exactly as it governs a real one.
+  const verdict = dueForCheck(
+    await readCheckedRows(path.join(args.out, 'availability')),
+    selected.map((t) => t.host),
+    Date.now(),
+  );
+  if (!verdict.due) {
+    console.error(`not due: ${verdict.reason}`);
+    return 0;
+  }
+  console.error(`due: ${verdict.reason}`);
+
   const summary = await executeRun({
     targets: selected,
     dataDir: args.out,
@@ -215,6 +234,29 @@ async function verify(args: Args): Promise<number> {
   );
   console.log(formatReport(report));
   return report.ok ? 0 : 1;
+}
+
+/**
+ * The record, read only for what the cadence floor needs.
+ *
+ * A missing or unreadable directory is a first run, not an error: refusing to
+ * check because no record exists yet would make the floor a bootstrap deadlock.
+ */
+async function readCheckedRows(dir: string): Promise<CheckedRow[]> {
+  let names: string[];
+  try {
+    names = await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+  const rows: CheckedRow[] = [];
+  for (const name of names.filter((n) => n.endsWith('.jsonl'))) {
+    const text = await fs.readFile(path.join(dir, name), 'utf8');
+    for (const line of text.split('\n')) {
+      if (line.trim() !== '') rows.push(JSON.parse(line) as CheckedRow);
+    }
+  }
+  return rows;
 }
 
 async function readAcknowledged(path: string): Promise<AcknowledgedBreach[]> {
@@ -412,6 +454,7 @@ async function previousViewHashes(dataDir: string): Promise<Map<string, string>>
 const USAGE = `govWebChecker
 
   check        [--targets <path>] [--out <dir>] [--only <id>] [--dry-run]
+               (does nothing if these hosts were read less than 55 minutes ago)
   census       [--frame <path>] [--slice <0-6>] [--out <dir>] [--dry-run]
   deep-check   [--targets <path>] [--preset mobile|desktop] [--only <id>] [--out <dir>]
                [--views <dir>] [--dry-run]

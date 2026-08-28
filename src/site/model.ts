@@ -293,6 +293,7 @@ function tierViews(rows: Observation[]): TierView[] {
               window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
               samples: list.length,
               vantage,
+              ...gapOf(list),
             })
           : undefined;
 
@@ -404,10 +405,11 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
 
     // Only successful readings carry a timing. A timeout is not a slow response,
     // and folding one in as a large number would invent a measurement.
-    const timings = rows
-      .map((o) => o.latency.median_ms)
-      .filter((ms): ms is number => typeof ms === 'number')
-      .sort((a, b) => a - b);
+    // Kept as rows, not just numbers: the gap between readings behind this figure
+    // is measured over the readings that actually carry a timing, since a
+    // timeout contributes no timing and so no reading to space.
+    const timedRows = rows.filter((o) => typeof o.latency.median_ms === 'number');
+    const timings = timedRows.map((o) => o.latency.median_ms!).sort((a, b) => a - b);
 
     const stamps = rows.map((o) => o.checked_at).sort();
     const typical =
@@ -421,6 +423,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
               window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
               samples: timings.length,
               vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
+              ...gapOf(timedRows),
             }),
             fastest_ms: timings[0]!,
             slowest_ms: timings[timings.length - 1]!,
@@ -475,11 +478,13 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
     window: { from: string; to: string };
     vantage: string;
     population: number;
+    largestGapMs?: number;
   } {
     return {
       window: { from: rows[0]!.checked_at, to: rows[rows.length - 1]!.checked_at },
       vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
       population: new Set(rows.map((o) => o.host)).size,
+      ...gapOf(rows),
     };
   }
 
@@ -647,6 +652,7 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
           window: { from: stamps[0]!, to: stamps[stamps.length - 1]! },
           samples: rows.length,
           vantage: [...new Set(rows.map((o) => o.method.vantage))].sort().join(', '),
+          ...gapOf(rows),
         }),
       });
     }
@@ -991,4 +997,43 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
     },
     discardedRuns: discarded.size,
   };
+}
+
+/**
+ * The longest a single site went unmeasured, across the sites a figure covers.
+ *
+ * Per host and then the worst of them, rather than over the pooled timeline: 58
+ * sites checked together produce readings milliseconds apart, so a pooled gap
+ * would describe the run's own concurrency instead of anyone's coverage.
+ *
+ * `undefined` when no host has two readings to space. A gap needs two readings,
+ * and reporting zero would say "measured continuously" about a site seen once.
+ */
+export function largestGapMs(rows: { host: string; checked_at: string }[]): number | undefined {
+  const byHost = new Map<string, number[]>();
+  for (const row of rows) {
+    const at = Date.parse(row.checked_at);
+    if (!Number.isFinite(at)) continue;
+    byHost.set(row.host, [...(byHost.get(row.host) ?? []), at]);
+  }
+
+  let worst: number | undefined;
+  for (const stamps of byHost.values()) {
+    stamps.sort((a, b) => a - b);
+    for (let i = 1; i < stamps.length; i++) {
+      const gap = stamps[i]! - stamps[i - 1]!;
+      if (worst === undefined || gap > worst) worst = gap;
+    }
+  }
+  return worst;
+}
+
+/**
+ * `largestGapMs` in the shape a `figure({...})` call spreads, present only when
+ * there is a gap to report. Spreading an explicit `undefined` would set the key,
+ * and an absent gap must stay absent rather than becoming a stated nothing.
+ */
+function gapOf(rows: { host: string; checked_at: string }[]): { largestGapMs?: number } {
+  const worst = largestGapMs(rows);
+  return worst === undefined ? {} : { largestGapMs: worst };
 }

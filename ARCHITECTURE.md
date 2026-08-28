@@ -270,6 +270,13 @@ build has no network path at all, which is stronger than a rule.
   of the record. A finding whose image is missing renders as absence rather than
   as a broken picture: the record is permanent and the images live in a cache
   that can be evicted, so the two will disagree.
+- `checker/due.ts` — the cadence floor, read from the record before any traffic
+  is sent. It is here rather than in a cron because a cron cannot hold one:
+  GitHub delays scheduled events and keeps only one pending run per workflow, so
+  runs arrive early, late and bunched. Six `check-*` workflows own six schedule
+  queues and call one reusable `check.yml`; this decides which of their runs
+  actually does anything. Same promotion as the per-address limit — a guarantee
+  that held only inside one process, made durable by reading the record.
 - `figure.ts` — the choke point. Its cadence field is named for what it means to
   a reader — hourly, daily, weekly — rather than for the collection tier behind
   it. It was called `tier` once, and the gap between that name and what the page
@@ -286,6 +293,10 @@ build has no network path at all, which is stronger than a rule.
   than plumbed in beside them. GitHub delivers scheduled runs best-effort — over
   2026-08-26/27 the hourly schedule fired twice in fifteen hours — so a figure
   that asserted its cadence was publishing a method that had not produced it.
+  It also states the longest gap between consecutive readings where that exceeds
+  the average, measured per host and then worst-of: 58 sites are checked
+  together, so a pooled timeline would report a gap near zero and certify a
+  bursty sampler as continuous.
 - `model.ts` — builds the dashboard: four tiles that answer before they
   enumerate. The first tile is the one that matters most and is the easiest place
   to be unfair — a 403 is an *answer*, the server responded and declined a robot,

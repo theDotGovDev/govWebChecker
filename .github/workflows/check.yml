@@ -1,39 +1,49 @@
 name: check
 
+# The collector itself, called by the six `check-*` schedules rather than
+# carrying one of its own.
+#
+# Why six callers instead of one hourly cron: GitHub does not so much drop
+# scheduled events as *delay* them — a `41 5 * * *` deep-check run was observed
+# starting at 16:46, eleven hours late — and it holds only one pending run per
+# workflow. So a delay longer than the period collapses the backlog: eleven
+# pending hourly runs become one, and an hourly cron degrades to roughly one run
+# per delay-period. That is how twenty-four scheduled checks a day became three
+# on 2026-08-27.
+#
+# Delay is per workflow, not per repository: deep-check delivered its run during
+# the exact window in which this workflow received nothing. Six workflows are
+# therefore six independent schedule queues, each of which still delivers under a
+# long delay. Each fires every six hours, staggered, so the union is one run an
+# hour when GitHub is healthy — no over-collection to absorb — and about half
+# that when a backlog is draining.
+#
+# The cadence floor is not here. It is in the code (src/checker/due.ts), because
+# a cron cannot hold one: runs arrive early, late and bunched, and only something
+# reading the record can decide whether traffic should actually be sent.
+
 on:
-  schedule:
-    # Hourly. Still statistical rather than operational: ~720 readings per site
-    # per month give a 30-minute interruption a fair chance of being caught and a
-    # 2-hour one a good chance of being caught repeatedly, so short outages reach
-    # the reliability record instead of falling between checks. This is not
-    # real-time detection — an outage between checks is invisible, and one we
-    # catch is dated to when we looked (spec.md FR-009).
-    #
-    # Cost at this cadence: 1 reading + 1 robots.txt per host per hour, and about
-    # 20 MB of packed git history per year.
-    - cron: '23 * * * *'
+  workflow_call:
   workflow_dispatch:
 
-# One group across every workflow that sends traffic to a target — `check`,
-# `census` and `deep-check`. The politeness limits live in a RateLimiter
-# *instance*, so they hold within one process and are blind to a second collector
-# on another runner. Serializing the collectors is what makes the per-address
-# guarantee true of the published record rather than merely true of each run.
+# One group across every workflow that sends traffic to a target — the six
+# `check-*` schedules, `census` and `deep-check`. The politeness limits live in a
+# RateLimiter *instance*, so they hold within one process and are blind to a
+# second collector on another runner. Serializing the collectors is what makes
+# the per-address guarantee true of the published record rather than merely true
+# of each run (FR-140e).
 #
-# This reverses a deliberate choice (research.md R5): the groups were split so a
-# long census could not block the hourly check, accepting cross-tier overlap as a
-# bounded risk "visible afterwards through verify". It materialised on
-# 2026-08-26 — a census slice and an hourly check hit one WordPress VIP edge
-# 126ms apart — and the cost was the opposite of what the split protected. The
-# record is append-only, so that pair failed verify on every subsequent run and
-# twenty hours of hourly readings were collected and discarded, against the one
-# or two slots per day that queueing costs.
+# Declared here rather than on the six callers, deliberately. It has to cover a
+# direct `workflow_dispatch` of this workflow too, and declaring it in both
+# places would deadlock: the caller would hold the group while the job it called
+# waited for the same group.
 #
 # Queue rather than cancel: a cancelled run is a gap in the record, and gaps are
-# meant to mean "we did not measure". GitHub still keeps only one run pending per
-# group, so an hourly check that collides with a long collector runs late, and a
-# second one behind it is dropped. That is a visible gap rather than a false
-# claim, which is the direction Principle V requires erring in.
+# meant to mean "we did not measure". GitHub keeps only one run pending per
+# group, so a check colliding with a long census runs late and a second one
+# behind it is superseded — which costs little now, because a superseded run
+# would almost always have found itself inside the cadence floor and sent
+# nothing anyway.
 concurrency:
   group: target-traffic
   cancel-in-progress: false

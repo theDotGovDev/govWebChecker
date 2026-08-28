@@ -51,6 +51,19 @@ export interface Figure {
   readonly vantage: string;
   /** The versioned rule that derived the reading, where one did (FR-205). */
   readonly rule?: string;
+  /**
+   * The longest interval between two consecutive readings behind this figure.
+   *
+   * Published alongside the average because the average hides exactly the
+   * failure it should expose: on the real record the median gap is 1h02 and the
+   * largest is 41h, so a mean of 1h26 reads as healthy hourly sampling while a
+   * site went unmeasured for the better part of two days. Sampling quality is
+   * judged on the worst gap, not the typical one.
+   *
+   * Optional because not every figure's model knows its history. Absence is
+   * absence of the question, never a gap of zero (FR-204).
+   */
+  readonly largestGapMs?: number;
 }
 
 /**
@@ -148,6 +161,29 @@ function observedInterval(f: Figure): string | undefined {
   return `a reading every ${gap}`;
 }
 
+function duration(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+/**
+ * The tail, named only when it says something the average did not.
+ *
+ * Evenly spaced readings have a worst gap equal to their average, and printing
+ * the same number twice tells a reader nothing. It is worth naming precisely
+ * when it exceeds what the average implies.
+ */
+function largestGap(f: Figure): string | undefined {
+  if (f.largestGapMs === undefined) return undefined;
+  const perSite = f.samples / f.population;
+  const gaps = perSite - 1;
+  const span = Date.parse(f.window.to) - Date.parse(f.window.from);
+  const average = gaps >= 1 && Number.isFinite(span) && span > 0 ? span / gaps : 0;
+  if (f.largestGapMs <= average) return undefined;
+  return `longest gap ${duration(f.largestGapMs)}`;
+}
+
 function day(iso: string): string {
   return iso.slice(0, 10);
 }
@@ -184,8 +220,10 @@ export function formatFigure(f: Figure | Absence, opts?: { note?: string }): str
     return `<span class="absence">— <span class="method">${escapeHtml(f.reason)}</span></span>`;
   }
   const observed = observedInterval(f);
+  const worst = largestGap(f);
   const method =
-    `${CADENCE_LABEL[f.cadence]}${observed ? `, ${observed}` : ''} · ` +
+    `${CADENCE_LABEL[f.cadence]}${observed ? `, ${observed}` : ''}` +
+    `${worst ? `, ${worst}` : ''} · ` +
     `${f.population === 1 ? '1 site' : `${f.population} sites`} · ` +
     `${day(f.window.from)} to ${day(f.window.to)} · ` +
     `${f.samples} readings · from ${escapeHtml(f.vantage)}` +
