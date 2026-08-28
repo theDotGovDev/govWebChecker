@@ -293,7 +293,12 @@ rather than "not present".
   only the published wording claimed more. What is now required in addition is
   that every published figure states the interval its readings actually arrived
   at, computed from the figure's own window, sample count and population, so a
-  reader can see the difference without trusting us.
+  reader can see the difference without trusting us, and MUST state the longest
+  gap between two consecutive readings wherever it exceeds that average. An
+  average alone flatters a bursty sampler: on the record of 2026-08-27 the
+  typical gap was 1h02 and the longest was 41h, so a mean of 1h26 read as
+  healthy hourly sampling while sites went unmeasured for most of two days.
+  Sampling quality is judged on the worst gap, not the typical one.
 
   **How the target is pursued, revised 2026-08-28.** GitHub does not so much
   drop scheduled events as *delay* them — a `41 5 * * *` run was observed

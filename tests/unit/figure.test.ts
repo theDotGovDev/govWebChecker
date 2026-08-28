@@ -245,3 +245,51 @@ describe('a cadence is a target, and the figure says what actually happened', ()
     assert.doesNotMatch(html, /a reading every/, 'one reading per site spaces nothing');
   });
 });
+
+/**
+ * The largest gap, because a mean interval hides exactly the failure it should
+ * expose.
+ *
+ * The figures report "a reading every 1h 26m", computed as window ÷ gaps. On the
+ * real record the median gap is 1h02 and the largest is 41h — a mean that reads
+ * as healthy hourly sampling while a site went unmeasured for the better part of
+ * two days. Sampling quality is judged on the worst gap, not the average one, so
+ * the average alone is a method that flatters the measurement.
+ */
+describe('a figure reports its worst gap, not just its average one', () => {
+  const base = {
+    value: 99.2,
+    unit: 'percent' as const,
+    cadence: 'hourly' as const,
+    population: 58,
+    vantage: 'github-actions/ubuntu-24.04',
+    window: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' },
+    samples: 58 * 25,
+  };
+
+  test('names the longest gap when the model knows it', () => {
+    const html = formatFigure(figure({ ...base, largestGapMs: 41 * 3_600_000 }));
+    assert.match(html, /longest gap 41h/, html);
+  });
+
+  test('a bursty sampler cannot hide behind its average', () => {
+    // The average says hourly; the worst gap says a day and a half went
+    // unmeasured. Both are true and only one of them is the warning.
+    const html = formatFigure(figure({ ...base, largestGapMs: 41 * 3_600_000 }));
+    assert.match(html, /a reading every 1h 0m/, 'the typical interval still shows');
+    assert.match(html, /longest gap/, 'and so does the tail it conceals');
+  });
+
+  test('says nothing about gaps it was not given', () => {
+    // Absence of the field is absence of the question, not a gap of zero.
+    const html = formatFigure(figure(base));
+    assert.doesNotMatch(html, /longest gap/);
+  });
+
+  test('a gap no larger than the typical interval is not worth naming', () => {
+    // Evenly spaced readings have a worst gap equal to their average, and
+    // printing it twice tells a reader nothing.
+    const html = formatFigure(figure({ ...base, largestGapMs: 3_600_000 }));
+    assert.doesNotMatch(html, /longest gap/, 'even sampling has no tail to report');
+  });
+})
