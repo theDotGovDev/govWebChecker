@@ -44,6 +44,16 @@ along committing whichever runs happen to pass. Treat a red `check` run as data
 loss, not as a flaky job, and check the failure rate rather than whether the
 most recent run was green.
 
+A **cancelled** `check-*` run is the one exception, and it is expected rather
+than alarming. All the collectors share the `target-traffic` concurrency group,
+GitHub keeps only one run pending per group, and the six queues deliberately
+over-provision — so when a long collector holds the group and two check queues
+arrive behind it, the older pending one is superseded. That costs nothing: the
+cadence floor means only one of them was going to send traffic anyway. Observed
+on 2026-08-28, when `check f` queued at 17:43 behind a `deep-check` run, was
+superseded by `check a` at 18:36, and `check a` collected at 18:43. Cancelled
+means "another queue got there first", not "we lost a reading".
+
 The next substantial piece of work is feature `003` — a census of all US `.gov`
 domains, checked in two tiers. Its spec is written
 (`specs/003-dotgov-census/spec.md`) and awaiting approval; nothing is built. It
