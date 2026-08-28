@@ -67,8 +67,23 @@ describe('the check schedules cover the day between them', () => {
     }
   });
 
-  test('the collector carries no schedule of its own', () => {
-    // It would fire alongside the six and double-collect.
-    assert.doesNotMatch(read('check.yml'), /- cron:/);
+  test('the collector carries a schedule of its own, as the proven seventh queue', () => {
+    // It used to be asserted that it must NOT, on the grounds that it would
+    // double-collect. That reasoning is obsolete: the cadence floor means a
+    // second run inside the hour sends nothing, so redundancy is free.
+    //
+    // And the cost of the old rule was real. Removing this schedule replaced the
+    // one queue GitHub was demonstrably still delivering with six unproven ones,
+    // and collection went from three runs a day to none.
+    assert.match(read('check.yml'), /- cron: '\d+ [\d,]+ \* \* \*'/);
+  });
+
+  test('every caller can be triggered by hand', () => {
+    // Six schedule-only workflows are six that cannot be tested. When none of
+    // them fired for twelve hours there was no way to tell a registration lag
+    // from a call that never worked.
+    for (const file of callers) {
+      assert.match(read(file), /workflow_dispatch:/, `${file} cannot be exercised without waiting for cron`);
+    }
   });
 });

@@ -25,6 +25,21 @@ name: check
 on:
   workflow_call:
   workflow_dispatch:
+  # A seventh queue, and the safety net.
+  #
+  # This workflow's schedule was removed when the six callers were added, which
+  # replaced the one queue GitHub was demonstrably still delivering with six
+  # unproven ones. It delivered three runs a day; the six delivered none in the
+  # twelve hours after they landed, so collection went from poor to nothing. A
+  # new workflow's schedule can take time to register, and the six may yet come
+  # good — but "may yet" is not a collection strategy.
+  #
+  # Its hours deliberately duplicate a caller's. Duplication is free: the cadence
+  # floor in src/checker/due.ts means a second run inside the hour sends no
+  # traffic and writes nothing, which is exactly what makes redundant queues a
+  # safe way to buy reliability.
+  schedule:
+    - cron: '19 1,7,13,19 * * *'
 
 # One group across every workflow that sends traffic to a target — the six
 # `check-*` schedules, `census` and `deep-check`. The politeness limits live in a
