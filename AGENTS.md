@@ -27,7 +27,11 @@ decided; a change here is a change to working software, not a greenfield choice.
   `refresh-targets`, `probe-data-sources`. Six queues because GitHub delays
   scheduled events and holds one pending run per workflow; the cadence floor is
   in `src/checker/due.ts`, not in a cron. Don't collapse them back into one
-  hourly cron.
+  hourly cron. `check.yml` keeps a schedule of its own as a seventh, proven
+  queue: when the six landed they delivered nothing for twelve hours while it
+  had been delivering three runs a day, so removing it traded poor collection
+  for none. Redundant queues are free because the floor makes a second run
+  inside the hour send nothing.
 - **Site**: generated into `docs/` by `build-site` and deployed by `pages.yml`.
   It is a build artifact, not a checked-in directory.
 

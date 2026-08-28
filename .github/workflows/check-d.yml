@@ -13,6 +13,11 @@ name: check d
 # decided by the cadence floor in src/checker/due.ts, which reads the record.
 
 on:
+  # Dispatchable so the caller can be proved to work without waiting for its
+  # cron. Shipping six schedule-only workflows meant six that could not be
+  # tested at all: when none of them fired for twelve hours there was no way
+  # to tell a registration lag from a broken call.
+  workflow_dispatch:
   schedule:
     - cron: '7 3,9,15,21 * * *'
 
