@@ -1,0 +1,24 @@
+name: check d
+
+# One of six schedule queues for the availability check. See check.yml for why
+# there are six rather than one hourly cron: GitHub delays scheduled events and
+# holds only one pending run per workflow, so an hourly cron collapses under a
+# delay longer than an hour, while six six-hourly ones keep delivering.
+#
+# Every six hours, staggered against its five siblings so the union is one run an
+# hour. The minute avoids :00 — GitHub names the top of the hour as a high-load
+# period — and avoids :15, :30 and :45 for the same reason.
+#
+# This file exists only to own a schedule. Whether traffic is actually sent is
+# decided by the cadence floor in src/checker/due.ts, which reads the record.
+
+on:
+  schedule:
+    - cron: '7 3,9,15,21 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    uses: ./.github/workflows/check.yml

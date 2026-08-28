@@ -295,6 +295,18 @@ rather than "not present".
   at, computed from the figure's own window, sample count and population, so a
   reader can see the difference without trusting us.
 
+  **How the target is pursued, revised 2026-08-28.** GitHub does not so much
+  drop scheduled events as *delay* them — a `41 5 * * *` run was observed
+  starting at 16:46 — and it holds only one pending run per workflow, so a delay
+  longer than the period collapses the backlog and an hourly cron degrades to
+  roughly one run per delay-period. Delay is per workflow, not per repository.
+
+  So the hourly target is pursued by six workflows with six schedule queues,
+  each firing every six hours and staggered to cover the day, and the cadence
+  floor MUST live in the code rather than in a cron: a run MUST NOT send traffic
+  to a host read within the floor, and that floor MUST NOT be bypassable by a
+  flag. Over-provisioning the schedule is only safe because of it.
+
   **Revised by `003`.** This originally applied to every target. A census of
   16,535 domains cannot be sampled hourly and stay within Principle I, so the
   cadence became a property of the tier rather than of the system. The statistical

@@ -61,6 +61,44 @@ async function targetsFile(entries: Array<{ id: string; url: string }>): Promise
 }
 
 describe('the check command', () => {
+  /**
+   * The floor is what makes over-provisioning the schedule safe, so it has to
+   * hold at the command, not just in the function that computes it. A run that
+   * is not due must send nothing — including under --dry-run, which writes
+   * nothing but sends the same traffic.
+   */
+  test('sends nothing when these hosts were read inside the floor', async () => {
+    const file = await targetsFile([{ id: 'a', url: 'https://www.example.gov/' }]);
+    const availability = path.join(dir, 'availability');
+    await fs.mkdir(availability, { recursive: true });
+    await fs.writeFile(
+      path.join(availability, '2026-08.jsonl'),
+      JSON.stringify({ host: 'www.example.gov', checked_at: new Date().toISOString() }) + '\n',
+      'utf8',
+    );
+    const result = await cli(['check', '--targets', file, '--out', dir, '--dry-run']);
+    assert.equal(result.code, 0, 'a skipped run is not a failure');
+    assert.match(result.stderr, /not due/);
+    assert.doesNotMatch(result.stderr, /targets,/, 'no run summary means no traffic was sent');
+    assert.equal(result.stdout.trim(), '', 'a dry run that skipped emits no observations');
+  });
+
+  test('runs when the newest reading for these hosts is older than the floor', async () => {
+    const file = await targetsFile([{ id: 'a', url: await refusedUrl() }]);
+    const availability = path.join(dir, 'availability');
+    await fs.mkdir(availability, { recursive: true });
+    const old = new Date(Date.now() - 3 * 3600_000).toISOString();
+    await fs.writeFile(
+      path.join(availability, '2026-08.jsonl'),
+      JSON.stringify({ host: new URL(await refusedUrl()).hostname, checked_at: old }) + '\n',
+      'utf8',
+    );
+    const result = await cli(['check', '--targets', file, '--out', dir, '--dry-run']);
+    assert.equal(result.code, 0);
+    assert.match(result.stderr, /due: last reading 3h 0m ago/);
+    assert.match(result.stderr, /1 targets/);
+  });
+
   test('exits 1 when the target list cannot be read', async () => {
     const result = await cli(['check', '--targets', path.join(dir, 'missing.json')]);
     assert.equal(result.code, 1);

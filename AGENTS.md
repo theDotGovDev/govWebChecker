@@ -22,8 +22,12 @@ decided; a change here is a change to working software, not a greenfield choice.
   (FR-001) — `refresh-targets.yml` opens a PR rather than committing.
 - **Record**: monthly JSONL under `data/availability/` and `data/runs/`. It is
   append-only and it is the product, so it is committed, not ignored.
-- **Workflows**: `check` (hourly collection), `ci`, `secret-scan`, `pages`,
-  `refresh-targets`, `probe-data-sources`.
+- **Workflows**: `check` (the collector, reusable) called by six staggered
+  `check-a`..`check-f` schedules, `ci`, `secret-scan`, `pages`,
+  `refresh-targets`, `probe-data-sources`. Six queues because GitHub delays
+  scheduled events and holds one pending run per workflow; the cadence floor is
+  in `src/checker/due.ts`, not in a cron. Don't collapse them back into one
+  hourly cron.
 - **Site**: generated into `docs/` by `build-site` and deployed by `pages.yml`.
   It is a build artifact, not a checked-in directory.
 
