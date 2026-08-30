@@ -981,3 +981,40 @@ describe('a refusal is never published as an outage (Principle V, FR-261)', () =
       `the tile must publish the rate its line draws, not the success rate: ${tile}`);
   });
 });
+
+/**
+ * Where the two instruments disagree, published (FR-349).
+ *
+ * A server can answer 200 while serving a block page or a bot challenge. That
+ * passes the hourly HTTP check and fails the daily browser one, and the
+ * disagreement is the only signal the project has that an "answered" rate might
+ * be counting pages nobody could use.
+ *
+ * The empty case is published too. "We compared and found none" is a finding; a
+ * section that vanishes when it has nothing to say leaves a reader unable to
+ * tell a clean result from a check that was never run.
+ */
+describe('the site publishes where its two methods disagree (FR-349)', () => {
+  test('says so plainly when the two methods agree everywhere', () => {
+    const html = body(render(fixtureRows()));
+    assert.match(
+      html.replace(/\s+/g, ' '),
+      /no site .{0,60}disagree|found none|agree/i,
+      'an empty result must be stated, not omitted',
+    );
+  });
+
+  test('a persistent disagreement is named with both instruments’ counts', () => {
+    const rows = fixtureRows();
+    const host = rows[0]!.host;
+    const failing = ['a', 'b', 'c'].map((i) => qualityReading(GOOD_PAGE, {
+      host,
+      outcome: 'check_failed',
+      checked_at: `2026-08-2${i === 'a' ? 1 : i === 'b' ? 2 : 3}T06:00:00Z`,
+    }));
+    const html = body(render(rows, undefined, [], failing));
+    const section = html.slice(html.indexOf('id="disagreement"'));
+    assert.ok(section.length > 0, 'the section must exist when there is a divergence');
+    assert.match(section, new RegExp(host.replace(/\./g, '\\.')), 'the host must be named');
+  });
+});

@@ -121,6 +121,7 @@ describe('site rendering', () => {
 describe('the page never publishes a figure without its population (SC-107)', () => {
   const model = {
     sites: [],
+    divergences: [],
     dashboard: [],
     agencies: [],
     tiers: [
