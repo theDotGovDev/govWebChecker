@@ -152,7 +152,7 @@ Recorded so they are not lost, and explicitly *not* required for US1 to ship.
 
 - [ ] T048 Confirm the federal traffic dataset's availability, coverage, and unit of aggregation, then populate the real `targets/federal.json` (blocked: source unverified in spec.md)
 - [ ] T049 Add `infra/` Terraform enabling platform secret scanning with push protection — the third secret layer the constitution requires
-- [ ] T050 Verify whether scheduled workflows are disabled after repository inactivity, and how that interacts with a repository whose only activity is its own automated commits (research.md R6)
+- [x] T050 Verify whether scheduled workflows are disabled after repository inactivity, and how that interacts with a repository whose only activity is its own automated commits (research.md R6) — verified as far as the platform allows; finding and the decision not to mitigate are recorded in R6
 - [ ] T051 Author the host-to-property mapping file and its schema (FR-001b) — not read by US1, needed by `002`
 
 ---

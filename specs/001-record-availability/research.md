@@ -146,6 +146,36 @@ not rediscovered as bugs:
   repository inactivity.** A repository whose only activity is its own automated
   commits may be affected; to be verified during implementation, since silent
   cessation is the failure mode that would go unnoticed longest.
+
+  **Verified 2026-08-29 (T050), as far as it can be.** GitHub documents the rule
+  — "In a public repository, scheduled workflows are automatically disabled when
+  no repository activity has occurred in 60 days" — and defines *nothing* about
+  what activity means. That is the whole of the official record; the docs say
+  neither what counts nor whether a bot's commits do.
+
+  What is established from practice: a **commit** resets the timer, and a
+  workflow *run* on its own does not. This repository commits to `data/`
+  several times a day, authored by `govwebchecker[bot]` and pushed with
+  `GITHUB_TOKEN`, so on that reading it is not exposed at all — and the
+  keepalive actions that exist for this problem target the case this repository
+  is not in, a schedule that runs but writes nothing back.
+
+  What remains genuinely unknown is whether a push made with `GITHUB_TOKEN`
+  counts. GitHub suppresses such pushes from triggering further workflow runs,
+  and nothing states whether the same suppression reaches the activity clock.
+  No amount of reading settles it; only a repository that goes 60 days with bot
+  commits and no human ones would, and that is not an experiment this project
+  can run on itself without risking the thing it is testing.
+
+  **Not mitigated, deliberately.** The failure needs both halves — bot commits
+  not counting *and* sixty days without a human — and the fixes are worse than
+  the exposure: a keepalive commit uses the same `GITHUB_TOKEN` and so fails in
+  exactly the case that would need it, and authoring commits with a PAT buys
+  certainty for a stored credential and a rotation burden. What the project has
+  instead is detection: every figure publishes the longest gap between readings
+  (FR-009), so a cessation shows up on the site as a growing gap rather than as
+  a page that quietly stops changing. Revisit if the repository is ever
+  genuinely dormant for a month.
 - **Two runs committing concurrently will conflict.** A concurrency group makes
   runs queue rather than race.
 
