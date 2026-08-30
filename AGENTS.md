@@ -54,11 +54,11 @@ on 2026-08-28, when `check f` queued at 17:43 behind a `deep-check` run, was
 superseded by `check a` at 18:36, and `check a` collected at 18:43. Cancelled
 means "another queue got there first", not "we lost a reading".
 
-The next substantial piece of work is feature `003` — a census of all US `.gov`
-domains, checked in two tiers. Its spec is written
-(`specs/003-dotgov-census/spec.md`) and awaiting approval; nothing is built. It
-widens `001`'s scope, so it also revises `001`'s FR-001a and FR-009, which it
-contradicts — do those edits in the same change, not afterwards.
+Feature `003` — a census of all US `.gov` domains — is built and running.
+`census.yml` sweeps one seventh of the frame a day and its rows are in the
+record alongside the hourly ones. Its spec is
+`specs/003-dotgov-census/spec.md`. It widened `001`'s scope and the revisions to
+`001`'s FR-001a and FR-009 are already made.
 
 Feature `002` — analysis and presentation — is still unwritten and keeps its
 number. `003` skipped ahead rather than taking it, so `001`'s references to
