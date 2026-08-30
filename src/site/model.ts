@@ -3,6 +3,7 @@ import type { Target } from '../targets/load.js';
 import { figure, type Figure } from './figure.js';
 import { censusSeries, type CensusSeries } from './series.js';
 import type { Frame } from '../census/frame.js';
+import { divergences, type Divergence } from './divergence.js';
 import type { DeepReading } from '../quality/deep-check.js';
 import { interpret, type Band } from './interpret.js';
 import { checksFor } from './checks.js';
@@ -117,6 +118,12 @@ export interface CensusView {
 
 export interface SiteModel {
   sites: SiteView[];
+  /**
+   * Sites our two instruments disagree about (FR-349). Empty is the good case
+   * and is published as such: "we looked and found none" is a finding, and
+   * omitting the section entirely would make its absence unreadable.
+   */
+  divergences: Divergence[];
   /** The first screen: interpreted tiles, before any table (FR-310). */
   dashboard: DashboardTile[];
   /** Present when deep readings exist; the checks behind the experience tile. */
@@ -961,6 +968,10 @@ export function buildSiteModel({ targets, observations, runs, frame, quality = [
   const tiersBuilt = tierViews(usable);
   return {
     sites,
+    // Computed from the two records as they stand, never from a stored verdict:
+    // a better rule must be able to re-judge every reading already collected
+    // without asking a single site anything again.
+    divergences: divergences(monitoring, quality),
     dashboard: dashboardTiles(exp),
     ...(exp ? { experience: exp } : {}),
     ...(aTrend ? { answeredTrend: aTrend } : {}),
