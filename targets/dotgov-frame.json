@@ -1,7 +1,7 @@
 {
   "source": "https://raw.githubusercontent.com/cisagov/dotgov-data/main/current-full.csv",
-  "retrieved_at": "2026-08-22T05:16:59.411Z",
-  "digest": "sha256:01aa0612b5259540b27c1c4a80dabd77ccb4441b0e01a6f65472729d7e71a181",
+  "retrieved_at": "2026-08-31T13:36:57.119Z",
+  "digest": "sha256:6ee8a8703ff11d769dffd9774ef7f346fcb0d59c2f4b81359fb114db285a1945",
   "domains": [
     {
       "domain": "13thjudicialil.gov",
@@ -1945,6 +1945,15 @@
       "suborganization": "",
       "city": "Albion",
       "state": "ME",
+      "slice": 1
+    },
+    {
+      "domain": "albiontownshipmn.gov",
+      "type": "City",
+      "organization": "Town of Albion",
+      "suborganization": "",
+      "city": "Annandale",
+      "state": "MN",
       "slice": 1
     },
     {
@@ -5800,6 +5809,15 @@
       "slice": 5
     },
     {
+      "domain": "auroranc.gov",
+      "type": "City",
+      "organization": "Town of Aurora",
+      "suborganization": "",
+      "city": "Aurora",
+      "state": "NC",
+      "slice": 2
+    },
+    {
       "domain": "aurorane.gov",
       "type": "City",
       "organization": "City of Aurora",
@@ -8023,6 +8041,15 @@
       "slice": 6
     },
     {
+      "domain": "bartonvillagevt.gov",
+      "type": "City",
+      "organization": "Barton Village",
+      "suborganization": "",
+      "city": "BARTON",
+      "state": "VT",
+      "slice": 0
+    },
+    {
       "domain": "bartowcountyga.gov",
       "type": "County",
       "organization": "Bartow County",
@@ -8228,6 +8255,15 @@
       "city": "Mountain Home",
       "state": "AR",
       "slice": 5
+    },
+    {
+      "domain": "baxtercountyjsar.gov",
+      "type": "County",
+      "organization": "Baxter County Juvenile Services",
+      "suborganization": "",
+      "city": "Mountain Home",
+      "state": "AR",
+      "slice": 2
     },
     {
       "domain": "baxterestates.gov",
@@ -14449,6 +14485,15 @@
       "slice": 3
     },
     {
+      "domain": "browncountyohelections.gov",
+      "type": "County - Election",
+      "organization": "Brown County Board of Elections",
+      "suborganization": "",
+      "city": "Georgetown",
+      "state": "OH",
+      "slice": 2
+    },
+    {
       "domain": "browncountyohio.gov",
       "type": "County",
       "organization": "Brown County Commissioners",
@@ -15923,6 +15968,15 @@
       "city": "Shreveport",
       "state": "LA",
       "slice": 6
+    },
+    {
+      "domain": "caddovalleyar.gov",
+      "type": "City",
+      "organization": "City of Caddo Valley",
+      "suborganization": "",
+      "city": "Caddo Valley",
+      "state": "AR",
+      "slice": 3
     },
     {
       "domain": "cahtotribe-nsn.gov",
@@ -17968,6 +18022,15 @@
       "slice": 4
     },
     {
+      "domain": "caseycountyky.gov",
+      "type": "County - Election",
+      "organization": "Casey County Fiscal Court",
+      "suborganization": "",
+      "city": "Liberty",
+      "state": "KY",
+      "slice": 6
+    },
+    {
       "domain": "caseycountysheriff.gov",
       "type": "County - Election",
       "organization": "Casey County Sheriff's Office",
@@ -19624,6 +19687,15 @@
       "slice": 4
     },
     {
+      "domain": "chaplinct.gov",
+      "type": "City",
+      "organization": "Town of Chaplin",
+      "suborganization": "",
+      "city": "Chaplin",
+      "state": "CT",
+      "slice": 1
+    },
+    {
       "domain": "chapman-ks.gov",
       "type": "City",
       "organization": "City of Chapman Kansas",
@@ -20126,6 +20198,15 @@
       "city": "Oakville",
       "state": "WA",
       "slice": 3
+    },
+    {
+      "domain": "chelancounty.gov",
+      "type": "County",
+      "organization": "Chelan County Courthouse",
+      "suborganization": "",
+      "city": "Wenatchee",
+      "state": "WA",
+      "slice": 6
     },
     {
       "domain": "chelancountywa.gov",
@@ -22252,6 +22333,15 @@
       "slice": 5
     },
     {
+      "domain": "cityofbranchar.gov",
+      "type": "City - Election",
+      "organization": "City of Branch",
+      "suborganization": "",
+      "city": "Branch",
+      "state": "AR",
+      "slice": 3
+    },
+    {
       "domain": "cityofbrea.gov",
       "type": "City",
       "organization": "City of Brea",
@@ -22351,6 +22441,15 @@
       "slice": 4
     },
     {
+      "domain": "cityofbrownsvalleymn.gov",
+      "type": "City",
+      "organization": "City of Browns Valley Minnesota",
+      "suborganization": "",
+      "city": "Brown's Valley",
+      "state": "MN",
+      "slice": 4
+    },
+    {
       "domain": "cityofbrucems.gov",
       "type": "City",
       "organization": "City of Bruce",
@@ -22421,6 +22520,15 @@
       "city": "Burton",
       "state": "TX",
       "slice": 0
+    },
+    {
+      "domain": "cityofbyronmn.gov",
+      "type": "City",
+      "organization": "Byron, Minnesota",
+      "suborganization": "",
+      "city": "Byron",
+      "state": "MN",
+      "slice": 4
     },
     {
       "domain": "cityofcalicorock.gov",
@@ -22664,6 +22772,15 @@
       "city": "Claremont",
       "state": "MN",
       "slice": 6
+    },
+    {
+      "domain": "cityofclayal.gov",
+      "type": "City",
+      "organization": "City of Clay, Alabama",
+      "suborganization": "",
+      "city": "Clay",
+      "state": "AL",
+      "slice": 1
     },
     {
       "domain": "cityofclaytonga.gov",
@@ -23159,6 +23276,15 @@
       "city": "Elephant Butte",
       "state": "NM",
       "slice": 6
+    },
+    {
+      "domain": "cityofedwardsvilleil.gov",
+      "type": "City - Election",
+      "organization": "City of Edwardsville",
+      "suborganization": "",
+      "city": "Edwardsville",
+      "state": "IL",
+      "slice": 4
     },
     {
       "domain": "cityofeffinghamks.gov",
@@ -26734,6 +26860,15 @@
       "slice": 4
     },
     {
+      "domain": "cityofspringbranch.gov",
+      "type": "City",
+      "organization": "City of Spring Branch",
+      "suborganization": "",
+      "city": "Spring Branch",
+      "state": "TX",
+      "slice": 2
+    },
+    {
       "domain": "cityofstanleyid.gov",
       "type": "City",
       "organization": "City of Stanley",
@@ -27623,6 +27758,15 @@
       "city": "Claremont",
       "state": "CA",
       "slice": 0
+    },
+    {
+      "domain": "claremontnh.gov",
+      "type": "City",
+      "organization": "City of Claremont",
+      "suborganization": "",
+      "city": "Claremont",
+      "state": "NH",
+      "slice": 4
     },
     {
       "domain": "claremontva.gov",
@@ -32042,6 +32186,15 @@
       "city": "Walters",
       "state": "OK",
       "slice": 4
+    },
+    {
+      "domain": "cottonwoodalabama.gov",
+      "type": "City",
+      "organization": "Town of Cottonwood Alabama",
+      "suborganization": "",
+      "city": "Cottonwood",
+      "state": "AL",
+      "slice": 6
     },
     {
       "domain": "cottonwoodaz.gov",
@@ -37437,7 +37590,7 @@
     {
       "domain": "douglascountyga.gov",
       "type": "County",
-      "organization": "Douglas County",
+      "organization": "Douglas County Board of Commissioners",
       "suborganization": "",
       "city": "Douglasville",
       "state": "GA",
@@ -39431,6 +39584,15 @@
       "city": "Denmark",
       "state": "WI",
       "slice": 4
+    },
+    {
+      "domain": "eatonmunicipalcourtohio.gov",
+      "type": "City",
+      "organization": "City of Eaton Municipal Court",
+      "suborganization": "",
+      "city": "Eaton",
+      "state": "OH",
+      "slice": 3
     },
     {
       "domain": "eatonnh.gov",
@@ -41521,6 +41683,15 @@
       "slice": 0
     },
     {
+      "domain": "errolnh.gov",
+      "type": "City",
+      "organization": "Town of Errol",
+      "suborganization": "",
+      "city": "Errol",
+      "state": "NH",
+      "slice": 0
+    },
+    {
       "domain": "erving-ma.gov",
       "type": "City",
       "organization": "Town of Erving",
@@ -42158,6 +42329,15 @@
       "city": "Cheyenne",
       "state": "WY",
       "slice": 6
+    },
+    {
+      "domain": "example.gov",
+      "type": "Federal - Executive",
+      "organization": ".gov Administration",
+      "suborganization": "Council of Test Administration",
+      "city": "Ashburn",
+      "state": "VA",
+      "slice": 5
     },
     {
       "domain": "excelsiormn.gov",
@@ -43166,6 +43346,15 @@
       "city": "Farmington",
       "state": "MN",
       "slice": 2
+    },
+    {
+      "domain": "farmingtonms.gov",
+      "type": "City - Election",
+      "organization": "Town of Farmington",
+      "suborganization": "",
+      "city": "Corinth",
+      "state": "MS",
+      "slice": 6
     },
     {
       "domain": "farmingtonnm.gov",
@@ -44606,6 +44795,15 @@
       "city": "Palm Coast",
       "state": "FL",
       "slice": 1
+    },
+    {
+      "domain": "flaglersheriff.gov",
+      "type": "County - Election",
+      "organization": "Flagler County Sheriff's Office",
+      "suborganization": "",
+      "city": "Bunnell",
+      "state": "FL",
+      "slice": 4
     },
     {
       "domain": "flaglertax.gov",
@@ -46190,6 +46388,15 @@
       "city": "Forrest City",
       "state": "AR",
       "slice": 5
+    },
+    {
+      "domain": "forsantx.gov",
+      "type": "City",
+      "organization": "City of Forsan, TX",
+      "suborganization": "",
+      "city": "Forsan",
+      "state": "TX",
+      "slice": 1
     },
     {
       "domain": "forsyth-il.gov",
@@ -50044,6 +50251,15 @@
       "slice": 6
     },
     {
+      "domain": "gispiquaoh.gov",
+      "type": "City",
+      "organization": "GIS City of Piqua",
+      "suborganization": "",
+      "city": "Piqua",
+      "state": "OH",
+      "slice": 5
+    },
+    {
       "domain": "gisservicemt.gov",
       "type": "State or territory",
       "organization": "Montana State Library",
@@ -50222,6 +50438,15 @@
       "city": "Glendale",
       "state": "UT",
       "slice": 2
+    },
+    {
+      "domain": "glendalevalleypd.gov",
+      "type": "Special district",
+      "organization": "Glendale Valley Police Department",
+      "suborganization": "",
+      "city": "Dysart",
+      "state": "PA",
+      "slice": 4
     },
     {
       "domain": "glendalewi.gov",
@@ -52690,6 +52915,15 @@
       "slice": 3
     },
     {
+      "domain": "greggcountyvotes.gov",
+      "type": "County - Election",
+      "organization": "Gregg County Elections",
+      "suborganization": "",
+      "city": "Longview",
+      "state": "TX",
+      "slice": 5
+    },
+    {
       "domain": "greshamne.gov",
       "type": "City",
       "organization": "Village of Gresham",
@@ -54506,6 +54740,15 @@
       "city": "Silver Creek",
       "state": "NY",
       "slice": 4
+    },
+    {
+      "domain": "hanovertwpccoh.gov",
+      "type": "City",
+      "organization": "Hanover Township in Columbiana County",
+      "suborganization": "",
+      "city": "Hanoverton",
+      "state": "OH",
+      "slice": 2
     },
     {
       "domain": "hanoverva.gov",
@@ -56695,6 +56938,15 @@
       "slice": 4
     },
     {
+      "domain": "henrycotnsheriff.gov",
+      "type": "County",
+      "organization": "Henry County Sheriff's Office",
+      "suborganization": "",
+      "city": "PARIS",
+      "state": "TN",
+      "slice": 3
+    },
+    {
       "domain": "henrycountyal.gov",
       "type": "County",
       "organization": "Henry County Commission",
@@ -57784,6 +58036,15 @@
       "slice": 6
     },
     {
+      "domain": "hinsdalenh.gov",
+      "type": "City",
+      "organization": "Town of Hinsdale",
+      "suborganization": "",
+      "city": "Hinsdale",
+      "state": "NH",
+      "slice": 6
+    },
+    {
       "domain": "hintontownship.gov",
       "type": "City",
       "organization": "Hinton Township",
@@ -58538,6 +58799,15 @@
       "city": "Hooksett",
       "state": "NH",
       "slice": 6
+    },
+    {
+      "domain": "hooksettlibrarynh.gov",
+      "type": "City",
+      "organization": "Hooksett Public Library",
+      "suborganization": "",
+      "city": "Hooksett",
+      "state": "NH",
+      "slice": 4
     },
     {
       "domain": "hooksettpolice.gov",
@@ -63004,6 +63274,15 @@
       "slice": 3
     },
     {
+      "domain": "jamestownkypolice.gov",
+      "type": "City",
+      "organization": "Jamestown Police Department",
+      "suborganization": "",
+      "city": "Jamestown",
+      "state": "KY",
+      "slice": 6
+    },
+    {
       "domain": "jamestownnd.gov",
       "type": "City",
       "organization": "City Of Jamestown",
@@ -64496,6 +64775,15 @@
       "city": "Jonesville",
       "state": "MI",
       "slice": 1
+    },
+    {
+      "domain": "joplinmo.gov",
+      "type": "City",
+      "organization": "City of Joplin",
+      "suborganization": "",
+      "city": "Joplin",
+      "state": "MO",
+      "slice": 0
     },
     {
       "domain": "jordanmn.gov",
@@ -68107,6 +68395,15 @@
       "slice": 5
     },
     {
+      "domain": "lakeviewfdecny.gov",
+      "type": "Special district",
+      "organization": "Lake View Fire District",
+      "suborganization": "",
+      "city": "Lake View",
+      "state": "NY",
+      "slice": 1
+    },
+    {
       "domain": "lakeviewpdtx.gov",
       "type": "City",
       "organization": "Lakeview Police Department",
@@ -69601,6 +69898,15 @@
       "slice": 5
     },
     {
+      "domain": "leacountyfair.gov",
+      "type": "County",
+      "organization": "Lea County",
+      "suborganization": "",
+      "city": "lovington",
+      "state": "NM",
+      "slice": 2
+    },
+    {
       "domain": "leadingtonmo.gov",
       "type": "City",
       "organization": "CITY OF LEADINGTON",
@@ -70382,6 +70688,15 @@
       "city": "Tallahassee",
       "state": "FL",
       "slice": 5
+    },
+    {
+      "domain": "leopoldmofire.gov",
+      "type": "Special district",
+      "organization": "Leopold Fire Protection District",
+      "suborganization": "",
+      "city": "Leopold",
+      "state": "MO",
+      "slice": 2
     },
     {
       "domain": "lep.gov",
@@ -74224,6 +74539,15 @@
       "suborganization": "",
       "city": "Mount Clemens",
       "state": "MI",
+      "slice": 6
+    },
+    {
+      "domain": "maconcountyal.gov",
+      "type": "County",
+      "organization": "Macon County Commission",
+      "suborganization": "",
+      "city": "Tuskegee",
+      "state": "AL",
       "slice": 6
     },
     {
@@ -79042,6 +79366,15 @@
       "slice": 4
     },
     {
+      "domain": "metacomet911.gov",
+      "type": "Special district",
+      "organization": "Metacomet Regional Emergency Communications Center",
+      "suborganization": "",
+      "city": "Norfolk",
+      "state": "MA",
+      "slice": 0
+    },
+    {
       "domain": "metalinefalls.gov",
       "type": "City",
       "organization": "Town of Metaline Falls",
@@ -79897,6 +80230,15 @@
       "slice": 0
     },
     {
+      "domain": "milbanksd.gov",
+      "type": "City",
+      "organization": "City of Milbank",
+      "suborganization": "",
+      "city": "Milbank",
+      "state": "SD",
+      "slice": 4
+    },
+    {
       "domain": "milcrofton.gov",
       "type": "Special district",
       "organization": "Milcrofton Utility District",
@@ -80093,6 +80435,15 @@
       "city": "Texarkana",
       "state": "AR",
       "slice": 6
+    },
+    {
+      "domain": "millercollectorar.gov",
+      "type": "County",
+      "organization": "Miller County Collector, AR",
+      "suborganization": "",
+      "city": "Texarkana",
+      "state": "AR",
+      "slice": 1
     },
     {
       "domain": "millercountyar.gov",
@@ -80651,6 +81002,15 @@
       "city": "Minnetonka",
       "state": "MN",
       "slice": 2
+    },
+    {
+      "domain": "minnetristamn.gov",
+      "type": "City",
+      "organization": "City of Minnetrista",
+      "suborganization": "",
+      "city": "Minnetrista",
+      "state": "MN",
+      "slice": 3
     },
     {
       "domain": "minocquapd.gov",
@@ -88402,6 +88762,15 @@
       "slice": 1
     },
     {
+      "domain": "niagarasheriff.gov",
+      "type": "County",
+      "organization": "Niagara County Sheriff's Office",
+      "suborganization": "",
+      "city": "Lockport",
+      "state": "NY",
+      "slice": 1
+    },
+    {
       "domain": "nibleycity.gov",
       "type": "City",
       "organization": "Nibley City Corporation",
@@ -92029,6 +92398,15 @@
       "slice": 2
     },
     {
+      "domain": "oaklandpolicenj.gov",
+      "type": "City",
+      "organization": "Oakland Police Department",
+      "suborganization": "",
+      "city": "Oakland",
+      "state": "NJ",
+      "slice": 3
+    },
+    {
       "domain": "oaklandtn.gov",
       "type": "City",
       "organization": "Town of Oakland",
@@ -92237,7 +92615,7 @@
     },
     {
       "domain": "ocassessor.gov",
-      "type": "Special district",
+      "type": "County",
       "organization": "Orange County Assessor Department",
       "suborganization": "",
       "city": "Orange",
@@ -98194,15 +98572,6 @@
       "slice": 2
     },
     {
-      "domain": "perrycountyar.gov",
-      "type": "County",
-      "organization": "Perry County Courthouse",
-      "suborganization": "",
-      "city": "Perryville",
-      "state": "AR",
-      "slice": 3
-    },
-    {
       "domain": "perrycountyclerkar.gov",
       "type": "County",
       "organization": "Perry County Clerk",
@@ -98210,6 +98579,15 @@
       "city": "Perryville",
       "state": "AR",
       "slice": 3
+    },
+    {
+      "domain": "perrycountycollectorar.gov",
+      "type": "County",
+      "organization": "Perry County Collector",
+      "suborganization": "",
+      "city": "Perryville",
+      "state": "AR",
+      "slice": 0
     },
     {
       "domain": "perrycountyil.gov",
@@ -98993,6 +99371,15 @@
       "city": "Bowling Green",
       "state": "MO",
       "slice": 4
+    },
+    {
+      "domain": "pikecountyar.gov",
+      "type": "County",
+      "organization": "Pike County, AR",
+      "suborganization": "",
+      "city": "Murfreesboro",
+      "state": "AR",
+      "slice": 1
     },
     {
       "domain": "pikecountygasheriff.gov",
@@ -108508,15 +108895,6 @@
       "slice": 3
     },
     {
-      "domain": "safecar.gov",
-      "type": "Federal - Executive",
-      "organization": "Department of Transportation",
-      "suborganization": "U.S. Department of Transportation Office of the Chief Information Officer",
-      "city": "Washington",
-      "state": "DC",
-      "slice": 6
-    },
-    {
       "domain": "safecastrawberries.gov",
       "type": "State or territory",
       "organization": "California Strawberry Commission",
@@ -109879,6 +110257,15 @@
       "domain": "santabarbaracounty.gov",
       "type": "County",
       "organization": "County of Santa Barbara",
+      "suborganization": "",
+      "city": "Santa Barbara",
+      "state": "CA",
+      "slice": 3
+    },
+    {
+      "domain": "santabarbarapd.gov",
+      "type": "City",
+      "organization": "Santa Barbara Police Department",
       "suborganization": "",
       "city": "Santa Barbara",
       "state": "CA",
@@ -114889,6 +115276,15 @@
       "slice": 2
     },
     {
+      "domain": "smythcounty.gov",
+      "type": "County - Election",
+      "organization": "Smyth County",
+      "suborganization": "",
+      "city": "Marion",
+      "state": "VA",
+      "slice": 3
+    },
+    {
       "domain": "snco.gov",
       "type": "County",
       "organization": "Shawnee County",
@@ -115418,6 +115814,15 @@
       "city": "Santa Rosa",
       "state": "CA",
       "slice": 2
+    },
+    {
+      "domain": "sonomacountyairport.gov",
+      "type": "County",
+      "organization": "County of Sonoma",
+      "suborganization": "",
+      "city": "Santa Rosa",
+      "state": "CA",
+      "slice": 4
     },
     {
       "domain": "sonomacountyca.gov",
@@ -117110,6 +117515,15 @@
       "city": "Sandy",
       "state": "UT",
       "slice": 1
+    },
+    {
+      "domain": "ssjcplca.gov",
+      "type": "City",
+      "organization": "Stockton - San Joaquin County Public Library",
+      "suborganization": "",
+      "city": "Stockton",
+      "state": "CA",
+      "slice": 3
     },
     {
       "domain": "ssjid.gov",
@@ -119485,6 +119899,15 @@
       "suborganization": "",
       "city": "Summerfield",
       "state": "NC",
+      "slice": 3
+    },
+    {
+      "domain": "summerfieldtwpclaremi.gov",
+      "type": "City",
+      "organization": "Summerfield Township",
+      "suborganization": "",
+      "city": "Harrison",
+      "state": "MI",
       "slice": 3
     },
     {
@@ -124717,6 +125140,15 @@
       "slice": 5
     },
     {
+      "domain": "townofcallicoon.gov",
+      "type": "City",
+      "organization": "Town of Callicoon",
+      "suborganization": "",
+      "city": "Jeffersonville",
+      "state": "NY",
+      "slice": 1
+    },
+    {
       "domain": "townofcambria.gov",
       "type": "City - Election",
       "organization": "Town of Cambria",
@@ -125444,6 +125876,15 @@
       "city": "Pine Bush",
       "state": "NY",
       "slice": 4
+    },
+    {
+      "domain": "townofcrenshaw.gov",
+      "type": "City",
+      "organization": "Town of Crenshaw",
+      "suborganization": "",
+      "city": "Crenshaw",
+      "state": "MS",
+      "slice": 3
     },
     {
       "domain": "townofcrestone.gov",
@@ -133879,15 +134320,6 @@
       "slice": 1
     },
     {
-      "domain": "usaseanconnect.gov",
-      "type": "Federal - Executive",
-      "organization": "Department of State",
-      "suborganization": "U.S. - ASEAN Connect",
-      "city": "Washington",
-      "state": "DC",
-      "slice": 4
-    },
-    {
       "domain": "usaspending.gov",
       "type": "Federal - Executive",
       "organization": "Department of the Treasury",
@@ -136273,6 +136705,15 @@
       "slice": 3
     },
     {
+      "domain": "villageofcatlin.gov",
+      "type": "City",
+      "organization": "Village of Catlin",
+      "suborganization": "",
+      "city": "Catlin",
+      "state": "IL",
+      "slice": 3
+    },
+    {
       "domain": "villageofcatskillny.gov",
       "type": "City",
       "organization": "Village of Catskill",
@@ -137317,6 +137758,15 @@
       "slice": 0
     },
     {
+      "domain": "villageofmcarthur.gov",
+      "type": "City",
+      "organization": "Village of McArthur",
+      "suborganization": "",
+      "city": "McArthur",
+      "state": "OH",
+      "slice": 0
+    },
+    {
       "domain": "villageofmcgraw.gov",
       "type": "City",
       "organization": "Village of McGraw",
@@ -138314,6 +138764,15 @@
       "city": "Valley Falls",
       "state": "NY",
       "slice": 5
+    },
+    {
+      "domain": "villageofvernonny.gov",
+      "type": "City",
+      "organization": "Village of Vernon",
+      "suborganization": "",
+      "city": "Vernon",
+      "state": "NY",
+      "slice": 4
     },
     {
       "domain": "villageofveronaohio.gov",
@@ -140062,6 +140521,15 @@
       "slice": 5
     },
     {
+      "domain": "wakemantownshipoh.gov",
+      "type": "City",
+      "organization": "Wakeman Township",
+      "suborganization": "",
+      "city": "Wakeman",
+      "state": "OH",
+      "slice": 6
+    },
+    {
       "domain": "wakpamnilake-nsn.gov",
       "type": "Tribal",
       "organization": "Wakpamni Lake Community",
@@ -140564,6 +141032,15 @@
       "city": "Wareham",
       "state": "MA",
       "slice": 4
+    },
+    {
+      "domain": "waresheriffga.gov",
+      "type": "County",
+      "organization": "Ware County Sheriff's Office",
+      "suborganization": "",
+      "city": "Waycross",
+      "state": "GA",
+      "slice": 1
     },
     {
       "domain": "wareshoalssc.gov",
@@ -145957,6 +146434,15 @@
       "slice": 3
     },
     {
+      "domain": "wingcawi.gov",
+      "type": "State or territory",
+      "organization": "Wisconsin Challenge Academy",
+      "suborganization": "",
+      "city": "Ft McCoy",
+      "state": "WI",
+      "slice": 2
+    },
+    {
       "domain": "winkelmanaz.gov",
       "type": "City",
       "organization": "Town of Winkelman",
@@ -146758,6 +147244,15 @@
       "slice": 5
     },
     {
+      "domain": "woodlakeca.gov",
+      "type": "City",
+      "organization": "City of Woodlake",
+      "suborganization": "",
+      "city": "Woodlake",
+      "state": "CA",
+      "slice": 6
+    },
+    {
       "domain": "woodlandhills-ut.gov",
       "type": "City",
       "organization": "Woodland Hills City",
@@ -146819,6 +147314,15 @@
       "city": "Wood-Ridge",
       "state": "NJ",
       "slice": 2
+    },
+    {
+      "domain": "woodridgeny.gov",
+      "type": "City - Election",
+      "organization": "Village of Woodridge New York",
+      "suborganization": "",
+      "city": "Woodridge",
+      "state": "NY",
+      "slice": 6
     },
     {
       "domain": "woodridgepdnj.gov",
@@ -147046,6 +147550,15 @@
       "slice": 4
     },
     {
+      "domain": "woosterar.gov",
+      "type": "City",
+      "organization": "City of Wooster",
+      "suborganization": "",
+      "city": "Greenbrier",
+      "state": "AR",
+      "slice": 5
+    },
+    {
       "domain": "worcesterma.gov",
       "type": "City",
       "organization": "City of Worcester",
@@ -147115,6 +147628,15 @@
       "suborganization": "Treasury PMO",
       "city": "Washington",
       "state": "DC",
+      "slice": 6
+    },
+    {
+      "domain": "workscelections.gov",
+      "type": "State or territory - Election",
+      "organization": "SC State Election Commission",
+      "suborganization": "",
+      "city": "Columbia",
+      "state": "SC",
       "slice": 6
     },
     {
@@ -147278,6 +147800,15 @@
       "city": "Mountain Grove",
       "state": "MO",
       "slice": 0
+    },
+    {
+      "domain": "wrightsvillega.gov",
+      "type": "City",
+      "organization": "City of Wrightsville",
+      "suborganization": "",
+      "city": "Wrightsville",
+      "state": "GA",
+      "slice": 6
     },
     {
       "domain": "wrighttown-ny.gov",
