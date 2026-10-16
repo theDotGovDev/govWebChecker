@@ -277,6 +277,12 @@ build has no network path at all, which is stronger than a rule.
   queues and call one reusable `check.yml`; this decides which of their runs
   actually does anything. Same promotion as the per-address limit — a guarantee
   that held only inside one process, made durable by reading the record.
+- `divergence.ts` — the two records read against each other. Every hot-tier host
+  is measured twice by methods that fail differently, so a site answering 200
+  with a block page passes the HTTP check and fails the browser one. Costs no
+  traffic: both records already exist. It reports the disagreement and never
+  decides which instrument was right, and it refuses to call one on fewer than
+  three browser readings (FR-349).
 - `figure.ts` — the choke point. Its cadence field is named for what it means to
   a reader — hourly, daily, weekly — rather than for the collection tier behind
   it. It was called `tier` once, and the gap between that name and what the page

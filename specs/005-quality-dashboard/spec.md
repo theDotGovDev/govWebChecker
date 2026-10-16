@@ -332,6 +332,23 @@ labeled with the device and the moment captured.
 - **FR-348**: Reducing a view to a hash MUST NOT run in the captured page's own
   context. A site's Content-Security-Policy governs that context and can forbid
   it, which is a site's prerogative and not a measurement failure.
+- **FR-349**: The site MUST publish the sites its two methods disagree about —
+  healthy over HTTP, failing in a real browser — and MUST publish that section
+  even when the set is empty. A server can answer 200 while serving a refusal, a
+  bot challenge or a security interstitial; that passes the hourly check and
+  fails the daily browser one, and the disagreement is the only signal available
+  that an answered rate may be counting pages nobody could use. It is computed
+  from the two stored records and costs no traffic.
+
+  A divergence MUST NOT be claimed from fewer than three browser readings, nor
+  from a minority of them. `www.gsaadvantage.gov` failed one browser check on
+  2026-08-27 and was carried as an open finding for three days; the four runs
+  after it all succeeded and its HTTP record was 178/178. One reading is not a
+  characterisation of an institution (FR-243), and the threshold is where that
+  rule is enforced rather than remembered.
+
+  The site MUST NOT adjudicate between the two. Either reading can be the true
+  one, so the finding is the disagreement, reported with both counts.
 
 ---
 

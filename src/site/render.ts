@@ -1,5 +1,6 @@
 import type { SiteModel, SiteView, TierView, TrendChart, EcosystemView, AgencyView, DashboardTile, ExperienceView } from './model.js';
 import type { CensusSeries, CensusMark } from './series.js';
+import type { Divergence } from './divergence.js';
 import { formatFigure, type Figure } from './figure.js';
 import { interpret } from './interpret.js';
 
@@ -775,6 +776,8 @@ ${model.ecosystem ? ecosystemChart(model.ecosystem) : ''}
 
 ${model.censusSeries ? censusSeriesSection(model.censusSeries) : ''}
 
+${disagreementSection(model.divergences)}
+
 <h2 id="page-experience">${ICON['phone']} Are the pages good to use?</h2>
 
 <p class="tagline">
@@ -1029,4 +1032,63 @@ ${model.sites.map(row).join('\n')}
 </body>
 </html>
 `;
+}
+
+/**
+ * Where our two instruments disagree about the same site.
+ *
+ * Published even when empty. "We compared and found none" is a finding; a
+ * section that disappears when it has nothing to say leaves a reader unable to
+ * tell a clean result from a check nobody ran — the same reason absence is its
+ * own type rather than a zero.
+ *
+ * It deliberately does not adjudicate. Either reading can be the true one: a
+ * site really can be up for a plain request and broken in a browser. So the
+ * page reports the disagreement with both counts and leaves the conclusion to
+ * the reader, which is also the only honest thing to do when the two numbers
+ * come from instruments that fail differently.
+ */
+function disagreementSection(found: Divergence[]): string {
+  const rows = found
+    .map(
+      (d) => `<tr><td><a href="./sites/${escape(d.host)}.html">${escape(d.host)}</a></td>` +
+        `<td>${d.httpSuccesses} of ${d.httpTotal}</td>` +
+        `<td>${d.browserTotal - d.browserFailures} of ${d.browserTotal}</td></tr>`,
+    )
+    .join('\n');
+
+  const body =
+    found.length === 0
+      ? `<p>We compared every site\u2019s two records and found none that disagree: no site
+     answers our plain request while failing to load in a real browser. That is
+     what we want to see, and it is stated here rather than left out so the
+     absence of a problem is distinguishable from the absence of a check.</p>`
+      : `<p>These sites answer our plain request but do not load in a real browser. A
+     server can return a page that is a refusal, a challenge screen or a
+     security warning, and only the browser notices. We do not say which reading
+     is right \u2014 both are things we saw \u2014 but a rate built on the first
+     column alone would be counting pages a visitor could not use.</p>
+   <div class="scroll">
+   <table>
+     <thead><tr><th>Site</th><th>Answered our request</th><th>Loaded in a browser</th></tr></thead>
+     <tbody>
+${rows}
+     </tbody>
+   </table>
+   </div>`;
+
+  return `<h2 id="disagreement">Where our two methods disagree</h2>
+
+<p class="tagline">
+  Every one of these sites is measured twice over, by methods that fail
+  differently: an hourly request, and a daily load in a real browser.
+</p>
+
+${body}
+
+<p class="note">
+  A single odd reading is not counted. A site has to fail most of at least three
+  browser checks before it appears here \u2014 one bad reading is data, not a
+  characterisation of an institution.
+</p>`;
 }
